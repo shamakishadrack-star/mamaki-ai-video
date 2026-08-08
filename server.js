@@ -91,7 +91,14 @@ app.post("/api/generate", async (req, res) => {
     });
   }
 });
-
+// MAMAKI API health check
+app.get("/api/status", (req, res) => {
+  res.json({
+    ok: true,
+    app: "MAMAKI AI VIDEO",
+    api: "running"
+  });
+});
 app.get("*splat", (req, res) => {
   res.sendFile(process.cwd() + "/index.html");
 });
