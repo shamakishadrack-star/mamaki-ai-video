@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>MAMAKI AI VIDEO</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #080a16;
+  color: white;
+  font-family: Arial, sans-serif;
+}
+
+.container {
+  max-width: 720px;
+  margin: auto;
+  padding: 20px;
+}
+
+.logo {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.logo h1 {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 800;
+}
+
+.logo span {
+  color: #20b9ff;
+}
+
+.tagline {
+  color: #aab3d4;
+  margin-top: 8px;
+}
+
+.card {
+  background: #12162a;
+  border: 1px solid #2b3150;
+  border-radius: 20px;
+  padding: 20px;
+  margin-bottom: 18px;
+}
+
+label {
+  display: block;
+  font-weight: bold;
+  margin: 14px 0 8px;
+}
+
+textarea,
+select {
+  width: 100%;
+  padding: 14px;
+  border-radius: 12px;
+  background: #0c0f1e;
+  color: white;
+  border: 1px solid #353c5e;
+  font-size: 16px;
+}
+
+textarea {
+  min-height: 150px;
+  resize: vertical;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+button {
+  width: 100%;
+  padding: 16px;
+  margin-top: 20px;
+  border: none;
+  border-radius: 14px;
+  background: linear-gradient(90deg, #6b4cff, #20b9ff);
+  color: white;
+  font-size: 17px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+}
+
+#status {
+  text-align: center;
+  color: #aab3d4;
+  margin-top: 15px;
+}
+
+#result {
+  display: none;
+}
+
+video {
+  width: 100%;
+  border-radius: 15px;
+  margin-top: 10px;
+  background: black;
+}
+
+.footer {
+  text-align: center;
+  color: #68708e;
+  font-size: 12px;
+  padding: 15px;
+}
+
+@media (max-width: 520px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <div class="logo">
+    <h1>🎬 MAMAKI <span>AI VIDEO</span></h1>
+    <div class="tagline">
+      Turn your ideas into videos.
+    </div>
+  </div>
+
+  <div class="card">
+
+    <label>Describe your video</label>
+
+    <textarea
+      id="prompt"
+      placeholder="Example: A Nigerian student walking to school at sunrise, cinematic and motivational..."
+    ></textarea>
+
+    <div class="grid">
+
+      <div>
+        <label>Video Style</label>
+
+        <select id="style">
+          <option>Realistic</option>
+          <option>Cinematic</option>
+          <option>Cartoon</option>
+          <option>3D Animation</option>
+          <option>AI Avatar</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Video Format</label>
+
+        <select id="ratio">
+          <option value="9:16">9:16 — TikTok / Reels / Shorts</option>
+          <option value="16:9">16:9 — YouTube</option>
+          <option value="1:1">1:1 — Social Media</option>
+        </select>
+      </div>
+
+    </div>
+
+    <label>Duration</label>
+
+    <select id="duration">
+      <option value="5">5 seconds</option>
+      <option value="10">10 seconds</option>
+      <option value="30">30 seconds</option>
+    </select>
+
+    <button id="generate">
+      ✨ GENERATE VIDEO
+    </button>
+
+    <div id="status"></div>
+
+  </div>
+
+
+  <div class="card" id="result">
+
+    <h3>Your Generated Video</h3>
+
+    <video
+      id="video"
+      controls
+      playsinline
+    ></video>
+
+    <a
+      id="download"
+      download="mamaki-ai-video.mp4"
+    >
+
+      <button>
+        ⬇️ SAVE VIDEO
+      </button>
+
+    </a>
+
+  </div>
+
+
+  <div class="footer">
+    MAMAKI AI VIDEO • Turn your ideas into videos.
+  </div>
+
+</div>
+
+
+<script>
+
+const generateButton =
+  document.getElementById("generate");
+
+const status =
+  document.getElementById("status");
+
+const result =
+  document.getElementById("result");
+
+const video =
+  document.getElementById("video");
+
+const download =
+  document.getElementById("download");
+
+
+generateButton.onclick = async function () {
+
+  const prompt =
+    document.getElementById("prompt").value.trim();
+
+  const style =
+    document.getElementById("style").value;
+
+  const ratio =
+    document.getElementById("ratio").value;
+
+  const duration =
+    document.getElementById("duration").value;
+
+
+  if (!prompt) {
+
+    alert("Please describe the video you want.");
+
+    return;
+  }
+
+
+  generateButton.disabled = true;
+
+  status.textContent =
+    "🎬 Generating your video... Please wait.";
+
+
+  try {
+
+    const response =
+      await fetch("/api/generate", {
+
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+
+          prompt: prompt,
+
+          style: style,
+
+          aspectRatio: ratio,
+
+          duration: duration
+
+        })
+
+      });
+
+
+    const data =
+      await response.json();
+
+
+    if (!response.ok) {
+
+      throw new Error(
+        data.error || "Video generation failed."
+      );
+
+    }
+
+
+    video.src =
+      data.videoUrl;
+
+    download.href =
+      data.videoUrl;
+
+    result.style.display =
+      "block";
+
+    status.textContent =
+      "✅ Your video is ready!";
+
+
+  }
+
+  catch (error) {
+
+    status.textContent =
+      "❌ " + error.message;
+
+  }
+
+  finally {
+
+    generateButton.disabled =
+      false;
+
+  }
+
+};
+
+</script>
+
+</body>
+</html>
