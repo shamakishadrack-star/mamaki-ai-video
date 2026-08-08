@@ -1,3 +1,4 @@
+
 import "dotenv/config";
 import express from "express";
 import { fal } from "@fal-ai/client";
@@ -19,7 +20,11 @@ app.post("/api/generate", async (req, res) => {
       });
     }
 
-    const { prompt, style = "Realistic", aspectRatio = "9:16" } = req.body;
+    const {
+      prompt,
+      style = "Realistic",
+      aspectRatio = "9:16"
+    } = req.body;
 
     if (!prompt || !prompt.trim()) {
       return res.status(400).json({
@@ -28,24 +33,35 @@ app.post("/api/generate", async (req, res) => {
     }
 
     const styles = {
-      Realistic: "photorealistic live-action, natural motion, realistic lighting",
-      Cinematic: "cinematic film look, professional camera movement, dramatic lighting",
-      Cartoon: "high-quality 3D cartoon animation, expressive characters",
-      "3D Animation": "high-quality 3D animated scene, smooth camera motion",
-      "AI Avatar": "professional digital presenter/avatar, natural movement"
+      Realistic:
+        "photorealistic live-action, natural motion, realistic lighting",
+
+      Cinematic:
+        "cinematic film look, professional camera movement, dramatic lighting",
+
+      Cartoon:
+        "high-quality 3D cartoon animation, expressive characters",
+
+      "3D Animation":
+        "high-quality 3D animated scene, smooth camera motion",
+
+      "AI Avatar":
+        "professional digital presenter/avatar, natural movement"
     };
 
     const finalPrompt =
       `${styles[style] || "high-quality video"}. ${prompt.trim()}`;
 
     const result = await fal.subscribe(
-      "fal-ai/wan/v2.7/text-to-video",
+      "fal-ai/wan-25-preview/text-to-video",
       {
         input: {
           prompt: finalPrompt,
           aspect_ratio: aspectRatio,
-          resolution: "720p",
-          duration: "5"
+          resolution: "480p",
+          duration: "5",
+          enable_prompt_expansion: true,
+          enable_safety_checker: true
         },
         logs: false
       }
@@ -65,10 +81,13 @@ app.post("/api/generate", async (req, res) => {
     });
 
   } catch (error) {
-    console.error(error);
+    console.error("VIDEO GENERATION ERROR:", error);
 
     res.status(500).json({
-      error: "Video generation failed."
+      error:
+        error?.body?.detail ||
+        error?.message ||
+        "Video generation failed."
     });
   }
 });
