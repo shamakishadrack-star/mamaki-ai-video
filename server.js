@@ -2,27 +2,19 @@ async function generateWithLTX(prompt, options = {}) {
   console.log("MAMAKI: Starting LTX video generation...");
 
   try {
-    const result = await fal.subscribe("fal-ai/ltx-video", {
+    const result = await fal.subscribe("fal-ai/ltx-video-v095", {
       input: {
         prompt: prompt,
-        ...(options.aspect_ratio
-          ? { aspect_ratio: options.aspect_ratio }
-          : {}),
-        ...(options.resolution
-          ? { resolution: options.resolution }
-          : {}),
-        ...(options.num_inference_steps
-          ? { num_inference_steps: options.num_inference_steps }
-          : {}),
+        resolution: options.resolution || "480p",
+        aspect_ratio: options.aspect_ratio || "16:9",
+        num_inference_steps: options.num_inference_steps || 40,
+        expand_prompt: true
       },
 
       logs: true,
 
       onQueueUpdate: (update) => {
-        console.log(
-          "MAMAKI: LTX status:",
-          update.status
-        );
+        console.log("MAMAKI: LTX status:", update.status);
 
         if (update.logs) {
           update.logs.forEach((log) => {
@@ -31,27 +23,20 @@ async function generateWithLTX(prompt, options = {}) {
             }
           });
         }
-      },
+      }
     });
 
     console.log("MAMAKI: LTX generation completed.");
-
-    const data = result?.data;
-
     console.log(
-      "MAMAKI: LTX result received:",
-      JSON.stringify(data)
+      "MAMAKI: LTX result:",
+      JSON.stringify(result)
     );
 
-    // Official LTX output:
-    // { video: { url: "https://..." } }
-
-    const videoUrl = data?.video?.url;
+    const videoUrl = result?.data?.video?.url;
 
     if (!videoUrl) {
       console.error(
-        "MAMAKI: LTX returned no video URL.",
-        JSON.stringify(data)
+        "MAMAKI: LTX returned no video URL."
       );
 
       throw new Error(
