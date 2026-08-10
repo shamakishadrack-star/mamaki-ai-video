@@ -122,21 +122,28 @@ if (!event || typeof event !== "object") {
       if (!item) continue;
 
       if (typeof item === "string") {
-        if (
-          item.startsWith("http://") ||
-          item.startsWith("https://")
-        ) {
-          return item;
-        }
-      }
-
-    if (typeof item === "object") {
+      if (typeof item === "object") {
   if (item.url) return item.url;
-  if (item.video?.url) return item.video.url;
-  if (item.path) return item.path;
-  if (item.video?.path) return item.video.path;
-  if (item.data?.url) return item.data.url;
-  if (item.data?.path) return item.data.path;
+
+  if (item.video?.url) {
+    return item.video.url;
+  }
+
+  if (item.data?.url) {
+    return item.data.url;
+  }
+
+  if (item.path) {
+    return `${LTX_SPACE}/gradio_api/file=${encodeURIComponent(item.path)}`;
+  }
+
+  if (item.video?.path) {
+    return `${LTX_SPACE}/gradio_api/file=${encodeURIComponent(item.video.path)}`;
+  }
+
+  if (item.data?.path) {
+    return `${LTX_SPACE}/gradio_api/file=${encodeURIComponent(item.data.path)}`;
+  }
 }
     }
   }
