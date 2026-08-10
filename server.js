@@ -291,7 +291,10 @@ async function generateWithLTX(
             "LTX video generation failed."
         );
       }
-
+console.log(
+  "MAMAKI LTX RAW EVENT:",
+  JSON.stringify(eventData)
+);
       const videoUrl =
         findVideoUrl(eventData);
 
