@@ -1,25 +1,147 @@
-
 import "dotenv/config";
 import express from "express";
-import { fal } from "@fal-ai/client";
 
 const app = express();
 
 app.use(express.json());
 app.use(express.static("."));
 
-if (process.env.FAL_KEY) {
-  fal.config({ credentials: process.env.FAL_KEY });
+const LTX_SPACE =
+  "https://deeprat-ltx-video-zerogpu-optimized.hf.space";
+
+const styles = {
+  Realistic:
+    "photorealistic live-action, natural motion, realistic lighting",
+  Cinematic:
+    "cinematic film look, professional camera movement, dramatic lighting",
+  Cartoon:
+    "high-quality 3D cartoon animation, expressive characters",
+  "3D Animation":
+    "high-quality 3D animated scene, smooth camera movement",
+  "AI Avatar":
+    "professional digital presenter avatar, natural movement"
+};
+
+function getDimensions(aspectRatio) {
+  if (aspectRatio === "9:16") {
+    return { height: 704, width: 512 };
+  }
+
+  if (aspectRatio === "1:1") {
+    return { height: 512, width: 512 };
+  }
+
+  return { height: 512, width: 704 };
+}
+
+async function generateWithLTX(prompt, aspectRatio) {
+  const { height, width } = getDimensions(aspectRatio);
+
+  const response = await fetch(
+    `${LTX_SPACE}/gradio_api/call/text_to_video`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        data: [
+          prompt,
+          "worst quality, blurry, jittery, distorted, inconsistent motion",
+          null,
+          null,
+          height,
+          width,
+          "text-to-video",
+          2,
+          9,
+          42,
+          true,
+          3.0,
+          false,
+          false
+        ]
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `LTX request failed (${response.status}): ${errorText.slice(0, 500)}`
+    );
+  }
+
+  const job = await response.json();
+
+  if (!job.event_id) {
+    throw new Error("LTX did not return a generation job ID.");
+  }
+
+  const resultResponse = await fetch(
+    `${LTX_SPACE}/gradio_api/call/text_to_video/${job.event_id}`
+  );
+
+  if (!resultResponse.ok) {
+    const errorText = await resultResponse.text();
+    throw new Error(
+      `LTX result request failed (${resultResponse.status}): ${errorText.slice(0, 500)}`
+    );
+  }
+
+  const stream = await resultResponse.text();
+
+  const lines = stream.split("\n");
+
+  for (const line of lines) {
+    if (!line.startsWith("data:")) continue;
+
+    const jsonText = line.substring(5).trim();
+
+    if (!jsonText) continue;
+
+    let event;
+
+    try {
+      event = JSON.parse(jsonText);
+    } catch {
+      continue;
+    }
+
+    if (event.msg === "error") {
+      throw new Error(
+        event.error || "LTX video generation failed."
+      );
+    }
+
+    if (!Array.isArray(event.data)) continue;
+
+    for (const item of event.data) {
+      if (!item) continue;
+
+      if (typeof item === "string") {
+        if (
+          item.startsWith("http://") ||
+          item.startsWith("https://")
+        ) {
+          return item;
+        }
+      }
+
+      if (typeof item === "object") {
+        if (item.url) return item.url;
+        if (item.video?.url) return item.video.url;
+      }
+    }
+  }
+
+  throw new Error(
+    "LTX finished without returning a video file."
+  );
 }
 
 app.post("/api/generate", async (req, res) => {
   try {
-    if (!process.env.FAL_KEY) {
-      return res.status(503).json({
-        error: "The AI video engine is not connected yet."
-      });
-    }
-
     const {
       prompt,
       style = "Realistic",
@@ -28,83 +150,4 @@ app.post("/api/generate", async (req, res) => {
 
     if (!prompt || !prompt.trim()) {
       return res.status(400).json({
-        error: "Please describe your video."
-      });
-    }
-
-    const styles = {
-      Realistic:
-        "photorealistic live-action, natural motion, realistic lighting",
-
-      Cinematic:
-        "cinematic film look, professional camera movement, dramatic lighting",
-
-      Cartoon:
-        "high-quality 3D cartoon animation, expressive characters",
-
-      "3D Animation":
-        "high-quality 3D animated scene, smooth camera motion",
-
-      "AI Avatar":
-        "professional digital presenter/avatar, natural movement"
-    };
-
-    const finalPrompt =
-      `${styles[style] || "high-quality video"}. ${prompt.trim()}`;
-
-    const result = await fal.subscribe(
-      "fal-ai/wan-25-preview/text-to-video",
-      {
-        input: {
-          prompt: finalPrompt,
-          aspect_ratio: aspectRatio,
-          resolution: "480p",
-          duration: "5",
-          enable_prompt_expansion: true,
-          enable_safety_checker: true
-        },
-        logs: false
-      }
-    );
-
-    const videoUrl = result?.data?.video?.url;
-
-    if (!videoUrl) {
-      return res.status(502).json({
-        error: "No video was returned."
-      });
-    }
-
-    res.json({
-      ok: true,
-      videoUrl
-    });
-
-  } catch (error) {
-    console.error("VIDEO GENERATION ERROR:", error);
-
-    res.status(500).json({
-      error:
-        error?.body?.detail ||
-        error?.message ||
-        "Video generation failed."
-    });
-  }
-});
-// MAMAKI API health check
-app.get("/api/status", (req, res) => {
-  res.json({
-    ok: true,
-    app: "MAMAKI AI VIDEO",
-    api: "running"
-  });
-});
-app.get("*splat", (req, res) => {
-  res.sendFile(process.cwd() + "/index.html");
-});
-
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`MAMAKI AI VIDEO running on port ${PORT}`);
-});
+       
