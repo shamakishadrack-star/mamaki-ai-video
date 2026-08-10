@@ -130,10 +130,14 @@ if (!event || typeof event !== "object") {
         }
       }
 
-      if (typeof item === "object") {
-        if (item.url) return item.url;
-        if (item.video?.url) return item.video.url;
-      }
+    if (typeof item === "object") {
+  if (item.url) return item.url;
+  if (item.video?.url) return item.video.url;
+  if (item.path) return item.path;
+  if (item.video?.path) return item.video.path;
+  if (item.data?.url) return item.data.url;
+  if (item.data?.path) return item.data.path;
+}
     }
   }
 
