@@ -107,7 +107,9 @@ async function generateWithLTX(prompt, aspectRatio) {
     } catch {
       continue;
     }
-
+if (!event || typeof event !== "object") {
+  continue;
+}
     if (event.msg === "error") {
       throw new Error(
         event.error || "LTX video generation failed."
