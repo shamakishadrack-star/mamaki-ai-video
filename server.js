@@ -148,6 +148,76 @@ app.post("/api/generate", async (req, res) => {
       aspectRatio = "9:16"
     } = req.body;
 
-    if (!prompt || !prompt.trim()) {
-      return res.status(400).json({
+  if (!prompt || !prompt.trim()) {
+  return res.status(400).json({
+    error: "Please describe your video."
+  });
+}
+
+const stylePrompt =
+  styles[style] || "high-quality video";
+
+const finalPrompt =
+  `${stylePrompt}. ${prompt.trim()}`;
+
+console.log(
+  "MAMAKI: Starting LTX video generation..."
+);
+
+const videoUrl = await generateWithLTX(
+  finalPrompt,
+  aspectRatio
+);
+
+console.log(
+  "MAMAKI: Video generated:",
+  videoUrl
+);
+
+return res.json({
+  ok: true,
+  videoUrl
+});
+
+  } catch (error) {
+    console.error(
+      "MAMAKI VIDEO ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      error:
+        error?.message ||
+        "Video generation failed."
+    });
+  }
+});
+
+app.get("/api/status", (req, res) => {
+  res.json({
+    ok: true,
+    app: "MAMAKI AI VIDEO",
+    api: "running",
+    engine: "LTX ZeroGPU"
+  });
+});
+
+app.get("*splat", (req, res) => {
+  res.sendFile(
+    process.cwd() + "/index.html"
+  );
+});
+
+const PORT =
+  process.env.PORT || 3000;
+
+app.listen(
+  PORT,
+  "0.0.0.0",
+  () => {
+    console.log(
+      `MAMAKI AI VIDEO running on port ${PORT}`
+    );
+  }
+);
        
