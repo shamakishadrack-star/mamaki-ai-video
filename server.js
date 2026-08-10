@@ -281,30 +281,7 @@ async function generateWithLTX(
         continue;
       }
 
-      if (
-        eventData.msg === "error" ||
-        eventData.msg === "process_error"
-      ) {
-        throw new Error(
-          eventData.error ||
-            eventData.message ||
-            "LTX video generation failed."
-        );
-      }
-console.log(
-  "MAMAKI LTX RAW EVENT:",
-  JSON.stringify(eventData)
-);
-      const videoUrl =
-        findVideoUrl(eventData);
-
-      if (videoUrl) {
-        console.log(
-          "MAMAKI: Video URL found."
-        );
-
-        return videoUrl;
-      }
+ 
     }
   }
 
