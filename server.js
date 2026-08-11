@@ -66,29 +66,27 @@ function getDimensions(aspectRatio) {
 }
 
 /* =========================================================
-   MAKE GRADIO FILE URL
+   GRADIO FILE URL
 ========================================================= */
 
-function makeGradioFileUrl(value) {
-  if (!value) {
-    return null;
-  }
+function makeFileUrl(value) {
+  if (!value) return null;
 
   if (typeof value === "object") {
     if (value.url) {
-      return makeGradioFileUrl(value.url);
+      return makeFileUrl(value.url);
     }
 
     if (value.path) {
-      return makeGradioFileUrl(value.path);
+      return makeFileUrl(value.path);
     }
 
     if (value.file) {
-      return makeGradioFileUrl(value.file);
+      return makeFileUrl(value.file);
     }
 
     if (value.video) {
-      return makeGradioFileUrl(value.video);
+      return makeFileUrl(value.video);
     }
 
     return null;
@@ -123,11 +121,14 @@ function makeGradioFileUrl(value) {
 }
 
 /* =========================================================
-   SEARCH ANY OBJECT FOR VIDEO
+   FIND VIDEO
 ========================================================= */
 
 function findVideo(value, seen = new Set()) {
-  if (value === null || value === undefined) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
     return null;
   }
 
@@ -153,7 +154,7 @@ function findVideo(value, seen = new Set()) {
       text.includes("/home/") ||
       text.includes("/app/")
     ) {
-      return makeGradioFileUrl(text);
+      return makeFileUrl(text);
     }
 
     return null;
@@ -169,147 +170,141 @@ function findVideo(value, seen = new Set()) {
 
   seen.add(value);
 
-  /* Direct Gradio FileData */
   if (value.path) {
-    const result = makeGradioFileUrl(value.path);
+    const result =
+      makeFileUrl(value.path);
 
-    if (result) {
-      return result;
-    }
+    if (result) return result;
   }
 
   if (value.url) {
-    const result = makeGradioFileUrl(value.url);
+    const result =
+      makeFileUrl(value.url);
 
-    if (result) {
-      return result;
-    }
+    if (result) return result;
   }
 
   if (value.video) {
-    const result = findVideo(value.video, seen);
+    const result =
+      findVideo(value.video, seen);
 
-    if (result) {
-      return result;
-    }
+    if (result) return result;
   }
 
   if (value.file) {
-    const result = findVideo(value.file, seen);
+    const result =
+      findVideo(value.file, seen);
 
-    if (result) {
-      return result;
-    }
+    if (result) return result;
   }
 
   if (value.output) {
-    const result = findVideo(value.output, seen);
+    const result =
+      findVideo(value.output, seen);
 
-    if (result) {
-      return result;
-    }
+    if (result) return result;
   }
 
   if (Array.isArray(value)) {
     for (const item of value) {
-      const result = findVideo(item, seen);
+      const result =
+        findVideo(item, seen);
 
-      if (result) {
-        return result;
-      }
+      if (result) return result;
     }
 
     return null;
   }
 
   for (const key of Object.keys(value)) {
-    const result = findVideo(value[key], seen);
+    const result =
+      findVideo(value[key], seen);
 
-    if (result) {
-      return result;
-    }
+    if (result) return result;
   }
 
   return null;
 }
 
 /* =========================================================
-   EXTRACT VIDEO FROM SSE DATA
+   READ ERROR INFORMATION
 ========================================================= */
 
-function extractVideoFromData(data) {
-  console.log(
-    "MAMAKI: Searching Gradio result..."
-  );
-
-  /* First try the actual object */
-  const direct = findVideo(data);
-
-  if (direct) {
-    return direct;
-  }
-
-  /* Sometimes Gradio sends JSON as a string */
-  if (typeof data === "string") {
-    try {
-      const parsed = JSON.parse(data);
-
-      const parsedVideo = findVideo(parsed);
-
-      if (parsedVideo) {
-        return parsedVideo;
-      }
-    } catch {
-      /* Not JSON */
-    }
-
-    /* Search embedded URLs */
-    const urlMatch = data.match(
-      /https?:\/\/[^\s"'\\]+/i
-    );
-
-    if (urlMatch) {
-      return urlMatch[0];
-    }
-
-    /* Search embedded file paths */
-    const pathMatch = data.match(
-      /(?:\/tmp\/|\/home\/|\/app\/)[^\s"'\\]+/i
-    );
-
-    if (pathMatch) {
-      return makeGradioFileUrl(pathMatch[0]);
-    }
-  }
-
-  return null;
-}
-
-/* =========================================================
-   PROCESS SSE EVENT
-========================================================= */
-
-function processSSEEvent(eventText) {
-  if (!eventText || !eventText.trim()) {
+function getErrorMessage(data) {
+  if (!data) {
     return null;
   }
 
-  const lines = eventText.split(/\r?\n/);
+  if (typeof data === "string") {
+    return data;
+  }
+
+  if (data.error) {
+    return String(data.error);
+  }
+
+  if (data.message) {
+    return String(data.message);
+  }
+
+  if (data.detail) {
+    return String(data.detail);
+  }
+
+  if (data.reason) {
+    return String(data.reason);
+  }
+
+  try {
+    return JSON.stringify(data);
+  } catch {
+    return null;
+  }
+}
+
+/* =========================================================
+   PROCESS SSE
+========================================================= */
+
+function processSSEEvent(eventText) {
+  if (
+    !eventText ||
+    !eventText.trim()
+  ) {
+    return null;
+  }
+
+  console.log(
+    "--------------------------------"
+  );
+
+  console.log(
+    "MAMAKI: COMPLETE SSE EVENT:"
+  );
+
+  console.log(
+    eventText.slice(0, 15000)
+  );
+
+  console.log(
+    "--------------------------------"
+  );
+
+  const lines =
+    eventText.split(/\r?\n/);
 
   let eventType = "message";
   let rawData = "";
 
   for (const line of lines) {
     if (line.startsWith("event:")) {
-      eventType = line
-        .slice(6)
-        .trim();
+      eventType =
+        line.slice(6).trim();
     }
 
     if (line.startsWith("data:")) {
-      const part = line
-        .slice(5)
-        .trim();
+      const part =
+        line.slice(5).trim();
 
       if (rawData) {
         rawData += "\n";
@@ -319,74 +314,76 @@ function processSSEEvent(eventText) {
     }
   }
 
-  if (!rawData) {
-    return null;
-  }
-
   console.log(
-    "MAMAKI: GRADIO EVENT:",
+    "MAMAKI: EVENT TYPE:",
     eventType
   );
 
   console.log(
-    "MAMAKI: GRADIO DATA:",
-    rawData.slice(0, 10000)
+    "MAMAKI: DATA:",
+    rawData || "(empty)"
   );
 
   let data = rawData;
 
-  try {
-    data = JSON.parse(rawData);
-  } catch {
-    /* Keep as text */
+  if (rawData) {
+    try {
+      data = JSON.parse(rawData);
+    } catch {
+      data = rawData;
+    }
   }
 
-  const videoUrl =
-    extractVideoFromData(data);
+  /* Try video first */
 
-  if (videoUrl) {
+  const video =
+    findVideo(data);
+
+  if (video) {
     console.log(
-      "================================"
+      "MAMAKI: VIDEO FOUND:",
+      video
     );
 
-    console.log(
-      "MAMAKI: VIDEO FOUND"
-    );
-
-    console.log(
-      videoUrl
-    );
-
-    console.log(
-      "================================"
-    );
-
-    return videoUrl;
+    return {
+      type: "video",
+      value: video
+    };
   }
+
+  /* Handle errors */
 
   if (
     eventType === "error" ||
     eventType === "process_error"
   ) {
-    let message =
-      "LTX video generation failed.";
+    const message =
+      getErrorMessage(data);
 
-    if (typeof data === "string") {
-      message = data;
-    } else if (data?.error) {
-      message = data.error;
-    } else if (data?.message) {
-      message = data.message;
-    }
+    return {
+      type: "error",
+      value:
+        message ||
+        "The LTX Space returned an error without a message."
+    };
+  }
 
-    throw new Error(message);
+  /* Successful completion without video */
+
+  if (
+    eventType === "complete"
+  ) {
+    return {
+      type: "complete",
+      value: data
+    };
   }
 
   return null;
 }
 
 /* =========================================================
-   READ GRADIO SSE STREAM
+   READ SSE
 ========================================================= */
 
 async function readSSE(
@@ -408,11 +405,14 @@ async function readSSE(
   let buffer = "";
   let timeoutTriggered = false;
 
-  const timeout = setTimeout(() => {
-    timeoutTriggered = true;
+  const timeout =
+    setTimeout(() => {
+      timeoutTriggered = true;
 
-    reader.cancel().catch(() => {});
-  }, timeoutMs);
+      reader
+        .cancel()
+        .catch(() => {});
+    }, timeoutMs);
 
   try {
     while (true) {
@@ -425,15 +425,18 @@ async function readSSE(
         break;
       }
 
-      buffer += decoder.decode(
-        value,
-        {
-          stream: true
-        }
-      );
+      buffer +=
+        decoder.decode(
+          value,
+          {
+            stream: true
+          }
+        );
 
       const events =
-        buffer.split(/\r?\n\r?\n/);
+        buffer.split(
+          /\r?\n\r?\n/
+        );
 
       buffer =
         events.pop() || "";
@@ -441,25 +444,54 @@ async function readSSE(
       for (
         const eventText of events
       ) {
-        const video =
+        const result =
           processSSEEvent(
             eventText
           );
 
-        if (video) {
-          return video;
+        if (!result) {
+          continue;
+        }
+
+        if (
+          result.type ===
+          "video"
+        ) {
+          return result.value;
+        }
+
+        if (
+          result.type ===
+          "error"
+        ) {
+          throw new Error(
+            `LTX Space error: ${result.value}`
+          );
         }
       }
     }
 
-    buffer += decoder.decode();
+    buffer +=
+      decoder.decode();
 
     if (buffer.trim()) {
-      const video =
+      const result =
         processSSEEvent(buffer);
 
-      if (video) {
-        return video;
+      if (
+        result?.type ===
+        "video"
+      ) {
+        return result.value;
+      }
+
+      if (
+        result?.type ===
+        "error"
+      ) {
+        throw new Error(
+          `LTX Space error: ${result.value}`
+        );
       }
     }
   } finally {
@@ -468,17 +500,17 @@ async function readSSE(
 
   if (timeoutTriggered) {
     throw new Error(
-      "LTX generation timed out."
+      "LTX generation timed out after 10 minutes."
     );
   }
 
   throw new Error(
-    "LTX completed, but no video file was returned."
+    "LTX finished without returning a video file."
   );
 }
 
 /* =========================================================
-   GENERATE VIDEO WITH LTX
+   GENERATE LTX
 ========================================================= */
 
 async function generateWithLTX(
@@ -493,6 +525,15 @@ async function generateWithLTX(
     aspectRatio
   );
 
+  /*
+   IMPORTANT:
+   The previous logs showed the frontend
+   sending 5 seconds even when 2 seconds
+   was selected.
+
+   We now clamp everything safely.
+  */
+
   let safeDuration =
     Number(duration);
 
@@ -504,18 +545,20 @@ async function generateWithLTX(
     safeDuration = 2;
   }
 
-  /*
-   DeepRat Space supports
-   approximately 0.3 - 8.5 seconds.
-  */
+  safeDuration =
+    Math.min(
+      8,
+      Math.max(
+        0.3,
+        safeDuration
+      )
+    );
 
-  safeDuration = Math.min(
-    8.5,
-    Math.max(
-      0.3,
-      safeDuration
-    )
-  );
+  const seed =
+    Math.floor(
+      Math.random() *
+      4294967295
+    );
 
   const inputData = [
     prompt,
@@ -527,10 +570,7 @@ async function generateWithLTX(
     "text-to-video",
     safeDuration,
     9,
-    Math.floor(
-      Math.random() *
-      4294967295
-    ),
+    seed,
     true,
     3.0,
     false,
@@ -542,7 +582,7 @@ async function generateWithLTX(
   );
 
   console.log(
-    "MAMAKI: STARTING LTX"
+    "MAMAKI: LTX REQUEST"
   );
 
   console.log(
@@ -551,9 +591,12 @@ async function generateWithLTX(
   );
 
   console.log(
-    "MAMAKI: SIZE:",
-    width,
-    "x",
+    "MAMAKI: WIDTH:",
+    width
+  );
+
+  console.log(
+    "MAMAKI: HEIGHT:",
     height
   );
 
@@ -563,10 +606,20 @@ async function generateWithLTX(
   );
 
   console.log(
+    "MAMAKI: SEED:",
+    seed
+  );
+
+  console.log(
+    "MAMAKI: INPUT COUNT:",
+    inputData.length
+  );
+
+  console.log(
     "================================"
   );
 
-  /* Start generation */
+  /* Start job */
 
   const startResponse =
     await fetch(
@@ -588,29 +641,52 @@ async function generateWithLTX(
       }
     );
 
-  if (!startResponse.ok) {
-    const text =
-      await startResponse.text();
+  const startText =
+    await startResponse.text();
 
+  console.log(
+    "MAMAKI: START STATUS:",
+    startResponse.status
+  );
+
+  console.log(
+    "MAMAKI: START RESPONSE:",
+    startText.slice(
+      0,
+      10000
+    )
+  );
+
+  if (!startResponse.ok) {
     throw new Error(
-      `LTX start failed (${startResponse.status}): ${text.slice(
+      `LTX start request failed (${startResponse.status}): ${startText.slice(
         0,
         4000
       )}`
     );
   }
 
-  const job =
-    await startResponse.json();
+  let job;
 
-  console.log(
-    "MAMAKI: JOB RESPONSE:",
-    JSON.stringify(job)
-  );
+  try {
+    job =
+      JSON.parse(
+        startText
+      );
+  } catch {
+    throw new Error(
+      `LTX returned invalid job data: ${startText.slice(
+        0,
+        4000
+      )}`
+    );
+  }
 
   if (!job?.event_id) {
     throw new Error(
-      "LTX did not return an event ID."
+      `LTX did not return an event ID. Response: ${JSON.stringify(
+        job
+      )}`
     );
   }
 
@@ -634,14 +710,19 @@ async function generateWithLTX(
       }
     );
 
+  console.log(
+    "MAMAKI: RESULT STATUS:",
+    resultResponse.status
+  );
+
   if (!resultResponse.ok) {
     const text =
       await resultResponse.text();
 
     throw new Error(
-      `LTX result failed (${resultResponse.status}): ${text.slice(
+      `LTX result request failed (${resultResponse.status}): ${text.slice(
         0,
-        4000
+        5000
       )}`
     );
   }
@@ -696,10 +777,7 @@ async function downloadVideo(
   );
 
   console.log(
-    "MAMAKI: VIDEO DOWNLOADED:"
-  );
-
-  console.log(
+    "MAMAKI: VIDEO SAVED:",
     outputPath
   );
 }
@@ -722,7 +800,7 @@ async function generateVoice(
   }
 
   console.log(
-    "MAMAKI: GENERATING AI VOICE..."
+    "MAMAKI: GENERATING VOICE..."
   );
 
   const tts =
@@ -780,14 +858,6 @@ async function generateVoice(
     );
   }
 
-  if (
-    audioBuffer.length < 1000
-  ) {
-    throw new Error(
-      "Generated voice file is too small."
-    );
-  }
-
   await fs.writeFile(
     outputPath,
     audioBuffer
@@ -815,7 +885,7 @@ function runFFmpeg(args) {
         return;
       }
 
-      const process =
+      const child =
         spawn(
           ffmpegPath,
           args
@@ -823,7 +893,7 @@ function runFFmpeg(args) {
 
       let stderr = "";
 
-      process.stderr.on(
+      child.stderr.on(
         "data",
         (data) => {
           stderr +=
@@ -831,12 +901,12 @@ function runFFmpeg(args) {
         }
       );
 
-      process.on(
+      child.on(
         "error",
         reject
       );
 
-      process.on(
+      child.on(
         "close",
         (code) => {
           if (code === 0) {
@@ -867,7 +937,7 @@ async function mergeVideoAndVoice(
   outputPath
 ) {
   console.log(
-    "MAMAKI: MERGING VIDEO + VOICE..."
+    "MAMAKI: MERGING VIDEO AND VOICE..."
   );
 
   await runFFmpeg([
@@ -917,20 +987,82 @@ app.post(
       );
 
     try {
-      const {
-        prompt,
-        voiceText,
-        style = "Realistic",
-        aspectRatio = "9:16",
-        duration = 2,
-        voice = true
-      } = req.body || {};
+      const body =
+        req.body || {};
+
+      const prompt =
+        typeof body.prompt ===
+        "string"
+          ? body.prompt
+          : "";
+
+      const voiceText =
+        typeof body.voiceText ===
+        "string"
+          ? body.voiceText
+          : "";
+
+      const style =
+        body.style ||
+        "Realistic";
+
+      const aspectRatio =
+        body.aspectRatio ||
+        "9:16";
+
+      /*
+       If frontend sends nothing,
+       use 2 seconds instead of 5.
+      */
+
+      let duration =
+        Number(
+          body.duration
+        );
 
       if (
-        typeof prompt !==
-          "string" ||
-        !prompt.trim()
+        !Number.isFinite(
+          duration
+        )
       ) {
+        duration = 2;
+      }
+
+      duration =
+        Math.min(
+          8,
+          Math.max(
+            0.3,
+            duration
+          )
+        );
+
+      const voice =
+        body.voice !== false;
+
+      console.log(
+        "================================"
+      );
+
+      console.log(
+        "MAMAKI: API REQUEST"
+      );
+
+      console.log(
+        "MAMAKI: REQUEST BODY:",
+        JSON.stringify(body)
+      );
+
+      console.log(
+        "MAMAKI: FINAL DURATION:",
+        duration
+      );
+
+      console.log(
+        "================================"
+      );
+
+      if (!prompt.trim()) {
         return res
           .status(400)
           .json({
@@ -970,45 +1102,37 @@ app.post(
 
       const stylePrompt =
         styles[style] ||
-        "high-quality video";
+        styles.Realistic;
 
       const finalPrompt =
         `${stylePrompt}. ${prompt.trim()}`;
 
-      /* 1. Generate */
+      /* 1. LTX */
 
-      const ltxVideoUrl =
+      const videoUrl =
         await generateWithLTX(
           finalPrompt,
           aspectRatio,
           duration
         );
 
-      if (!ltxVideoUrl) {
-        throw new Error(
-          "LTX returned no video URL."
-        );
-      }
-
       /* 2. Download */
 
       await downloadVideo(
-        ltxVideoUrl,
+        videoUrl,
         videoPath
       );
 
-      /* 3. Narration */
+      /* 3. Voice text */
 
       const narration =
-        typeof voiceText ===
-          "string" &&
         voiceText.trim()
           ? voiceText.trim()
           : prompt.trim();
 
       /* 4. Voice */
 
-      if (voice !== false) {
+      if (voice) {
         await generateVoice(
           narration,
           audioPath
@@ -1028,8 +1152,6 @@ app.post(
         );
       }
 
-      /* 6. Final URL */
-
       const finalUrl =
         `/api/video/${path.basename(
           finalPath
@@ -1040,10 +1162,11 @@ app.post(
       );
 
       console.log(
-        "MAMAKI: GENERATION SUCCESSFUL"
+        "MAMAKI: SUCCESS"
       );
 
       console.log(
+        "MAMAKI VIDEO:",
         finalUrl
       );
 
@@ -1058,18 +1181,29 @@ app.post(
           finalUrl,
 
         voiceOver:
-          voice !== false,
+          voice,
 
         message:
-          voice !== false
+          voice
             ? "Video and AI voice-over generated successfully."
             : "Video generated successfully."
       });
 
     } catch (error) {
       console.error(
-        "MAMAKI VIDEO ERROR:",
+        "================================"
+      );
+
+      console.error(
+        "MAMAKI VIDEO ERROR:"
+      );
+
+      console.error(
         error
+      );
+
+      console.error(
+        "================================"
       );
 
       return res
@@ -1083,8 +1217,6 @@ app.post(
         });
 
     } finally {
-      /* Clean temporary source files */
-
       try {
         const files =
           await fs.readdir(
@@ -1113,14 +1245,14 @@ app.post(
           }
         }
       } catch {
-        /* Ignore cleanup errors */
+        /* Ignore */
       }
     }
   }
 );
 
 /* =========================================================
-   SERVE FINAL VIDEO
+   VIDEO ROUTE
 ========================================================= */
 
 app.get(
@@ -1237,7 +1369,7 @@ app.get(
 );
 
 /* =========================================================
-   START SERVER
+   START
 ========================================================= */
 
 app.listen(
