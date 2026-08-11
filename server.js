@@ -1,10 +1,21 @@
 import "dotenv/config";
 import express from "express";
+import fs from "fs/promises";
+import path from "path";
+import { fileURLToPath } from "url";
+import { spawn } from "child_process";
+import { ttsSave } from "edge-tts";
+import ffmpegPath from "ffmpeg-static";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static("."));
+
+const PORT = process.env.PORT || 3000;
 
 const LTX_SPACE =
   "https://deeprat-ltx-video-zerogpu-optimized.hf.space";
@@ -28,7 +39,6 @@ const styles = {
   "AI Avatar":
     "professional digital presenter avatar, natural movement"
 };
-
 
 /* =========================================================
    VIDEO DIMENSIONS
@@ -55,13 +65,28 @@ function getDimensions(aspectRatio) {
   };
 }
 
-
 /* =========================================================
    CONVERT GRADIO FILE DATA TO URL
    ========================================================= */
 
 function filePathToUrl(value) {
   if (!value) {
+    return null;
+  }
+
+  if (typeof value === "object") {
+    if (value.url) {
+      return filePathToUrl(value.url);
+    }
+
+    if (value.path) {
+      return filePathToUrl(value.path);
+    }
+
+    if (value.video) {
+      return filePathToUrl(value.video);
+    }
+
     return null;
   }
 
@@ -82,24 +107,11 @@ function filePathToUrl(value) {
     return text;
   }
 
-  /*
-   * Gradio file endpoint.
-   *
-   * Encode only the individual path segments so that
-   * the Gradio file route receives a valid file path.
-   */
-
-  const encodedPath = text
-    .split("/")
-    .map((part) => encodeURIComponent(part))
-    .join("/");
-
-  return `${LTX_SPACE}/gradio_api/file=${encodedPath}`;
+  return `${LTX_SPACE}/gradio_api/file=${encodeURIComponent(text)}`;
 }
 
-
 /* =========================================================
-   FIND VIDEO FILE IN GRADIO RESPONSE
+   FIND VIDEO IN GRADIO RESPONSE
    ========================================================= */
 
 function findVideoUrl(value, seen = new Set()) {
@@ -107,20 +119,8 @@ function findVideoUrl(value, seen = new Set()) {
     return null;
   }
 
-  /*
-   * STRING
-   */
-
   if (typeof value === "string") {
     const text = value.trim();
-
-    if (!text) {
-      return null;
-    }
-
-    /*
-     * Direct URL.
-     */
 
     if (
       text.startsWith("http://") ||
@@ -129,12 +129,8 @@ function findVideoUrl(value, seen = new Set()) {
       return text;
     }
 
-    /*
-     * Local Gradio file path.
-     */
-
     if (
-      text.toLowerCase().includes(".mp4") ||
+      text.includes(".mp4") ||
       text.includes("/tmp/") ||
       text.includes("/home/") ||
       text.includes("/app/")
@@ -145,86 +141,55 @@ function findVideoUrl(value, seen = new Set()) {
     return null;
   }
 
+  if (typeof value !== "object") {
+    return null;
+  }
 
-  /*
-   * OBJECT
-   */
-
-  if (
-    typeof value !== "object" ||
-    seen.has(value)
-  ) {
+  if (seen.has(value)) {
     return null;
   }
 
   seen.add(value);
 
-
   /*
-   * IMPORTANT:
-   * Gradio FileData commonly contains:
+   * Exact Gradio VideoData structure:
    *
    * {
-   *   path: "...",
-   *   url: "...",
-   *   orig_name: "...",
-   *   mime_type: "video/mp4"
+   *   video: {
+   *     path: "...",
+   *     url: "...",
+   *     ...
+   *   },
+   *   subtitles: null
    * }
    */
 
-  if (typeof value.path === "string") {
-    const path = value.path.trim();
-
-    if (
-      path &&
-      (
-        path.toLowerCase().includes(".mp4") ||
-        value.mime_type?.startsWith("video/")
-      )
-    ) {
-      return filePathToUrl(path);
-    }
-  }
-
-
-  /*
-   * Prefer Gradio's supplied URL when available.
-   */
-
-  if (typeof value.url === "string") {
-    const url = value.url.trim();
-
-    if (url) {
-      return url;
-    }
-  }
-
-
-  /*
-   * Direct video property.
-   */
-
   if (value.video) {
-    const result = findVideoUrl(
-      value.video,
-      seen
-    );
+    const result = findVideoUrl(value.video, seen);
 
     if (result) {
       return result;
     }
   }
 
+  if (value.url) {
+    const result = filePathToUrl(value.url);
 
-  /*
-   * Recursively inspect all properties.
-   */
+    if (result) {
+      return result;
+    }
+  }
+
+  if (value.path) {
+    const result = filePathToUrl(value.path);
+
+    if (result) {
+      return result;
+    }
+  }
 
   for (const key of Object.keys(value)) {
-    const result = findVideoUrl(
-      value[key],
-      seen
-    );
+    const result = findVideoUrl(value[key], seen);
 
     if (result) {
       return result;
@@ -234,9 +199,8 @@ function findVideoUrl(value, seen = new Set()) {
   return null;
 }
 
-
 /* =========================================================
-   EXTRACT VIDEO FROM ANY RESPONSE
+   EXTRACT VIDEO FROM GRADIO DATA
    ========================================================= */
 
 function extractVideo(value) {
@@ -244,81 +208,59 @@ function extractVideo(value) {
     return null;
   }
 
-  /*
-   * First inspect the object directly.
-   */
+  const direct = findVideoUrl(value);
 
-  let videoUrl = findVideoUrl(value);
-
-  if (videoUrl) {
-    return videoUrl;
+  if (direct) {
+    return direct;
   }
 
+  if (typeof value !== "string") {
+    return null;
+  }
 
-  /*
-   * If the response is a JSON string,
-   * parse it and inspect it again.
-   */
+  const text = value.trim();
 
-  if (typeof value === "string") {
-    const text = value.trim();
+  if (!text) {
+    return null;
+  }
 
-    if (!text) {
-      return null;
+  try {
+    const parsed = JSON.parse(text);
+
+    const parsedVideo = findVideoUrl(parsed);
+
+    if (parsedVideo) {
+      return parsedVideo;
     }
+  } catch {
+    // Not JSON. Continue.
+  }
 
-    try {
-      const parsed = JSON.parse(text);
+  const mp4Match = text.match(
+    /https?:\/\/[^\s"'\\]+\.mp4[^\s"'\\]*/i
+  );
 
-      videoUrl = findVideoUrl(parsed);
+  if (mp4Match) {
+    return mp4Match[0];
+  }
 
-      if (videoUrl) {
-        return videoUrl;
-      }
-    } catch {
-      // Not JSON. Continue below.
-    }
+  const pathMatch = text.match(
+    /(?:\/tmp\/|\/home\/|\/app\/)[^\s"'\\]+\.mp4/i
+  );
 
-
-    /*
-     * Search raw text for an MP4 URL.
-     */
-
-    const httpMatch = text.match(
-      /https?:\/\/[^\s"'\\]+\.mp4[^\s"'\\]*/i
-    );
-
-    if (httpMatch) {
-      return httpMatch[0];
-    }
-
-
-    /*
-     * Search raw text for a local MP4 path.
-     */
-
-    const pathMatch = text.match(
-      /(?:\/tmp\/|\/home\/|\/app\/)[^\s"'\\]+\.mp4/i
-    );
-
-    if (pathMatch) {
-      return filePathToUrl(pathMatch[0]);
-    }
+  if (pathMatch) {
+    return filePathToUrl(pathMatch[0]);
   }
 
   return null;
 }
 
-
 /* =========================================================
-   PROCESS ONE SSE EVENT
+   PROCESS SSE EVENT
    ========================================================= */
 
 function processSSEEvent(eventText) {
-  if (
-    !eventText ||
-    !eventText.trim()
-  ) {
+  if (!eventText || !eventText.trim()) {
     return null;
   }
 
@@ -328,17 +270,12 @@ function processSSEEvent(eventText) {
   let rawData = "";
 
   for (const line of lines) {
-
     if (line.startsWith("event:")) {
-      eventType = line
-        .slice(6)
-        .trim();
+      eventType = line.slice(6).trim();
     }
 
     if (line.startsWith("data:")) {
-      const part = line
-        .slice(5)
-        .trim();
+      const part = line.slice(5).trim();
 
       if (rawData) {
         rawData += "\n";
@@ -348,14 +285,9 @@ function processSSEEvent(eventText) {
     }
   }
 
-
-  if (
-    !rawData ||
-    rawData === "null"
-  ) {
+  if (!rawData || rawData === "null") {
     return null;
   }
-
 
   console.log(
     "MAMAKI: LTX EVENT:",
@@ -367,11 +299,6 @@ function processSSEEvent(eventText) {
     rawData.slice(0, 5000)
   );
 
-
-  /*
-   * Parse JSON.
-   */
-
   let data;
 
   try {
@@ -380,33 +307,16 @@ function processSSEEvent(eventText) {
     data = rawData;
   }
 
-
-  /*
-   * IMPORTANT:
-   * Gradio text_to_video returns the video
-   * inside the completion data.
-   */
-
-  let videoUrl = extractVideo(data);
-
-  if (!videoUrl) {
-    videoUrl = extractVideo(rawData);
-  }
-
+  const videoUrl = extractVideo(data);
 
   if (videoUrl) {
     console.log(
-      "MAMAKI: VIDEO FOUND:",
+      "MAMAKI: VIDEO FILE FOUND:",
       videoUrl
     );
 
     return videoUrl;
   }
-
-
-  /*
-   * Handle errors.
-   */
 
   if (
     eventType === "error" ||
@@ -421,151 +331,57 @@ function processSSEEvent(eventText) {
     );
   }
 
-
-  /*
-   * Gradio heartbeat/status events.
-   */
-
-  if (
-    eventType === "generating" ||
-    eventType === "process_starts" ||
-    eventType === "heartbeat"
-  ) {
-    console.log(
-      "MAMAKI: LTX still processing..."
-    );
-  }
-
-
-  /*
-   * Completion event.
-   */
-
-  if (eventType === "complete") {
-    console.log(
-      "MAMAKI: LTX COMPLETE EVENT RECEIVED"
-    );
-
-    console.log(
-      "MAMAKI: COMPLETE DATA:",
-      rawData.slice(0, 10000)
-    );
-  }
-
   return null;
 }
-
 
 /* =========================================================
    READ GRADIO SSE STREAM
    ========================================================= */
 
-async function readSSE(
-  response,
-  timeoutMs = 300000
-) {
+async function readSSE(response, timeoutMs = 300000) {
   if (!response.body) {
     throw new Error(
       "LTX returned no event stream."
     );
   }
 
-  const reader =
-    response.body.getReader();
+  const reader = response.body.getReader();
 
-  const decoder =
-    new TextDecoder();
+  const decoder = new TextDecoder();
 
   let buffer = "";
 
-  let timedOut = false;
+  let timeoutTriggered = false;
 
   const timeout = setTimeout(() => {
-    timedOut = true;
+    timeoutTriggered = true;
 
-    reader
-      .cancel()
-      .catch(() => {});
+    reader.cancel().catch(() => {});
   }, timeoutMs);
 
-
   try {
-
     while (true) {
-
-      const {
-        value,
-        done
-      } = await reader.read();
-
-
-      /*
-       * Stream finished.
-       */
+      const { value, done } =
+        await reader.read();
 
       if (done) {
-
-        /*
-         * Process any remaining event.
-         */
-
-        if (buffer.trim()) {
-
-          const result =
-            processSSEEvent(buffer);
-
-          if (result) {
-            return result;
-          }
-        }
-
         break;
       }
 
-
-      /*
-       * Decode incoming bytes.
-       */
-
       buffer += decoder.decode(
         value,
-        {
-          stream: true
-        }
+        { stream: true }
       );
 
+      const events = buffer.split(
+        /\r?\n\r?\n/
+      );
 
-      /*
-       * SSE events are separated
-       * by a blank line.
-       */
+      buffer = events.pop() || "";
 
-      const events =
-        buffer.split(
-          /\r?\n\r?\n/
-        );
-
-
-      /*
-       * Keep unfinished event.
-       */
-
-      buffer =
-        events.pop() || "";
-
-
-      /*
-       * Process completed events.
-       */
-
-      for (
-        const eventText of events
-      ) {
-
+      for (const eventText of events) {
         const videoUrl =
-          processSSEEvent(
-            eventText
-          );
+          processSSEEvent(eventText);
 
         if (videoUrl) {
           return videoUrl;
@@ -573,45 +389,69 @@ async function readSSE(
       }
     }
 
-
-    /*
-     * Flush decoder.
-     */
-
-    buffer +=
-      decoder.decode();
-
+    buffer += decoder.decode();
 
     if (buffer.trim()) {
-
-      const result =
+      const videoUrl =
         processSSEEvent(buffer);
 
-      if (result) {
-        return result;
+      if (videoUrl) {
+        return videoUrl;
       }
     }
-
-
   } finally {
-
     clearTimeout(timeout);
-
   }
 
-
-  if (timedOut) {
+  if (timeoutTriggered) {
     throw new Error(
-      "LTX video generation timed out."
+      "LTX generation timed out."
     );
   }
-
 
   throw new Error(
     "LTX completed, but the Gradio response did not contain a video file."
   );
 }
 
+/* =========================================================
+   DOWNLOAD GENERATED LTX VIDEO
+   ========================================================= */
+
+async function downloadVideo(videoUrl, outputPath) {
+  console.log(
+    "MAMAKI: Downloading generated video..."
+  );
+
+  const response = await fetch(videoUrl);
+
+  if (!response.ok) {
+    throw new Error(
+      `Unable to download LTX video (${response.status}).`
+    );
+  }
+
+  const buffer =
+    Buffer.from(
+      await response.arrayBuffer()
+    );
+
+  if (buffer.length < 1000) {
+    throw new Error(
+      "Downloaded LTX video file is unexpectedly small."
+    );
+  }
+
+  await fs.writeFile(
+    outputPath,
+    buffer
+  );
+
+  console.log(
+    "MAMAKI: Video saved:",
+    outputPath
+  );
+}
 
 /* =========================================================
    GENERATE VIDEO WITH LTX
@@ -622,24 +462,19 @@ async function generateWithLTX(
   aspectRatio,
   duration
 ) {
-
   const {
     height,
     width
-  } = getDimensions(
-    aspectRatio
-  );
-
+  } = getDimensions(aspectRatio);
 
   const requestedDuration =
     Number(duration);
 
-
   const safeDuration =
     Math.min(
-      8.5,
+      8,
       Math.max(
-        0.3,
+        2,
         Number.isFinite(
           requestedDuration
         )
@@ -647,7 +482,6 @@ async function generateWithLTX(
           : 5
       )
     );
-
 
   console.log(
     "MAMAKI: Sending request to LTX..."
@@ -664,27 +498,6 @@ async function generateWithLTX(
     "MAMAKI: Duration:",
     safeDuration
   );
-
-
-  /*
-   * Exact parameter order confirmed
-   * from the Gradio API information:
-   *
-   * 1 prompt
-   * 2 negative_prompt
-   * 3 input_image_filepath
-   * 4 input_video_filepath
-   * 5 height
-   * 6 width
-   * 7 mode
-   * 8 duration
-   * 9 frames
-   * 10 seed
-   * 11 randomize_seed
-   * 12 guidance_scale
-   * 13 improve_texture_flag
-   * 14 slow_motion_flag
-   */
 
   const response =
     await fetch(
@@ -703,82 +516,57 @@ async function generateWithLTX(
         body: JSON.stringify({
           data: [
             prompt,
-
             NEGATIVE_PROMPT,
-
             null,
-
             null,
-
             height,
-
             width,
-
             "text-to-video",
-
             safeDuration,
-
             9,
-
             Math.floor(
               Math.random() *
-              4294967295
+                4294967295
             ),
-
             true,
-
-            1,
-
-            true,
-
+            3.0,
+            false,
             false
           ]
         })
       }
     );
 
-
   if (!response.ok) {
-
     const text =
       await response.text();
 
     throw new Error(
       `LTX start failed (${response.status}): ${text.slice(
         0,
-        2000
+        1500
       )}`
     );
   }
 
-
   const job =
     await response.json();
-
 
   console.log(
     "MAMAKI: LTX START RESPONSE:",
     JSON.stringify(job)
   );
 
-
   if (!job?.event_id) {
-
     throw new Error(
       "LTX did not return a generation job ID."
     );
   }
 
-
   console.log(
     "MAMAKI: LTX JOB:",
     job.event_id
   );
-
-
-  /*
-   * Connect to the Gradio event stream.
-   */
 
   const resultResponse =
     await fetch(
@@ -793,45 +581,183 @@ async function generateWithLTX(
       }
     );
 
-
   if (!resultResponse.ok) {
-
     const text =
       await resultResponse.text();
 
     throw new Error(
       `LTX result failed (${resultResponse.status}): ${text.slice(
         0,
-        2000
+        1500
       )}`
     );
   }
 
+  return await readSSE(
+    resultResponse,
+    300000
+  );
+}
 
-  const videoUrl =
-    await readSSE(
-      resultResponse,
-      300000
-    );
+/* =========================================================
+   GENERATE AI VOICE
+   ========================================================= */
 
+async function generateVoice(
+  text,
+  outputPath
+) {
+  console.log(
+    "MAMAKI: Generating AI voice-over..."
+  );
 
-  if (!videoUrl) {
+  const cleanText =
+    String(text || "").trim();
 
+  if (!cleanText) {
     throw new Error(
-      "LTX completed but no video URL was returned."
+      "Voice-over text is empty."
     );
   }
 
-
-  console.log(
-    "MAMAKI: FINAL VIDEO URL:",
-    videoUrl
+  /*
+   * Natural English female voice.
+   * This can be changed later.
+   */
+  await ttsSave(
+    cleanText,
+    outputPath,
+    {
+      voice:
+        "en-US-AriaNeural",
+      rate:
+        "+0%",
+      volume:
+        "+0%",
+      pitch:
+        "+0Hz"
+    }
   );
 
-
-  return videoUrl;
+  console.log(
+    "MAMAKI: Voice-over created:",
+    outputPath
+  );
 }
 
+/* =========================================================
+   RUN FFMPEG
+   ========================================================= */
+
+function runFFmpeg(args) {
+  return new Promise(
+    (resolve, reject) => {
+      if (!ffmpegPath) {
+        reject(
+          new Error(
+            "FFmpeg binary was not found."
+          )
+        );
+
+        return;
+      }
+
+      console.log(
+        "MAMAKI: Starting FFmpeg..."
+      );
+
+      const process =
+        spawn(
+          ffmpegPath,
+          args
+        );
+
+      let stderr = "";
+
+      process.stderr.on(
+        "data",
+        (data) => {
+          stderr += data.toString();
+        }
+      );
+
+      process.on(
+        "error",
+        reject
+      );
+
+      process.on(
+        "close",
+        (code) => {
+          if (code === 0) {
+            resolve();
+
+            return;
+          }
+
+          reject(
+            new Error(
+              `FFmpeg failed with code ${code}: ${stderr.slice(
+                -3000
+              )}`
+            )
+          );
+        }
+      );
+    }
+  );
+}
+
+/* =========================================================
+   MERGE VIDEO + VOICE
+   ========================================================= */
+
+async function mergeVideoAndVoice(
+  videoPath,
+  audioPath,
+  outputPath
+) {
+  console.log(
+    "MAMAKI: Combining video and voice-over..."
+  );
+
+  await runFFmpeg([
+    "-y",
+
+    "-i",
+    videoPath,
+
+    "-i",
+    audioPath,
+
+    "-map",
+    "0:v:0",
+
+    "-map",
+    "1:a:0",
+
+    "-c:v",
+    "copy",
+
+    "-c:a",
+    "aac",
+
+    "-b:a",
+    "128k",
+
+    "-shortest",
+
+    "-movflags",
+    "+faststart",
+
+    outputPath
+  ]);
+
+  console.log(
+    "MAMAKI: FINAL VIDEO CREATED:",
+    outputPath
+  );
+}
 
 /* =========================================================
    GENERATE API
@@ -840,22 +766,26 @@ async function generateWithLTX(
 app.post(
   "/api/generate",
   async (req, res) => {
+    const workDir =
+      path.join(
+        __dirname,
+        "tmp"
+      );
 
     try {
-
       const {
         prompt,
+        voiceText,
         style = "Realistic",
         aspectRatio = "9:16",
-        duration = 5
+        duration = 5,
+        voice = true
       } = req.body || {};
-
 
       if (
         typeof prompt !== "string" ||
         !prompt.trim()
       ) {
-
         return res
           .status(400)
           .json({
@@ -865,15 +795,40 @@ app.post(
           });
       }
 
+      await fs.mkdir(
+        workDir,
+        {
+          recursive: true
+        }
+      );
+
+      const timestamp =
+        Date.now();
+
+      const videoPath =
+        path.join(
+          workDir,
+          `ltx-${timestamp}.mp4`
+        );
+
+      const audioPath =
+        path.join(
+          workDir,
+          `voice-${timestamp}.mp3`
+        );
+
+      const finalPath =
+        path.join(
+          workDir,
+          `mamaki-${timestamp}.mp4`
+        );
 
       const stylePrompt =
         styles[style] ||
         "high-quality video";
 
-
       const finalPrompt =
         `${stylePrompt}. ${prompt.trim()}`;
-
 
       console.log(
         "MAMAKI: STARTING LTX GENERATION..."
@@ -884,33 +839,117 @@ app.post(
         finalPrompt
       );
 
+      /*
+       * STEP 1:
+       * Generate the video.
+       */
 
-      const videoUrl =
+      const ltxVideoUrl =
         await generateWithLTX(
           finalPrompt,
           aspectRatio,
           duration
         );
 
+      if (!ltxVideoUrl) {
+        throw new Error(
+          "LTX returned no video URL."
+        );
+      }
 
-      console.log(
-        "MAMAKI: GENERATION SUCCESSFUL"
+      /*
+       * STEP 2:
+       * Download the LTX video.
+       */
+
+      await downloadVideo(
+        ltxVideoUrl,
+        videoPath
       );
 
+      /*
+       * STEP 3:
+       * Generate voice-over.
+       *
+       * If voiceText is supplied by the
+       * frontend, use it.
+       *
+       * Otherwise use the original prompt.
+       */
+
+      const narration =
+        typeof voiceText === "string" &&
+        voiceText.trim()
+          ? voiceText.trim()
+          : prompt.trim();
+
+      /*
+       * Voice can be disabled by sending:
+       * "voice": false
+       */
+
+      if (voice !== false) {
+        await generateVoice(
+          narration,
+          audioPath
+        );
+
+        /*
+         * STEP 4:
+         * Combine video + voice.
+         */
+
+        await mergeVideoAndVoice(
+          videoPath,
+          audioPath,
+          finalPath
+        );
+      } else {
+        /*
+         * If voice is disabled,
+         * return the original video.
+         */
+
+        await fs.copyFile(
+          videoPath,
+          finalPath
+        );
+      }
+
+      /*
+       * STEP 5:
+       * Return final video.
+       */
+
+      const finalUrl =
+        `/api/video/${path.basename(
+          finalPath
+        )}`;
+
+      console.log(
+        "MAMAKI: GENERATION SUCCESSFUL:"
+      );
+
+      console.log(
+        finalUrl
+      );
 
       return res.json({
         ok: true,
-        videoUrl
+        videoUrl: finalUrl,
+        voiceOver:
+          voice !== false,
+        message:
+          voice !== false
+            ? "Video and AI voice-over generated successfully."
+            : "Video generated successfully."
       });
 
-
     } catch (error) {
-
       console.error(
         "MAMAKI VIDEO ERROR:",
         error
       );
-
 
       return res
         .status(500)
@@ -920,10 +959,118 @@ app.post(
             error?.message ||
             "Video generation failed."
         });
+
+    } finally {
+      /*
+       * Do not delete the final video here.
+       * It must remain available for the browser.
+       *
+       * Delete only temporary source files.
+       */
+
+      try {
+        const files =
+          await fs.readdir(
+            workDir
+          );
+
+        for (const file of files) {
+          if (
+            file.startsWith("ltx-") ||
+            file.startsWith("voice-")
+          ) {
+            await fs.unlink(
+              path.join(
+                workDir,
+                file
+              )
+            ).catch(
+              () => {}
+            );
+          }
+        }
+      } catch {
+        // Ignore cleanup errors.
+      }
     }
   }
 );
 
+/* =========================================================
+   SERVE GENERATED VIDEOS
+   ========================================================= */
+
+app.get(
+  "/api/video/:filename",
+  async (req, res) => {
+    try {
+      const filename =
+        path.basename(
+          req.params.filename
+        );
+
+      if (
+        !filename.startsWith(
+          "mamaki-"
+        ) ||
+        !filename.endsWith(
+          ".mp4"
+        )
+      ) {
+        return res
+          .status(400)
+          .send(
+            "Invalid video filename."
+          );
+      }
+
+      const videoPath =
+        path.join(
+          __dirname,
+          "tmp",
+          filename
+        );
+
+      try {
+        await fs.access(
+          videoPath
+        );
+      } catch {
+        return res
+          .status(404)
+          .send(
+            "Video not found."
+          );
+      }
+
+      res.setHeader(
+        "Content-Type",
+        "video/mp4"
+      );
+
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename="${filename}"`
+      );
+
+      return res.sendFile(
+        videoPath
+      );
+
+    } catch (error) {
+      console.error(
+        "MAMAKI VIDEO SERVE ERROR:",
+        error
+      );
+
+      return res
+        .status(500)
+        .send(
+          "Unable to serve video."
+        );
+    }
+  }
+);
 
 /* =========================================================
    STATUS API
@@ -932,7 +1079,6 @@ app.post(
 app.get(
   "/api/status",
   (req, res) => {
-
     res.json({
       ok: true,
       app:
@@ -940,11 +1086,14 @@ app.get(
       api:
         "running",
       engine:
-        "LTX Video ZeroGPU"
+        "LTX Video + AI Voice-over + FFmpeg",
+      voice:
+        "Edge TTS",
+      ffmpeg:
+        Boolean(ffmpegPath)
     });
   }
 );
-
 
 /* =========================================================
    FRONTEND
@@ -953,28 +1102,23 @@ app.get(
 app.get(
   /.*/,
   (req, res) => {
-
     res.sendFile(
-      process.cwd() +
-      "/index.html"
+      path.join(
+        __dirname,
+        "index.html"
+      )
     );
   }
 );
-
 
 /* =========================================================
    START SERVER
    ========================================================= */
 
-const PORT =
-  process.env.PORT || 3000;
-
-
 app.listen(
   PORT,
   "0.0.0.0",
   () => {
-
     console.log(
       `MAMAKI AI VIDEO running on port ${PORT}`
     );
