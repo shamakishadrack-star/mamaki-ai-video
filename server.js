@@ -1,4 +1,5 @@
-import "dotenv/config";
+
+            import "dotenv/config";
 import express from "express";
 
 const app = express();
@@ -15,30 +16,56 @@ const NEGATIVE_PROMPT =
 const styles = {
   Realistic:
     "photorealistic live-action, natural motion, realistic lighting",
+
   Cinematic:
     "cinematic film look, professional camera movement, dramatic lighting",
+
   Cartoon:
     "high-quality 3D cartoon animation, expressive characters",
+
   "3D Animation":
     "high-quality 3D animated scene, smooth camera movement",
+
   "AI Avatar":
     "professional digital presenter avatar, natural movement"
 };
 
+
+/* =========================================================
+   VIDEO DIMENSIONS
+   ========================================================= */
+
 function getDimensions(aspectRatio) {
   if (aspectRatio === "9:16") {
-    return { height: 704, width: 400 };
+    return {
+      height: 704,
+      width: 400
+    };
   }
 
   if (aspectRatio === "1:1") {
-    return { height: 512, width: 512 };
+    return {
+      height: 512,
+      width: 512
+    };
   }
 
-  return { height: 400, width: 704 };
+  return {
+    height: 400,
+    width: 704
+  };
 }
 
+
+/* =========================================================
+   CONVERT GRADIO FILE PATH TO URL
+   ========================================================= */
+
 function filePathToUrl(value) {
-  if (typeof value !== "string" || !value.trim()) {
+  if (
+    typeof value !== "string" ||
+    !value.trim()
+  ) {
     return null;
   }
 
@@ -51,11 +78,23 @@ function filePathToUrl(value) {
     return text;
   }
 
-  return `${LTX_SPACE}/gradio_api/file=${encodeURIComponent(text)}`;
+  return `${LTX_SPACE}/gradio_api/file=${encodeURIComponent(
+    text
+  )}`;
 }
 
-function findVideoUrl(value, seen = new Set()) {
-  if (value == null) return null;
+
+/* =========================================================
+   FIND VIDEO INSIDE ANY GRADIO RESPONSE
+   ========================================================= */
+
+function findVideoUrl(
+  value,
+  seen = new Set()
+) {
+  if (value == null) {
+    return null;
+  }
 
   if (typeof value === "string") {
     const text = value.trim();
@@ -70,7 +109,8 @@ function findVideoUrl(value, seen = new Set()) {
     if (
       text.toLowerCase().includes(".mp4") ||
       text.includes("/tmp/") ||
-      text.includes("gradio")
+      text.includes("/home/") ||
+      text.includes("/app/")
     ) {
       return filePathToUrl(text);
     }
@@ -87,41 +127,289 @@ function findVideoUrl(value, seen = new Set()) {
 
   seen.add(value);
 
-  if (typeof value.url === "string") {
-    const url = filePathToUrl(value.url);
+  if (
+    typeof value.url === "string"
+  ) {
+    const url =
+      filePathToUrl(value.url);
 
-    if (url) return url;
+    if (url) {
+      return url;
+    }
   }
 
-  if (typeof value.path === "string") {
-    const url = filePathToUrl(value.path);
+  if (
+    typeof value.path === "string"
+  ) {
+    const url =
+      filePathToUrl(value.path);
 
-    if (url) return url;
+    if (url) {
+      return url;
+    }
   }
 
-  if (typeof value.video === "string") {
-    const url = filePathToUrl(value.video);
+  if (
+    typeof value.video === "string"
+  ) {
+    const url =
+      filePathToUrl(value.video);
 
-    if (url) return url;
+    if (url) {
+      return url;
+    }
   }
 
-  if (value.video && typeof value.video === "object") {
-    const url = findVideoUrl(value.video, seen);
+  if (value.video) {
+    const url =
+      findVideoUrl(
+        value.video,
+        seen
+      );
 
-    if (url) return url;
+    if (url) {
+      return url;
+    }
   }
 
-  for (const key of Object.keys(value)) {
-    const found = findVideoUrl(
-      value[key],
-      seen
-    );
+  for (
+    const key of Object.keys(value)
+  ) {
+    const found =
+      findVideoUrl(
+        value[key],
+        seen
+      );
 
-    if (found) return found;
+    if (found) {
+      return found;
+    }
   }
 
   return null;
 }
+
+
+/* =========================================================
+   EXTRACT VIDEO FROM SSE DATA
+   ========================================================= */
+
+function extractVideo(value) {
+  if (value == null) {
+    return null;
+  }
+
+  let found =
+    findVideoUrl(value);
+
+  if (found) {
+    return found;
+  }
+
+  if (typeof value === "string") {
+    const text =
+      value.trim();
+
+    if (!text) {
+      return null;
+    }
+
+    /*
+     * Gradio may return JSON encoded
+     * inside a string.
+     */
+
+    try {
+      const parsed =
+        JSON.parse(text);
+
+      found =
+        findVideoUrl(parsed);
+
+      if (found) {
+        return found;
+      }
+    } catch {
+      // Continue with raw string.
+    }
+
+    /*
+     * Look for a direct MP4 URL.
+     */
+
+    const httpMatch =
+      text.match(
+        /https?:\/\/[^\s"'\\]+\.mp4[^\s"'\\]*/i
+      );
+
+    if (httpMatch) {
+      return httpMatch[0];
+    }
+
+    /*
+     * Look for a local temporary
+     * Gradio MP4 file.
+     */
+
+    const pathMatch =
+      text.match(
+        /(?:\/tmp\/|\/home\/|\/app\/)[^\s"'\\]+\.mp4/i
+      );
+
+    if (pathMatch) {
+      return filePathToUrl(
+        pathMatch[0]
+      );
+    }
+  }
+
+  return null;
+}
+
+
+/* =========================================================
+   PROCESS ONE SERVER-SENT EVENT
+   ========================================================= */
+
+function processSSEEvent(
+  eventText
+) {
+  if (
+    !eventText ||
+    !eventText.trim()
+  ) {
+    return null;
+  }
+
+  const lines =
+    eventText.split(/\r?\n/);
+
+  let eventType =
+    "message";
+
+  let rawData = "";
+
+  for (
+    const line of lines
+  ) {
+    if (
+      line.startsWith("event:")
+    ) {
+      eventType =
+        line
+          .slice(6)
+          .trim();
+    }
+
+    if (
+      line.startsWith("data:")
+    ) {
+      const part =
+        line
+          .slice(5)
+          .trim();
+
+      if (rawData) {
+        rawData += "\n";
+      }
+
+      rawData += part;
+    }
+  }
+
+  if (
+    !rawData ||
+    rawData === "null"
+  ) {
+    return null;
+  }
+
+  console.log(
+    "MAMAKI: LTX event:",
+    eventType
+  );
+
+  console.log(
+    "MAMAKI: LTX raw data:",
+    rawData.slice(0, 3000)
+  );
+
+  let data;
+
+  try {
+    data =
+      JSON.parse(rawData);
+  } catch {
+    data =
+      rawData;
+  }
+
+  /*
+   * Check parsed response.
+   */
+
+  let videoUrl =
+    extractVideo(data);
+
+  /*
+   * Check raw SSE response.
+   */
+
+  if (!videoUrl) {
+    videoUrl =
+      extractVideo(rawData);
+  }
+
+  if (videoUrl) {
+    console.log(
+      "MAMAKI: VIDEO URL FOUND:",
+      videoUrl
+    );
+
+    return videoUrl;
+  }
+
+  /*
+   * Handle explicit Gradio errors.
+   */
+
+  if (
+    eventType === "error" ||
+    eventType === "process_error"
+  ) {
+    throw new Error(
+      typeof data === "string"
+        ? data
+        : data?.error ||
+          data?.message ||
+          "LTX video generation failed."
+    );
+  }
+
+  /*
+   * Handle final Gradio event.
+   */
+
+  if (
+    eventType === "complete"
+  ) {
+    console.log(
+      "MAMAKI: LTX COMPLETE EVENT RECEIVED"
+    );
+
+    console.log(
+      "MAMAKI: COMPLETE RAW DATA:",
+      rawData
+    );
+  }
+
+  return null;
+}
+
+
+/* =========================================================
+   READ GRADIO SERVER-SENT EVENTS
+   ========================================================= */
 
 async function readSSE(
   response,
@@ -143,7 +431,9 @@ async function readSSE(
 
   const timeout =
     setTimeout(() => {
-      reader.cancel().catch(() => {});
+      reader
+        .cancel()
+        .catch(() => {});
     }, timeoutMs);
 
   try {
@@ -153,107 +443,91 @@ async function readSSE(
         done
       } = await reader.read();
 
-      if (done) break;
+      /*
+       * Process anything remaining
+       * when the stream closes.
+       */
 
-      buffer += decoder.decode(
-        value,
-        { stream: true }
-      );
+      if (done) {
+        if (buffer.trim()) {
+          const finalResult =
+            processSSEEvent(
+              buffer
+            );
+
+          if (finalResult) {
+            return finalResult;
+          }
+        }
+
+        break;
+      }
+
+      buffer +=
+        decoder.decode(
+          value,
+          {
+            stream: true
+          }
+        );
 
       const events =
-        buffer.split(/\r?\n\r?\n/);
+        buffer.split(
+          /\r?\n\r?\n/
+        );
+
+      /*
+       * Keep the unfinished event.
+       */
 
       buffer =
         events.pop() || "";
 
-      for (const eventText of events) {
-        const lines =
-          eventText.split(/\r?\n/);
-
-        let eventType = "message";
-        let rawData = "";
-
-        for (const line of lines) {
-          if (line.startsWith("event:")) {
-            eventType =
-              line.slice(6).trim();
-          }
-
-          if (line.startsWith("data:")) {
-            rawData +=
-              line.slice(5).trim();
-          }
-        }
-
-        if (!rawData) continue;
-
-        if (rawData === "null") {
-          continue;
-        }
-
-        let data;
-
-        try {
-          data = JSON.parse(rawData);
-        } catch {
-          console.log(
-            "MAMAKI: Non-JSON LTX event:",
-            rawData.slice(0, 300)
-          );
-
-          continue;
-        }
-
-        console.log(
-          "MAMAKI: LTX event:",
-          eventType
-        );
-
-        if (
-          eventType === "error" ||
-          eventType === "process_error"
-        ) {
-          throw new Error(
-            typeof data === "string"
-              ? data
-              : data?.error ||
-                data?.message ||
-                "LTX video generation failed."
-          );
-        }
-
+      for (
+        const eventText of events
+      ) {
         const videoUrl =
-          findVideoUrl(data);
+          processSSEEvent(
+            eventText
+          );
 
         if (videoUrl) {
-          console.log(
-            "MAMAKI: VIDEO URL FOUND:",
-            videoUrl
-          );
-
           return videoUrl;
-        }
-
-        if (
-          eventType === "complete"
-        ) {
-          console.log(
-            "MAMAKI: LTX complete event received."
-          );
-
-          console.log(
-            "MAMAKI: Complete data:",
-            JSON.stringify(data)
-          );
         }
       }
     }
+
+    /*
+     * Flush remaining decoder data.
+     */
+
+    buffer +=
+      decoder.decode();
+
+    if (buffer.trim()) {
+      const finalResult =
+        processSSEEvent(
+          buffer
+        );
+
+      if (finalResult) {
+        return finalResult;
+      }
+    }
+
   } finally {
     clearTimeout(timeout);
   }
 
-  return null;
+  throw new Error(
+    "LTX completed but no video file was found in the final Gradio response."
+  );
 }
+
+
+/* =========================================================
+   GENERATE VIDEO WITH LTX
+   ========================================================= */
 
 async function generateWithLTX(
   prompt,
@@ -263,7 +537,10 @@ async function generateWithLTX(
   const {
     height,
     width
-  } = getDimensions(aspectRatio);
+  } =
+    getDimensions(
+      aspectRatio
+    );
 
   const requestedDuration =
     Number(duration);
@@ -273,7 +550,9 @@ async function generateWithLTX(
       6,
       Math.max(
         2,
-        Number.isFinite(requestedDuration)
+        Number.isFinite(
+          requestedDuration
+        )
           ? requestedDuration
           : 5
       )
@@ -304,6 +583,7 @@ async function generateWithLTX(
         headers: {
           "Content-Type":
             "application/json",
+
           Accept:
             "application/json"
         },
@@ -396,12 +676,22 @@ async function generateWithLTX(
 
   if (!videoUrl) {
     throw new Error(
-      "LTX completed but no video file was found in the final Gradio response."
+      "LTX completed but no video file was returned."
     );
   }
 
+  console.log(
+    "MAMAKI: Final video URL:",
+    videoUrl
+  );
+
   return videoUrl;
 }
+
+
+/* =========================================================
+   GENERATE API
+   ========================================================= */
 
 app.post(
   "/api/generate",
@@ -412,16 +702,20 @@ app.post(
         style = "Realistic",
         aspectRatio = "9:16",
         duration = 5
-      } = req.body || {};
+      } =
+        req.body || {};
 
       if (
-        typeof prompt !== "string" ||
+        typeof prompt !==
+          "string" ||
         !prompt.trim()
       ) {
-        return res.status(400).json({
-          error:
-            "Please describe your video."
-        });
+        return res
+          .status(400)
+          .json({
+            error:
+              "Please describe your video."
+          });
       }
 
       const stylePrompt =
@@ -451,11 +745,6 @@ app.post(
         "MAMAKI: Generation successful."
       );
 
-      console.log(
-        "MAMAKI: Returning video:",
-        videoUrl
-      );
-
       return res.json({
         ok: true,
         videoUrl
@@ -467,15 +756,22 @@ app.post(
         error
       );
 
-      return res.status(500).json({
-        ok: false,
-        error:
-          error?.message ||
-          "Video generation failed."
-      });
+      return res
+        .status(500)
+        .json({
+          ok: false,
+          error:
+            error?.message ||
+            "Video generation failed."
+        });
     }
   }
 );
+
+
+/* =========================================================
+   STATUS API
+   ========================================================= */
 
 app.get(
   "/api/status",
@@ -492,6 +788,11 @@ app.get(
   }
 );
 
+
+/* =========================================================
+   FRONTEND
+   ========================================================= */
+
 app.get(
   /.*/,
   (req, res) => {
@@ -501,6 +802,11 @@ app.get(
     );
   }
 );
+
+
+/* =========================================================
+   START SERVER
+   ========================================================= */
 
 const PORT =
   process.env.PORT || 3000;
