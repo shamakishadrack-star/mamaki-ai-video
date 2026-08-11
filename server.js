@@ -1,5 +1,4 @@
-
-            import "dotenv/config";
+import "dotenv/config";
 import express from "express";
 
 const app = express();
@@ -58,18 +57,23 @@ function getDimensions(aspectRatio) {
 
 
 /* =========================================================
-   CONVERT GRADIO FILE PATH TO URL
+   CONVERT GRADIO FILE DATA TO URL
    ========================================================= */
 
 function filePathToUrl(value) {
-  if (
-    typeof value !== "string" ||
-    !value.trim()
-  ) {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
     return null;
   }
 
   const text = value.trim();
+
+  if (!text) {
+    return null;
+  }
 
   if (
     text.startsWith("http://") ||
@@ -78,26 +82,45 @@ function filePathToUrl(value) {
     return text;
   }
 
-  return `${LTX_SPACE}/gradio_api/file=${encodeURIComponent(
-    text
-  )}`;
+  /*
+   * Gradio file endpoint.
+   *
+   * Encode only the individual path segments so that
+   * the Gradio file route receives a valid file path.
+   */
+
+  const encodedPath = text
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+
+  return `${LTX_SPACE}/gradio_api/file=${encodedPath}`;
 }
 
 
 /* =========================================================
-   FIND VIDEO INSIDE ANY GRADIO RESPONSE
+   FIND VIDEO FILE IN GRADIO RESPONSE
    ========================================================= */
 
-function findVideoUrl(
-  value,
-  seen = new Set()
-) {
+function findVideoUrl(value, seen = new Set()) {
   if (value == null) {
     return null;
   }
 
+  /*
+   * STRING
+   */
+
   if (typeof value === "string") {
     const text = value.trim();
+
+    if (!text) {
+      return null;
+    }
+
+    /*
+     * Direct URL.
+     */
 
     if (
       text.startsWith("http://") ||
@@ -105,6 +128,10 @@ function findVideoUrl(
     ) {
       return text;
     }
+
+    /*
+     * Local Gradio file path.
+     */
 
     if (
       text.toLowerCase().includes(".mp4") ||
@@ -118,6 +145,11 @@ function findVideoUrl(
     return null;
   }
 
+
+  /*
+   * OBJECT
+   */
+
   if (
     typeof value !== "object" ||
     seen.has(value)
@@ -127,62 +159,75 @@ function findVideoUrl(
 
   seen.add(value);
 
-  if (
-    typeof value.url === "string"
-  ) {
-    const url =
-      filePathToUrl(value.url);
+
+  /*
+   * IMPORTANT:
+   * Gradio FileData commonly contains:
+   *
+   * {
+   *   path: "...",
+   *   url: "...",
+   *   orig_name: "...",
+   *   mime_type: "video/mp4"
+   * }
+   */
+
+  if (typeof value.path === "string") {
+    const path = value.path.trim();
+
+    if (
+      path &&
+      (
+        path.toLowerCase().includes(".mp4") ||
+        value.mime_type?.startsWith("video/")
+      )
+    ) {
+      return filePathToUrl(path);
+    }
+  }
+
+
+  /*
+   * Prefer Gradio's supplied URL when available.
+   */
+
+  if (typeof value.url === "string") {
+    const url = value.url.trim();
 
     if (url) {
       return url;
     }
   }
 
-  if (
-    typeof value.path === "string"
-  ) {
-    const url =
-      filePathToUrl(value.path);
 
-    if (url) {
-      return url;
-    }
-  }
-
-  if (
-    typeof value.video === "string"
-  ) {
-    const url =
-      filePathToUrl(value.video);
-
-    if (url) {
-      return url;
-    }
-  }
+  /*
+   * Direct video property.
+   */
 
   if (value.video) {
-    const url =
-      findVideoUrl(
-        value.video,
-        seen
-      );
+    const result = findVideoUrl(
+      value.video,
+      seen
+    );
 
-    if (url) {
-      return url;
+    if (result) {
+      return result;
     }
   }
 
-  for (
-    const key of Object.keys(value)
-  ) {
-    const found =
-      findVideoUrl(
-        value[key],
-        seen
-      );
 
-    if (found) {
-      return found;
+  /*
+   * Recursively inspect all properties.
+   */
+
+  for (const key of Object.keys(value)) {
+    const result = findVideoUrl(
+      value[key],
+      seen
+    );
+
+    if (result) {
+      return result;
     }
   }
 
@@ -191,7 +236,7 @@ function findVideoUrl(
 
 
 /* =========================================================
-   EXTRACT VIDEO FROM SSE DATA
+   EXTRACT VIDEO FROM ANY RESPONSE
    ========================================================= */
 
 function extractVideo(value) {
@@ -199,67 +244,65 @@ function extractVideo(value) {
     return null;
   }
 
-  let found =
-    findVideoUrl(value);
+  /*
+   * First inspect the object directly.
+   */
 
-  if (found) {
-    return found;
+  let videoUrl = findVideoUrl(value);
+
+  if (videoUrl) {
+    return videoUrl;
   }
 
+
+  /*
+   * If the response is a JSON string,
+   * parse it and inspect it again.
+   */
+
   if (typeof value === "string") {
-    const text =
-      value.trim();
+    const text = value.trim();
 
     if (!text) {
       return null;
     }
 
-    /*
-     * Gradio may return JSON encoded
-     * inside a string.
-     */
-
     try {
-      const parsed =
-        JSON.parse(text);
+      const parsed = JSON.parse(text);
 
-      found =
-        findVideoUrl(parsed);
+      videoUrl = findVideoUrl(parsed);
 
-      if (found) {
-        return found;
+      if (videoUrl) {
+        return videoUrl;
       }
     } catch {
-      // Continue with raw string.
+      // Not JSON. Continue below.
     }
 
+
     /*
-     * Look for a direct MP4 URL.
+     * Search raw text for an MP4 URL.
      */
 
-    const httpMatch =
-      text.match(
-        /https?:\/\/[^\s"'\\]+\.mp4[^\s"'\\]*/i
-      );
+    const httpMatch = text.match(
+      /https?:\/\/[^\s"'\\]+\.mp4[^\s"'\\]*/i
+    );
 
     if (httpMatch) {
       return httpMatch[0];
     }
 
+
     /*
-     * Look for a local temporary
-     * Gradio MP4 file.
+     * Search raw text for a local MP4 path.
      */
 
-    const pathMatch =
-      text.match(
-        /(?:\/tmp\/|\/home\/|\/app\/)[^\s"'\\]+\.mp4/i
-      );
+    const pathMatch = text.match(
+      /(?:\/tmp\/|\/home\/|\/app\/)[^\s"'\\]+\.mp4/i
+    );
 
     if (pathMatch) {
-      return filePathToUrl(
-        pathMatch[0]
-      );
+      return filePathToUrl(pathMatch[0]);
     }
   }
 
@@ -268,12 +311,10 @@ function extractVideo(value) {
 
 
 /* =========================================================
-   PROCESS ONE SERVER-SENT EVENT
+   PROCESS ONE SSE EVENT
    ========================================================= */
 
-function processSSEEvent(
-  eventText
-) {
+function processSSEEvent(eventText) {
   if (
     !eventText ||
     !eventText.trim()
@@ -281,33 +322,23 @@ function processSSEEvent(
     return null;
   }
 
-  const lines =
-    eventText.split(/\r?\n/);
+  const lines = eventText.split(/\r?\n/);
 
-  let eventType =
-    "message";
-
+  let eventType = "message";
   let rawData = "";
 
-  for (
-    const line of lines
-  ) {
-    if (
-      line.startsWith("event:")
-    ) {
-      eventType =
-        line
-          .slice(6)
-          .trim();
+  for (const line of lines) {
+
+    if (line.startsWith("event:")) {
+      eventType = line
+        .slice(6)
+        .trim();
     }
 
-    if (
-      line.startsWith("data:")
-    ) {
-      const part =
-        line
-          .slice(5)
-          .trim();
+    if (line.startsWith("data:")) {
+      const part = line
+        .slice(5)
+        .trim();
 
       if (rawData) {
         rawData += "\n";
@@ -317,6 +348,7 @@ function processSSEEvent(
     }
   }
 
+
   if (
     !rawData ||
     rawData === "null"
@@ -324,53 +356,56 @@ function processSSEEvent(
     return null;
   }
 
+
   console.log(
-    "MAMAKI: LTX event:",
+    "MAMAKI: LTX EVENT:",
     eventType
   );
 
   console.log(
-    "MAMAKI: LTX raw data:",
-    rawData.slice(0, 3000)
+    "MAMAKI: LTX DATA:",
+    rawData.slice(0, 5000)
   );
+
+
+  /*
+   * Parse JSON.
+   */
 
   let data;
 
   try {
-    data =
-      JSON.parse(rawData);
+    data = JSON.parse(rawData);
   } catch {
-    data =
-      rawData;
+    data = rawData;
   }
 
-  /*
-   * Check parsed response.
-   */
-
-  let videoUrl =
-    extractVideo(data);
 
   /*
-   * Check raw SSE response.
+   * IMPORTANT:
+   * Gradio text_to_video returns the video
+   * inside the completion data.
    */
+
+  let videoUrl = extractVideo(data);
 
   if (!videoUrl) {
-    videoUrl =
-      extractVideo(rawData);
+    videoUrl = extractVideo(rawData);
   }
+
 
   if (videoUrl) {
     console.log(
-      "MAMAKI: VIDEO URL FOUND:",
+      "MAMAKI: VIDEO FOUND:",
       videoUrl
     );
 
     return videoUrl;
   }
 
+
   /*
-   * Handle explicit Gradio errors.
+   * Handle errors.
    */
 
   if (
@@ -386,20 +421,34 @@ function processSSEEvent(
     );
   }
 
+
   /*
-   * Handle final Gradio event.
+   * Gradio heartbeat/status events.
    */
 
   if (
-    eventType === "complete"
+    eventType === "generating" ||
+    eventType === "process_starts" ||
+    eventType === "heartbeat"
   ) {
+    console.log(
+      "MAMAKI: LTX still processing..."
+    );
+  }
+
+
+  /*
+   * Completion event.
+   */
+
+  if (eventType === "complete") {
     console.log(
       "MAMAKI: LTX COMPLETE EVENT RECEIVED"
     );
 
     console.log(
-      "MAMAKI: COMPLETE RAW DATA:",
-      rawData
+      "MAMAKI: COMPLETE DATA:",
+      rawData.slice(0, 10000)
     );
   }
 
@@ -408,12 +457,12 @@ function processSSEEvent(
 
 
 /* =========================================================
-   READ GRADIO SERVER-SENT EVENTS
+   READ GRADIO SSE STREAM
    ========================================================= */
 
 async function readSSE(
   response,
-  timeoutMs = 180000
+  timeoutMs = 300000
 ) {
   if (!response.body) {
     throw new Error(
@@ -429,63 +478,90 @@ async function readSSE(
 
   let buffer = "";
 
-  const timeout =
-    setTimeout(() => {
-      reader
-        .cancel()
-        .catch(() => {});
-    }, timeoutMs);
+  let timedOut = false;
+
+  const timeout = setTimeout(() => {
+    timedOut = true;
+
+    reader
+      .cancel()
+      .catch(() => {});
+  }, timeoutMs);
+
 
   try {
+
     while (true) {
+
       const {
         value,
         done
       } = await reader.read();
 
+
       /*
-       * Process anything remaining
-       * when the stream closes.
+       * Stream finished.
        */
 
       if (done) {
-        if (buffer.trim()) {
-          const finalResult =
-            processSSEEvent(
-              buffer
-            );
 
-          if (finalResult) {
-            return finalResult;
+        /*
+         * Process any remaining event.
+         */
+
+        if (buffer.trim()) {
+
+          const result =
+            processSSEEvent(buffer);
+
+          if (result) {
+            return result;
           }
         }
 
         break;
       }
 
-      buffer +=
-        decoder.decode(
-          value,
-          {
-            stream: true
-          }
-        );
+
+      /*
+       * Decode incoming bytes.
+       */
+
+      buffer += decoder.decode(
+        value,
+        {
+          stream: true
+        }
+      );
+
+
+      /*
+       * SSE events are separated
+       * by a blank line.
+       */
 
       const events =
         buffer.split(
           /\r?\n\r?\n/
         );
 
+
       /*
-       * Keep the unfinished event.
+       * Keep unfinished event.
        */
 
       buffer =
         events.pop() || "";
 
+
+      /*
+       * Process completed events.
+       */
+
       for (
         const eventText of events
       ) {
+
         const videoUrl =
           processSSEEvent(
             eventText
@@ -497,30 +573,42 @@ async function readSSE(
       }
     }
 
+
     /*
-     * Flush remaining decoder data.
+     * Flush decoder.
      */
 
     buffer +=
       decoder.decode();
 
-    if (buffer.trim()) {
-      const finalResult =
-        processSSEEvent(
-          buffer
-        );
 
-      if (finalResult) {
-        return finalResult;
+    if (buffer.trim()) {
+
+      const result =
+        processSSEEvent(buffer);
+
+      if (result) {
+        return result;
       }
     }
 
+
   } finally {
+
     clearTimeout(timeout);
+
   }
 
+
+  if (timedOut) {
+    throw new Error(
+      "LTX video generation timed out."
+    );
+  }
+
+
   throw new Error(
-    "LTX completed but no video file was found in the final Gradio response."
+    "LTX completed, but the Gradio response did not contain a video file."
   );
 }
 
@@ -534,22 +622,24 @@ async function generateWithLTX(
   aspectRatio,
   duration
 ) {
+
   const {
     height,
     width
-  } =
-    getDimensions(
-      aspectRatio
-    );
+  } = getDimensions(
+    aspectRatio
+  );
+
 
   const requestedDuration =
     Number(duration);
 
+
   const safeDuration =
     Math.min(
-      6,
+      8.5,
       Math.max(
-        2,
+        0.3,
         Number.isFinite(
           requestedDuration
         )
@@ -557,6 +647,7 @@ async function generateWithLTX(
           : 5
       )
     );
+
 
   console.log(
     "MAMAKI: Sending request to LTX..."
@@ -573,6 +664,27 @@ async function generateWithLTX(
     "MAMAKI: Duration:",
     safeDuration
   );
+
+
+  /*
+   * Exact parameter order confirmed
+   * from the Gradio API information:
+   *
+   * 1 prompt
+   * 2 negative_prompt
+   * 3 input_image_filepath
+   * 4 input_video_filepath
+   * 5 height
+   * 6 width
+   * 7 mode
+   * 8 duration
+   * 9 frames
+   * 10 seed
+   * 11 randomize_seed
+   * 12 guidance_scale
+   * 13 improve_texture_flag
+   * 14 slow_motion_flag
+   */
 
   const response =
     await fetch(
@@ -591,57 +703,82 @@ async function generateWithLTX(
         body: JSON.stringify({
           data: [
             prompt,
+
             NEGATIVE_PROMPT,
+
             null,
+
             null,
+
             height,
+
             width,
+
             "text-to-video",
+
             safeDuration,
+
             9,
+
             Math.floor(
               Math.random() *
-                4294967295
+              4294967295
             ),
+
             true,
-            3.0,
-            false,
+
+            1,
+
+            true,
+
             false
           ]
         })
       }
     );
 
+
   if (!response.ok) {
+
     const text =
       await response.text();
 
     throw new Error(
       `LTX start failed (${response.status}): ${text.slice(
         0,
-        1000
+        2000
       )}`
     );
   }
 
+
   const job =
     await response.json();
 
+
   console.log(
-    "MAMAKI: LTX start response:",
+    "MAMAKI: LTX START RESPONSE:",
     JSON.stringify(job)
   );
 
+
   if (!job?.event_id) {
+
     throw new Error(
       "LTX did not return a generation job ID."
     );
   }
 
+
   console.log(
-    "MAMAKI: LTX job:",
+    "MAMAKI: LTX JOB:",
     job.event_id
   );
+
+
+  /*
+   * Connect to the Gradio event stream.
+   */
 
   const resultResponse =
     await fetch(
@@ -656,34 +793,41 @@ async function generateWithLTX(
       }
     );
 
+
   if (!resultResponse.ok) {
+
     const text =
       await resultResponse.text();
 
     throw new Error(
       `LTX result failed (${resultResponse.status}): ${text.slice(
         0,
-        1000
+        2000
       )}`
     );
   }
 
+
   const videoUrl =
     await readSSE(
       resultResponse,
-      180000
+      300000
     );
 
+
   if (!videoUrl) {
+
     throw new Error(
-      "LTX completed but no video file was returned."
+      "LTX completed but no video URL was returned."
     );
   }
 
+
   console.log(
-    "MAMAKI: Final video URL:",
+    "MAMAKI: FINAL VIDEO URL:",
     videoUrl
   );
+
 
   return videoUrl;
 }
@@ -696,43 +840,50 @@ async function generateWithLTX(
 app.post(
   "/api/generate",
   async (req, res) => {
+
     try {
+
       const {
         prompt,
         style = "Realistic",
         aspectRatio = "9:16",
         duration = 5
-      } =
-        req.body || {};
+      } = req.body || {};
+
 
       if (
-        typeof prompt !==
-          "string" ||
+        typeof prompt !== "string" ||
         !prompt.trim()
       ) {
+
         return res
           .status(400)
           .json({
+            ok: false,
             error:
               "Please describe your video."
           });
       }
 
+
       const stylePrompt =
         styles[style] ||
         "high-quality video";
 
+
       const finalPrompt =
         `${stylePrompt}. ${prompt.trim()}`;
 
+
       console.log(
-        "MAMAKI: Starting LTX video generation..."
+        "MAMAKI: STARTING LTX GENERATION..."
       );
 
       console.log(
-        "MAMAKI: Final prompt:",
+        "MAMAKI: FINAL PROMPT:",
         finalPrompt
       );
+
 
       const videoUrl =
         await generateWithLTX(
@@ -741,20 +892,25 @@ app.post(
           duration
         );
 
+
       console.log(
-        "MAMAKI: Generation successful."
+        "MAMAKI: GENERATION SUCCESSFUL"
       );
+
 
       return res.json({
         ok: true,
         videoUrl
       });
 
+
     } catch (error) {
+
       console.error(
         "MAMAKI VIDEO ERROR:",
         error
       );
+
 
       return res
         .status(500)
@@ -776,6 +932,7 @@ app.post(
 app.get(
   "/api/status",
   (req, res) => {
+
     res.json({
       ok: true,
       app:
@@ -796,9 +953,10 @@ app.get(
 app.get(
   /.*/,
   (req, res) => {
+
     res.sendFile(
       process.cwd() +
-        "/index.html"
+      "/index.html"
     );
   }
 );
@@ -811,10 +969,12 @@ app.get(
 const PORT =
   process.env.PORT || 3000;
 
+
 app.listen(
   PORT,
   "0.0.0.0",
   () => {
+
     console.log(
       `MAMAKI AI VIDEO running on port ${PORT}`
     );
