@@ -4,6 +4,7 @@ import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 import { spawn } from "child_process";
+import Replicate from "replicate";
 import { EdgeTTS } from "edge-tts-universal";
 import ffmpegPath from "ffmpeg-static";
 
@@ -12,398 +13,432 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-app.use(express.json({ limit: "1mb" }));
-app.use(express.static("."));
+const PORT = process.env.PORT || 10000;
 
-const PORT = process.env.PORT || 3000;
+const REPLICATE_API_TOKEN =
+  (process.env.REPLICATE_API_TOKEN || "").trim();
 
-const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
+const replicate = REPLICATE_API_TOKEN
+  ? new Replicate({
+      auth: REPLICATE_API_TOKEN
+    })
+  : null;
 
-const REPLICATE_MODEL =
+const MODEL =
   "wan-video/wan-2.5-t2v-fast";
 
-const NEGATIVE_PROMPT =
-  "worst quality, blurry, jittery, distorted, deformed, low quality, flickering";
+const TMP_DIR = path.join(
+  __dirname,
+  "tmp"
+);
 
 const styles = {
   Realistic:
-    "photorealistic live-action, natural motion, realistic lighting",
+    "photorealistic live-action, realistic human movement, natural lighting, realistic camera motion",
 
   Cinematic:
-    "cinematic film look, professional camera movement, dramatic lighting",
+    "cinematic live-action, professional film camera, dramatic lighting, smooth camera movement",
 
   Cartoon:
-    "high-quality 3D cartoon animation, expressive characters",
+    "high quality 3D cartoon animation, expressive characters, smooth animation",
 
   "3D Animation":
-    "high-quality 3D animated scene, smooth camera movement",
+    "high quality 3D animation, detailed environment, smooth camera movement",
 
   "AI Avatar":
-    "professional digital presenter avatar, natural movement"
+    "professional digital presenter, realistic human movement, natural facial expressions"
 };
 
+const negativePrompt =
+  "blurry, distorted, deformed, low quality, jittery, flickering, bad anatomy, unnatural motion";
+
 /* =========================================================
-   DIMENSIONS
+   BASIC SETUP
 ========================================================= */
 
-function getSize(aspectRatio) {
-  if (aspectRatio === "9:16") {
-    return "720*1280";
-  }
+app.use(
+  express.json({
+    limit: "5mb"
+  })
+);
 
-  if (aspectRatio === "1:1") {
-    return "720*720";
-  }
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "5mb"
+  })
+);
 
-  return "1280*720";
+app.use(
+  express.static(__dirname)
+);
+
+/* =========================================================
+   DIRECTORY
+========================================================= */
+
+async function ensureTmp() {
+  await fs.mkdir(
+    TMP_DIR,
+    {
+      recursive: true
+    }
+  );
 }
 
 /* =========================================================
-   REPLICATE VIDEO GENERATION
+   VIDEO SIZE
 ========================================================= */
 
-async function generateWithReplicate(
-  prompt,
-  aspectRatio,
-  duration
+function getVideoSize(
+  aspectRatio
 ) {
+  switch (aspectRatio) {
+    case "9:16":
+      return "720*1280";
+
+    case "1:1":
+      return "720*720";
+
+    case "16:9":
+    default:
+      return "1280*720";
+  }
+}
+
+/* =========================================================
+   REPLICATE AUTHENTICATION
+========================================================= */
+
+async function checkReplicateAuthentication() {
   if (!REPLICATE_API_TOKEN) {
-    throw new Error(
-      "REPLICATE_API_TOKEN is missing. Add it to Render Environment Variables."
-    );
+    return {
+      valid: false,
+      reason:
+        "REPLICATE_API_TOKEN is missing from Render."
+    };
   }
-
-  let safeDuration = Number(duration);
-
-  if (!Number.isFinite(safeDuration)) {
-    safeDuration = 5;
-  }
-
-  /*
-   Wan 2.5 T2V Fast currently requires
-   at least 5 seconds.
-  */
-  safeDuration = Math.min(
-    10,
-    Math.max(5, Math.round(safeDuration))
-  );
-
-  const size = getSize(aspectRatio);
-
-  console.log("================================");
-  console.log("MAMAKI: STARTING REPLICATE");
-  console.log("MAMAKI: MODEL:", REPLICATE_MODEL);
-  console.log("MAMAKI: PROMPT:", prompt);
-  console.log("MAMAKI: SIZE:", size);
-  console.log("MAMAKI: DURATION:", safeDuration);
-  console.log("================================");
-
-  const response = await fetch(
-    "https://api.replicate.com/v1/models/wan-video/wan-2.5-t2v-fast/predictions",
-    {
-      method: "POST",
-
-      headers: {
-        Authorization:
-          `Bearer ${REPLICATE_API_TOKEN}`,
-        "Content-Type": "application/json",
-        Prefer: "wait=60"
-      },
-
-      body: JSON.stringify({
-        input: {
-          prompt,
-          negative_prompt: NEGATIVE_PROMPT,
-          size,
-          duration: safeDuration,
-          enable_prompt_expansion: true
-        }
-      })
-    }
-  );
-
-  const responseText = await response.text();
-
-  console.log(
-    "MAMAKI: REPLICATE STATUS:",
-    response.status
-  );
-
-  console.log(
-    "MAMAKI: REPLICATE RESPONSE:",
-    responseText.slice(0, 10000)
-  );
-
-  let data;
 
   try {
-    data = JSON.parse(responseText);
-  } catch {
-    throw new Error(
-      `Replicate returned invalid JSON: ${responseText.slice(
-        0,
-        1000
-      )}`
-    );
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      data?.detail ||
-      data?.error ||
-      `Replicate request failed (${response.status}).`
-    );
-  }
-
-  /*
-   Replicate normally returns:
-   output: "https://replicate.delivery/.../output.mp4"
-  */
-
-  if (typeof data?.output === "string") {
-    return data.output;
-  }
-
-  /*
-   Some responses may contain an array.
-  */
-
-  if (
-    Array.isArray(data?.output) &&
-    data.output.length > 0
-  ) {
-    const first = data.output[0];
-
-    if (typeof first === "string") {
-      return first;
-    }
-
-    if (first?.url) {
-      return first.url;
-    }
-  }
-
-  /*
-   If the prediction is still processing,
-   poll it until finished.
-  */
-
-  if (data?.id) {
-    return await waitForReplicatePrediction(
-      data.id
-    );
-  }
-
-  throw new Error(
-    "Replicate completed without returning a video URL."
-  );
-}
-
-/* =========================================================
-   WAIT FOR REPLICATE PREDICTION
-========================================================= */
-
-async function waitForReplicatePrediction(
-  predictionId
-) {
-  console.log(
-    "MAMAKI: Waiting for Replicate prediction:",
-    predictionId
-  );
-
-  const maxAttempts = 120;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    await new Promise((resolve) =>
-      setTimeout(resolve, 3000)
-    );
-
     const response = await fetch(
-      `https://api.replicate.com/v1/predictions/${encodeURIComponent(
-        predictionId
-      )}`,
+      "https://api.replicate.com/v1/account",
       {
+        method: "GET",
         headers: {
           Authorization:
-            `Bearer ${REPLICATE_API_TOKEN}`
+            `Bearer ${REPLICATE_API_TOKEN}`,
+          Accept:
+            "application/json"
         }
       }
     );
 
-    const text = await response.text();
-
-    let data;
-
-    try {
-      data = JSON.parse(text);
-    } catch {
-      throw new Error(
-        "Replicate returned invalid prediction data."
-      );
+    if (!response.ok) {
+      return {
+        valid: false,
+        reason:
+          `Replicate rejected the token. HTTP ${response.status}.`
+      };
     }
 
-    console.log(
-      `MAMAKI: REPLICATE STATUS ${attempt}:`,
-      data?.status
-    );
+    const account =
+      await response.json();
 
-    if (data?.status === "succeeded") {
-      if (typeof data.output === "string") {
-        return data.output;
-      }
+    return {
+      valid: true,
+      account:
+        account.username ||
+        account.name ||
+        "authenticated"
+    };
 
-      if (
-        Array.isArray(data.output) &&
-        data.output.length > 0
-      ) {
-        const first = data.output[0];
-
-        if (typeof first === "string") {
-          return first;
-        }
-
-        if (first?.url) {
-          return first.url;
-        }
-      }
-
-      throw new Error(
-        "Replicate succeeded but returned no video URL."
-      );
-    }
-
-    if (
-      data?.status === "failed" ||
-      data?.status === "canceled"
-    ) {
-      throw new Error(
-        data?.error ||
-        `Replicate video generation ${data.status}.`
-      );
-    }
+  } catch (error) {
+    return {
+      valid: false,
+      reason:
+        `Could not connect to Replicate: ${error.message}`
+    };
   }
-
-  throw new Error(
-    "Replicate video generation timed out."
-  );
 }
 
 /* =========================================================
-   DOWNLOAD VIDEO
+   GET VIDEO URL FROM REPLICATE OUTPUT
 ========================================================= */
 
-async function downloadVideo(
-  videoUrl,
-  outputPath
-) {
-  console.log(
-    "MAMAKI: Downloading video:",
-    videoUrl
-  );
+function getOutputUrl(output) {
+  if (!output) {
+    return null;
+  }
 
-  const response = await fetch(videoUrl);
+  if (
+    typeof output === "string"
+  ) {
+    return output;
+  }
 
-  if (!response.ok) {
-    throw new Error(
-      `Unable to download generated video (${response.status}).`
+  if (
+    typeof output.url === "function"
+  ) {
+    return output.url();
+  }
+
+  if (
+    typeof output.url === "string"
+  ) {
+    return output.url;
+  }
+
+  if (
+    Array.isArray(output) &&
+    output.length
+  ) {
+    return getOutputUrl(
+      output[0]
     );
   }
 
-  const buffer = Buffer.from(
-    await response.arrayBuffer()
+  return null;
+}
+
+/* =========================================================
+   DOWNLOAD FILE
+========================================================= */
+
+async function downloadFile(
+  url,
+  destination
+) {
+  console.log(
+    "MAMAKI: Downloading:",
+    url
   );
 
-  if (buffer.length < 1000) {
+  const response =
+    await fetch(url);
+
+  if (!response.ok) {
     throw new Error(
-      "Replicate returned an invalid video file."
+      `Video download failed. HTTP ${response.status}.`
+    );
+  }
+
+  const data =
+    Buffer.from(
+      await response.arrayBuffer()
+    );
+
+  if (data.length < 1000) {
+    throw new Error(
+      "Downloaded video is empty or invalid."
     );
   }
 
   await fs.writeFile(
-    outputPath,
-    buffer
+    destination,
+    data
   );
 
   console.log(
-    "MAMAKI: Video saved:",
-    outputPath
+    "MAMAKI: Video downloaded:",
+    data.length,
+    "bytes"
   );
 }
 
 /* =========================================================
-   EDGE TTS VOICE
+   GENERATE VIDEO WITH WAN 2.5 FAST
+========================================================= */
+
+async function generateVideo({
+  prompt,
+  duration,
+  aspectRatio
+}) {
+  if (!replicate) {
+    throw new Error(
+      "REPLICATE_API_TOKEN is missing."
+    );
+  }
+
+  const authentication =
+    await checkReplicateAuthentication();
+
+  if (!authentication.valid) {
+    throw new Error(
+      authentication.reason
+    );
+  }
+
+  let seconds =
+    Number(duration);
+
+  if (
+    !Number.isFinite(seconds)
+  ) {
+    seconds = 5;
+  }
+
+  seconds =
+    Math.max(
+      5,
+      Math.min(
+        10,
+        Math.round(seconds)
+      )
+    );
+
+  const size =
+    getVideoSize(
+      aspectRatio
+    );
+
+  console.log(
+    "========================================"
+  );
+
+  console.log(
+    "MAMAKI: WAN 2.5 FAST"
+  );
+
+  console.log(
+    "MAMAKI: SIZE:",
+    size
+  );
+
+  console.log(
+    "MAMAKI: DURATION:",
+    seconds
+  );
+
+  console.log(
+    "MAMAKI: PROMPT:",
+    prompt
+  );
+
+  console.log(
+    "========================================"
+  );
+
+  const input = {
+    size,
+    prompt,
+    duration: seconds,
+    negative_prompt:
+      negativePrompt,
+    enable_prompt_expansion:
+      true
+  };
+
+  const output =
+    await replicate.run(
+      MODEL,
+      {
+        input
+      }
+    );
+
+  const videoUrl =
+    getOutputUrl(
+      output
+    );
+
+  if (!videoUrl) {
+    throw new Error(
+      "Wan 2.5 completed but did not return a video URL."
+    );
+  }
+
+  return videoUrl;
+}
+
+/* =========================================================
+   EDGE TTS
 ========================================================= */
 
 async function generateVoice(
   text,
-  outputPath
+  destination
 ) {
-  const cleanText = String(text || "").trim();
+  const narration =
+    String(text || "")
+      .trim();
 
-  if (!cleanText) {
+  if (!narration) {
     throw new Error(
       "Voice-over text is empty."
     );
   }
 
   console.log(
-    "MAMAKI: Generating AI voice..."
+    "MAMAKI: Creating voice-over..."
   );
 
-  const tts = new EdgeTTS(
-    cleanText,
-    "en-US-AriaNeural",
-    {
-      rate: "+0%",
-      volume: "+0%",
-      pitch: "+0Hz"
-    }
-  );
+  const tts =
+    new EdgeTTS(
+      narration,
+      "en-US-AriaNeural",
+      {
+        rate: "+0%",
+        volume: "+0%",
+        pitch: "+0Hz"
+      }
+    );
 
-  const result = await tts.synthesize();
+  const result =
+    await tts.synthesize();
 
-  if (!result || !result.audio) {
+  if (
+    !result ||
+    !result.audio
+  ) {
     throw new Error(
-      "Edge TTS returned no audio."
+      "Edge TTS did not return audio."
     );
   }
 
-  let audioBuffer;
+  let audio;
 
-  if (Buffer.isBuffer(result.audio)) {
-    audioBuffer = result.audio;
-  } else if (
-    result.audio instanceof Uint8Array
-  ) {
-    audioBuffer = Buffer.from(
+  if (
+    Buffer.isBuffer(
       result.audio
-    );
+    )
+  ) {
+    audio =
+      result.audio;
+
   } else if (
-    typeof result.audio.arrayBuffer ===
+    result.audio instanceof
+    Uint8Array
+  ) {
+    audio =
+      Buffer.from(
+        result.audio
+      );
+
+  } else if (
+    typeof result.audio
+      .arrayBuffer ===
     "function"
   ) {
-    audioBuffer = Buffer.from(
-      await result.audio.arrayBuffer()
-    );
+    audio =
+      Buffer.from(
+        await result.audio
+          .arrayBuffer()
+      );
+
   } else {
     throw new Error(
-      "Unable to read Edge TTS audio."
-    );
-  }
-
-  if (audioBuffer.length < 1000) {
-    throw new Error(
-      "Generated voice file is too small."
+      "Could not read Edge TTS audio."
     );
   }
 
   await fs.writeFile(
-    outputPath,
-    audioBuffer
+    destination,
+    audio
   );
 
   console.log(
-    "MAMAKI: Voice created."
+    "MAMAKI: Voice-over created."
   );
 }
 
@@ -411,52 +446,53 @@ async function generateVoice(
    FFMPEG
 ========================================================= */
 
-function runFFmpeg(args) {
+function runFFmpeg(
+  args
+) {
   return new Promise(
     (resolve, reject) => {
       if (!ffmpegPath) {
         reject(
           new Error(
-            "FFmpeg binary was not found."
+            "FFmpeg is unavailable."
           )
         );
         return;
       }
 
-      const process = spawn(
-        ffmpegPath,
-        args
-      );
+      const child =
+        spawn(
+          ffmpegPath,
+          args
+        );
 
       let stderr = "";
 
-      process.stderr.on(
+      child.stderr.on(
         "data",
-        (data) => {
-          stderr += data.toString();
+        data => {
+          stderr +=
+            data.toString();
         }
       );
 
-      process.on(
+      child.on(
         "error",
         reject
       );
 
-      process.on(
+      child.on(
         "close",
-        (code) => {
+        code => {
           if (code === 0) {
             resolve();
-            return;
+          } else {
+            reject(
+              new Error(
+                `FFmpeg failed: ${stderr.slice(-3000)}`
+              )
+            );
           }
-
-          reject(
-            new Error(
-              `FFmpeg failed with code ${code}: ${stderr.slice(
-                -5000
-              )}`
-            )
-          );
         }
       );
     }
@@ -464,26 +500,26 @@ function runFFmpeg(args) {
 }
 
 /* =========================================================
-   MERGE VIDEO + VOICE
+   ADD VOICE TO VIDEO
 ========================================================= */
 
-async function mergeVideoAndVoice(
-  videoPath,
-  audioPath,
-  outputPath
+async function combineVideoAudio(
+  video,
+  audio,
+  output
 ) {
   console.log(
-    "MAMAKI: Combining video + AI voice..."
+    "MAMAKI: Combining video and voice..."
   );
 
   await runFFmpeg([
     "-y",
 
     "-i",
-    videoPath,
+    video,
 
     "-i",
-    audioPath,
+    audio,
 
     "-map",
     "0:v:0",
@@ -505,262 +541,214 @@ async function mergeVideoAndVoice(
     "-movflags",
     "+faststart",
 
-    outputPath
+    output
   ]);
-
-  console.log(
-    "MAMAKI: Final video created."
-  );
 }
 
 /* =========================================================
-   GENERATE API
+   GENERATE ENDPOINT
 ========================================================= */
 
 app.post(
   "/api/generate",
   async (req, res) => {
-    const workDir = path.join(
-      __dirname,
-      "tmp"
-    );
+    const id =
+      Date.now();
 
-    let videoPath = null;
-    let audioPath = null;
-    let finalPath = null;
+    let sourceVideo =
+      null;
+
+    let voiceFile =
+      null;
+
+    let finalVideo =
+      null;
 
     try {
-      const {
-        prompt,
-        voiceText,
-        style = "Realistic",
-        aspectRatio = "9:16",
-        duration = 5,
-        voice = true
-      } = req.body || {};
+      await ensureTmp();
 
-      if (
-        typeof prompt !== "string" ||
-        !prompt.trim()
-      ) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "Please describe your video."
-        });
+      const body =
+        req.body || {};
+
+      const rawPrompt =
+        body.prompt ||
+        body.description ||
+        body.text ||
+        "";
+
+      const prompt =
+        String(rawPrompt)
+          .trim();
+
+      if (!prompt) {
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            error:
+              "Please enter a video prompt."
+          });
       }
 
-      await fs.mkdir(
-        workDir,
-        {
-          recursive: true
-        }
-      );
+      const style =
+        body.style ||
+        "Realistic";
 
-      const timestamp =
-        Date.now();
+      const aspectRatio =
+        body.aspectRatio ||
+        body.aspect ||
+        "9:16";
 
-      videoPath = path.join(
-        workDir,
-        `replicate-${timestamp}.mp4`
-      );
+      const duration =
+        body.duration ||
+        5;
 
-      audioPath = path.join(
-        workDir,
-        `voice-${timestamp}.mp3`
-      );
-
-      finalPath = path.join(
-        workDir,
-        `mamaki-${timestamp}.mp4`
-      );
-
-      const stylePrompt =
+      const styleText =
         styles[style] ||
-        "high-quality video";
+        styles.Realistic;
 
       const finalPrompt =
-        `${stylePrompt}. ${prompt.trim()}`;
+        `${styleText}. ${prompt}`;
 
-      console.log(
-        "================================"
-      );
-
-      console.log(
-        "MAMAKI AI VIDEO"
-      );
-
-      console.log(
-        "ENGINE: REPLICATE WAN 2.5"
-      );
-
-      console.log(
-        "================================"
-      );
-
-      /* 1. Generate video */
-
-      const videoUrl =
-        await generateWithReplicate(
-          finalPrompt,
-          aspectRatio,
-          duration
+      const voiceEnabled =
+        !(
+          body.voice === false ||
+          body.voice === "false" ||
+          body.voiceOver === false ||
+          body.voiceOver === "false"
         );
-
-      if (!videoUrl) {
-        throw new Error(
-          "Replicate returned no video URL."
-        );
-      }
-
-      /* 2. Download video */
-
-      await downloadVideo(
-        videoUrl,
-        videoPath
-      );
-
-      /* 3. Narration text */
 
       const narration =
-        typeof voiceText === "string" &&
-        voiceText.trim()
-          ? voiceText.trim()
-          : prompt.trim();
+        String(
+          body.voiceText ||
+          body.narration ||
+          body.script ||
+          prompt
+        ).trim();
 
-      /* 4. Voice-over */
+      sourceVideo =
+        path.join(
+          TMP_DIR,
+          `source-${id}.mp4`
+        );
 
-      if (voice !== false) {
+      voiceFile =
+        path.join(
+          TMP_DIR,
+          `voice-${id}.mp3`
+        );
+
+      finalVideo =
+        path.join(
+          TMP_DIR,
+          `mamaki-${id}.mp4`
+        );
+
+      /* Generate */
+
+      const videoUrl =
+        await generateVideo({
+          prompt:
+            finalPrompt,
+          duration,
+          aspectRatio
+        });
+
+      /* Download */
+
+      await downloadFile(
+        videoUrl,
+        sourceVideo
+      );
+
+      /* Voice */
+
+      if (voiceEnabled) {
         await generateVoice(
           narration,
-          audioPath
+          voiceFile
         );
 
-        /* 5. Merge */
-
-        await mergeVideoAndVoice(
-          videoPath,
-          audioPath,
-          finalPath
+        await combineVideoAudio(
+          sourceVideo,
+          voiceFile,
+          finalVideo
         );
+
       } else {
         await fs.copyFile(
-          videoPath,
-          finalPath
+          sourceVideo,
+          finalVideo
         );
       }
 
-      /* 6. Return */
-
-      const finalUrl =
+      const videoEndpoint =
         `/api/video/${path.basename(
-          finalPath
+          finalVideo
         )}`;
 
       console.log(
-        "================================"
-      );
-
-      console.log(
-        "MAMAKI: GENERATION SUCCESSFUL"
-      );
-
-      console.log(
-        "VIDEO:",
-        finalUrl
-      );
-
-      console.log(
-        "VOICE:",
-        voice !== false
-      );
-
-      console.log(
-        "================================"
+        "MAMAKI: GENERATION SUCCESS"
       );
 
       return res.json({
         ok: true,
 
-        videoUrl: finalUrl,
+        success: true,
+
+        videoUrl:
+          videoEndpoint,
+
+        url:
+          videoEndpoint,
 
         voiceOver:
-          voice !== false,
+          voiceEnabled,
 
         message:
-          voice !== false
-            ? "Video and AI voice-over generated successfully."
-            : "Video generated successfully."
+          "MAMAKI video generated successfully."
       });
 
     } catch (error) {
       console.error(
-        "================================"
-      );
-
-      console.error(
         "MAMAKI VIDEO ERROR:",
-        error
+        error.message
       );
 
-      console.error(
-        "================================"
-      );
-
-      return res.status(500).json({
-        ok: false,
-
-        error:
-          error?.message ||
-          "Video generation failed."
-      });
+      return res
+        .status(500)
+        .json({
+          ok: false,
+          success: false,
+          error:
+            error.message ||
+            "Video generation failed."
+        });
 
     } finally {
+      /* Delete temporary files,
+         keep final MP4. */
 
-      /*
-       Keep the final mamaki-*.mp4 file
-       so the browser can play it.
-
-       Delete temporary source video
-       and voice files.
-      */
-
-      try {
-        const files =
-          await fs.readdir(
-            workDir
-          );
-
-        for (
-          const file of files
-        ) {
-          if (
-            file.startsWith(
-              "replicate-"
-            ) ||
-            file.startsWith(
-              "voice-"
-            )
-          ) {
-            await fs.unlink(
-              path.join(
-                workDir,
-                file
-              )
-            ).catch(
+      for (
+        const file of [
+          sourceVideo,
+          voiceFile
+        ]
+      ) {
+        if (file) {
+          await fs
+            .unlink(file)
+            .catch(
               () => {}
             );
-          }
         }
-      } catch {
-        /* Ignore cleanup errors */
       }
     }
   }
 );
 
 /* =========================================================
-   SERVE FINAL VIDEO
+   VIDEO DELIVERY
 ========================================================= */
 
 app.get(
@@ -783,28 +771,19 @@ app.get(
         return res
           .status(400)
           .send(
-            "Invalid video filename."
+            "Invalid video."
           );
       }
 
-      const videoPath =
+      const file =
         path.join(
-          __dirname,
-          "tmp",
+          TMP_DIR,
           filename
         );
 
-      try {
-        await fs.access(
-          videoPath
-        );
-      } catch {
-        return res
-          .status(404)
-          .send(
-            "Video not found."
-          );
-      }
+      await fs.access(
+        file
+      );
 
       res.setHeader(
         "Content-Type",
@@ -817,53 +796,79 @@ app.get(
       );
 
       return res.sendFile(
-        videoPath
+        file
       );
 
-    } catch (error) {
-      console.error(
-        "MAMAKI SERVE ERROR:",
-        error
-      );
-
+    } catch {
       return res
-        .status(500)
+        .status(404)
         .send(
-          "Unable to serve video."
+          "Video not found."
         );
     }
   }
 );
 
 /* =========================================================
-   STATUS
+   STATUS / AUTHENTICATION TEST
 ========================================================= */
 
 app.get(
   "/api/status",
-  (req, res) => {
-    res.json({
-      ok: true,
+  async (req, res) => {
+    const auth =
+      await checkReplicateAuthentication();
+
+    return res.json({
+      ok:
+        auth.valid,
 
       app:
         "MAMAKI AI VIDEO",
 
-      api:
-        "running",
-
       engine:
-        "Replicate Wan 2.5 T2V Fast + Edge TTS + FFmpeg",
+        "Replicate Wan 2.5 T2V Fast",
 
       replicate:
-        Boolean(
-          REPLICATE_API_TOKEN
-        ),
+        auth.valid,
+
+      authentication:
+        auth.valid
+          ? "valid"
+          : "invalid",
+
+      account:
+        auth.account ||
+        null,
+
+      error:
+        auth.valid
+          ? null
+          : auth.reason,
 
       ffmpeg:
-        Boolean(ffmpegPath),
+        Boolean(
+          ffmpegPath
+        ),
 
-      voice:
+      voiceOver:
         true
+    });
+  }
+);
+
+/* =========================================================
+   HEALTH
+========================================================= */
+
+app.get(
+  "/health",
+  (req, res) => {
+    res.json({
+      status:
+        "ok",
+      app:
+        "MAMAKI AI VIDEO"
     });
   }
 );
@@ -873,7 +878,7 @@ app.get(
 ========================================================= */
 
 app.get(
-  /.*/,
+  "*",
   (req, res) => {
     res.sendFile(
       path.join(
@@ -885,7 +890,7 @@ app.get(
 );
 
 /* =========================================================
-   START
+   START SERVER
 ========================================================= */
 
 app.listen(
@@ -893,23 +898,42 @@ app.listen(
   "0.0.0.0",
   () => {
     console.log(
-      `MAMAKI AI VIDEO running on port ${PORT}`
+      "========================================"
     );
 
     console.log(
-      "MAMAKI: Replicate:",
-      Boolean(
-        REPLICATE_API_TOKEN
-      )
+      "MAMAKI AI VIDEO"
     );
 
     console.log(
-      "MAMAKI: FFmpeg:",
-      Boolean(ffmpegPath)
+      `Running on port ${PORT}`
     );
 
     console.log(
-      "MAMAKI: Voice-over: ENABLED"
+      "Replicate token:",
+      REPLICATE_API_TOKEN
+        ? "FOUND"
+        : "MISSING"
+    );
+
+    console.log(
+      "Replicate model:",
+      MODEL
+    );
+
+    console.log(
+      "Voice-over: ENABLED"
+    );
+
+    console.log(
+      "FFmpeg:",
+      ffmpegPath
+        ? "FOUND"
+        : "MISSING"
+    );
+
+    console.log(
+      "========================================"
     );
   }
 );
