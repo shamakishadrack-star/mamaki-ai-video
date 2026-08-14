@@ -59,7 +59,8 @@ label {
 }
 
 textarea,
-select {
+select,
+input[type="file"] {
   width: 100%;
   padding: 14px;
   border-radius: 12px;
@@ -74,10 +75,60 @@ textarea {
   resize: vertical;
 }
 
+input[type="file"] {
+  cursor: pointer;
+}
+
+input[type="file"]::file-selector-button {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-right: 10px;
+  background: #20b9ff;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+}
+
 .grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+
+.mode {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #0c0f1e;
+  border: 1px solid #353c5e;
+  color: #aab3d4;
+  text-align: center;
+  font-size: 14px;
+}
+
+.preview {
+  display: none;
+  margin-top: 14px;
+  padding: 10px;
+  border-radius: 14px;
+  background: #0c0f1e;
+  border: 1px solid #353c5e;
+}
+
+.preview img {
+  display: block;
+  width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+  border-radius: 10px;
+}
+
+.remove-image {
+  background: #242a43;
+  margin-top: 10px;
+  padding: 10px;
+  font-size: 14px;
 }
 
 button {
@@ -95,12 +146,14 @@ button {
 
 button:disabled {
   opacity: 0.6;
+  cursor: not-allowed;
 }
 
 #status {
   text-align: center;
   color: #aab3d4;
   margin-top: 15px;
+  line-height: 1.5;
 }
 
 #result {
@@ -125,6 +178,10 @@ video {
   .grid {
     grid-template-columns: 1fr;
   }
+
+  .logo h1 {
+    font-size: 27px;
+  }
 }
 </style>
 </head>
@@ -135,10 +192,12 @@ video {
 
   <div class="logo">
     <h1>🎬 MAMAKI <span>AI VIDEO</span></h1>
+
     <div class="tagline">
       Turn your ideas into videos.
     </div>
   </div>
+
 
   <div class="card">
 
@@ -149,50 +208,122 @@ video {
       placeholder="Example: A Nigerian student walking to school at sunrise, cinematic and motivational..."
     ></textarea>
 
+
+    <label>Reference Image — Optional</label>
+
+    <input
+      type="file"
+      id="referenceImage"
+      accept="image/jpeg,image/png,image/webp"
+    >
+
+    <div class="mode" id="mode">
+      🎬 Text → Video
+    </div>
+
+
+    <div
+      class="preview"
+      id="imagePreview"
+    >
+
+      <img
+        id="previewImage"
+        alt="Reference image preview"
+      >
+
+      <button
+        type="button"
+        class="remove-image"
+        id="removeImage"
+      >
+        ✕ Remove Reference Image
+      </button>
+
+    </div>
+
+
     <div class="grid">
 
       <div>
+
         <label>Video Style</label>
 
         <select id="style">
+
           <option>Realistic</option>
+
           <option>Cinematic</option>
+
           <option>Cartoon</option>
+
           <option>3D Animation</option>
+
           <option>AI Avatar</option>
+
         </select>
+
       </div>
 
+
       <div>
+
         <label>Video Format</label>
 
         <select id="ratio">
-          <option value="9:16">9:16 — TikTok / Reels / Shorts</option>
-          <option value="16:9">16:9 — YouTube</option>
-          <option value="1:1">1:1 — Social Media</option>
+
+          <option value="9:16">
+            9:16 — TikTok / Reels / Shorts
+          </option>
+
+          <option value="16:9">
+            16:9 — YouTube
+          </option>
+
+          <option value="1:1">
+            1:1 — Social Media
+          </option>
+
         </select>
+
       </div>
 
     </div>
 
+
     <label>Duration</label>
 
     <select id="duration">
-      <option value="5">5 seconds</option>
-      <option value="10">10 seconds</option>
-      <option value="30">30 seconds</option>
+
+      <option value="5">
+        5 seconds
+      </option>
+
+      <option value="10">
+        10 seconds
+      </option>
+
+      <option value="30">
+        30 seconds
+      </option>
+
     </select>
+
 
     <button id="generate">
       ✨ GENERATE VIDEO
     </button>
+
 
     <div id="status"></div>
 
   </div>
 
 
-  <div class="card" id="result">
+  <div
+    class="card"
+    id="result"
+  >
 
     <h3>Your Generated Video</h3>
 
@@ -201,6 +332,7 @@ video {
       controls
       playsinline
     ></video>
+
 
     <a
       id="download"
@@ -240,105 +372,300 @@ const video =
 const download =
   document.getElementById("download");
 
+const referenceImage =
+  document.getElementById("referenceImage");
 
-generateButton.onclick = async function () {
+const imagePreview =
+  document.getElementById("imagePreview");
 
-  const prompt =
-    document.getElementById("prompt").value.trim();
+const previewImage =
+  document.getElementById("previewImage");
 
-  const style =
-    document.getElementById("style").value;
+const removeImage =
+  document.getElementById("removeImage");
 
-  const ratio =
-    document.getElementById("ratio").value;
-
-  const duration =
-    document.getElementById("duration").value;
-
-
-  if (!prompt) {
-
-    alert("Please describe the video you want.");
-
-    return;
-  }
+const mode =
+  document.getElementById("mode");
 
 
-  generateButton.disabled = true;
+/* =========================
+   IMAGE PREVIEW
+========================= */
 
-  status.textContent =
-    "🎬 Generating your video... Please wait.";
+referenceImage.addEventListener(
+  "change",
+  function () {
 
+    const file =
+      referenceImage.files[0];
 
-  try {
+    if (!file) {
 
-    const response =
-      await fetch("/api/generate", {
+      imagePreview.style.display =
+        "none";
 
-        method: "POST",
+      previewImage.src = "";
 
-        headers: {
-          "Content-Type": "application/json"
-        },
+      mode.textContent =
+        "🎬 Text → Video";
 
-        body: JSON.stringify({
-
-          prompt: prompt,
-
-          style: style,
-
-          aspectRatio: ratio,
-
-          duration: duration
-
-        })
-
-      });
+      return;
+    }
 
 
-    const data =
-      await response.json();
+    if (
+      ![
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ].includes(file.type)
+    ) {
 
-
-    if (!response.ok) {
-
-      throw new Error(
-        data.error || "Video generation failed."
+      alert(
+        "Please select a JPG, PNG or WebP image."
       );
+
+      referenceImage.value = "";
+
+      return;
+    }
+
+
+    previewImage.src =
+      URL.createObjectURL(file);
+
+    imagePreview.style.display =
+      "block";
+
+    mode.textContent =
+      "🖼️ Image + Text → Video";
+
+  }
+);
+
+
+/* =========================
+   REMOVE IMAGE
+========================= */
+
+removeImage.addEventListener(
+  "click",
+  function () {
+
+    referenceImage.value =
+      "";
+
+    previewImage.src =
+      "";
+
+    imagePreview.style.display =
+      "none";
+
+    mode.textContent =
+      "🎬 Text → Video";
+
+  }
+);
+
+
+/* =========================
+   GENERATE VIDEO
+========================= */
+
+generateButton.onclick =
+  async function () {
+
+    const prompt =
+      document
+        .getElementById("prompt")
+        .value
+        .trim();
+
+    const style =
+      document
+        .getElementById("style")
+        .value;
+
+    const ratio =
+      document
+        .getElementById("ratio")
+        .value;
+
+    const duration =
+      document
+        .getElementById("duration")
+        .value;
+
+    const imageFile =
+      referenceImage.files[0];
+
+
+    if (!prompt) {
+
+      alert(
+        "Please describe the video you want."
+      );
+
+      return;
+    }
+
+
+    generateButton.disabled =
+      true;
+
+    result.style.display =
+      "none";
+
+
+    if (imageFile) {
+
+      status.textContent =
+        "🖼️ Creating your video from the reference image... Please wait.";
+
+    } else {
+
+      status.textContent =
+        "🎬 Generating your video... Please wait.";
 
     }
 
 
-    video.src =
-      data.videoUrl;
+    try {
 
-    download.href =
-      data.videoUrl;
+      /*
+       * IMPORTANT:
+       * Use FormData because the backend
+       * accepts referenceImage uploads.
+       */
 
-    result.style.display =
-      "block";
-
-    status.textContent =
-      "✅ Your video is ready!";
+      const formData =
+        new FormData();
 
 
-  }
+      formData.append(
+        "prompt",
+        prompt
+      );
 
-  catch (error) {
 
-    status.textContent =
-      "❌ " + error.message;
+      formData.append(
+        "style",
+        style
+      );
 
-  }
 
-  finally {
+      formData.append(
+        "aspectRatio",
+        ratio
+      );
 
-    generateButton.disabled =
-      false;
 
-  }
+      formData.append(
+        "duration",
+        duration
+      );
 
-};
+
+      if (imageFile) {
+
+        formData.append(
+          "referenceImage",
+          imageFile
+        );
+
+      }
+
+
+      const response =
+        await fetch(
+          "/api/generate",
+          {
+            method: "POST",
+            body: formData
+          }
+        );
+
+
+      let data;
+
+      try {
+
+        data =
+          await response.json();
+
+      } catch {
+
+        throw new Error(
+          "The server returned an invalid response."
+        );
+
+      }
+
+
+      if (!response.ok) {
+
+        throw new Error(
+          data.error ||
+          "Video generation failed."
+        );
+
+      }
+
+
+      if (!data.videoUrl) {
+
+        throw new Error(
+          "The server completed the request but returned no video."
+        );
+
+      }
+
+
+      video.src =
+        data.videoUrl;
+
+
+      download.href =
+        data.videoUrl;
+
+
+      result.style.display =
+        "block";
+
+
+      status.textContent =
+        "✅ Your video is ready!";
+
+
+      video.scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+      });
+
+
+    } catch (error) {
+
+      console.error(
+        "MAMAKI FRONTEND ERROR:",
+        error
+      );
+
+
+      status.textContent =
+        "❌ " +
+        (
+          error.message ||
+          "Video generation failed."
+        );
+
+    } finally {
+
+      generateButton.disabled =
+        false;
+
+    }
+
+  };
 
 </script>
 
