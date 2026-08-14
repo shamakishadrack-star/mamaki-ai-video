@@ -22,9 +22,8 @@ const replicate = TOKEN
       auth: TOKEN
     })
   : null;
-
 const T2V_MODEL =
-  "wan-video/wan-2.5-t2v-fast";
+  "wan-video/wan-2.5-t2v";
 
 const I2V_MODEL =
   "wan-video/wan-2.5-i2v";
