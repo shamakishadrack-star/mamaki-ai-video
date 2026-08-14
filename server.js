@@ -81,9 +81,12 @@ function duration(value) {
 }
 
 function size(ratio) {
-  if (ratio === "9:16") return "720x1280";
-  if (ratio === "1:1") return "720x720";
-  return "1280x720";
+  if (ratio === "9:16") return "720*1280";
+  if (ratio === "16:9") return "1280*720";
+  if (ratio === "9:16-HD") return "1080*1920";
+  if (ratio === "16:9-HD") return "1920*1080";
+
+  return "720*1280";
 }
 
 function isImage(file) {
