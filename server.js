@@ -25,7 +25,7 @@ const replicate = TOKEN
 
 
 /* =========================================================
-   MAMAKI AI MODELS
+   MODELS
 ========================================================= */
 
 const T2V_MODEL =
@@ -49,23 +49,17 @@ const INDEX =
   path.join(ROOT, "index.html");
 
 
-await fs.mkdir(
-  TMP,
-  {
-    recursive: true
-  }
-);
+await fs.mkdir(TMP, {
+  recursive: true
+});
 
-await fs.mkdir(
-  OUTPUT,
-  {
-    recursive: true
-  }
-);
+await fs.mkdir(OUTPUT, {
+  recursive: true
+});
 
 
 /* =========================================================
-   EXPRESS
+   BODY PARSERS
 ========================================================= */
 
 app.use(
@@ -83,38 +77,29 @@ app.use(
 
 
 /* =========================================================
-   MAMAKI INTERFACE
+   INTERFACE
 ========================================================= */
 
-app.get(
-  "/",
-  async (req, res) => {
+app.get("/", async (req, res) => {
+  try {
+    await fs.access(INDEX);
 
-    try {
+    return res.sendFile(INDEX);
 
-      await fs.access(INDEX);
-
-      return res.sendFile(INDEX);
-
-    } catch {
-
-      return res
-        .status(404)
-        .send(
-          "MAMAKI interface not found. index.html is missing."
-        );
-    }
+  } catch {
+    return res
+      .status(404)
+      .send(
+        "MAMAKI interface not found. index.html is missing."
+      );
   }
-);
+});
 
 
 app.use(
-  express.static(
-    ROOT,
-    {
-      index: false
-    }
-  )
+  express.static(ROOT, {
+    index: false
+  })
 );
 
 
@@ -122,38 +107,87 @@ app.use(
    UPLOAD
 ========================================================= */
 
-const upload =
-  multer({
+const upload = multer({
+  storage: multer.memoryStorage(),
 
-    storage:
-      multer.memoryStorage(),
+  limits: {
+    fileSize: 100 * 1024 * 1024,
+    files: 10
+  },
 
-    limits: {
+  fileFilter: (req, file, cb) => {
 
-      fileSize:
-        100 * 1024 * 1024,
+    const allowedImages = [
+      "image/jpeg",
+      "image/png",
+      "image/webp"
+    ];
 
-      files:
-        10
+    const allowedAudio = [
+      "audio/mpeg",
+      "audio/mp3",
+      "audio/wav",
+      "audio/x-wav",
+      "audio/mp4",
+      "audio/aac",
+      "audio/ogg",
+      "audio/webm"
+    ];
 
+    if (
+      file.fieldname === "referenceImage"
+    ) {
+
+      if (
+        allowedImages.includes(
+          file.mimetype
+        )
+      ) {
+        return cb(null, true);
+      }
+
+      return cb(
+        new Error(
+          "Reference image must be JPG, PNG, or WebP."
+        )
+      );
     }
 
-  });
+    if (
+      file.fieldname === "music" ||
+      file.fieldname === "effects"
+    ) {
+
+      if (
+        allowedAudio.includes(
+          file.mimetype
+        )
+      ) {
+        return cb(null, true);
+      }
+
+      return cb(
+        new Error(
+          "Audio file format is not supported."
+        )
+      );
+    }
+
+    cb(null, true);
+  }
+});
 
 
 /* =========================================================
    HELPERS
 ========================================================= */
 
-function duration(value) {
+function getDuration(value) {
 
   const n =
     Number(value || 5);
 
-  if (
-    !Number.isFinite(n)
-  ) {
-
+  if (!Number.isFinite(n)) {
     return 5;
   }
 
@@ -167,40 +201,25 @@ function duration(value) {
 }
 
 
-function size(ratio) {
+function getSize(ratio) {
 
-  if (
-    ratio === "9:16"
-  ) {
-
+  if (ratio === "9:16") {
     return "720*1280";
   }
 
-  if (
-    ratio === "16:9"
-  ) {
-
+  if (ratio === "16:9") {
     return "1280*720";
   }
 
-  if (
-    ratio === "1:1"
-  ) {
-
+  if (ratio === "1:1") {
     return "720*720";
   }
 
-  if (
-    ratio === "9:16-HD"
-  ) {
-
+  if (ratio === "9:16-HD") {
     return "1080*1920";
   }
 
-  if (
-    ratio === "16:9-HD"
-  ) {
-
+  if (ratio === "16:9-HD") {
     return "1920*1080";
   }
 
@@ -222,59 +241,123 @@ function isImage(file) {
 
 
 /* =========================================================
-   REPLICATE OUTPUT → BUFFER
+   REPLICATE FILE UPLOAD
+========================================================= */
+
+async function uploadImageToReplicate(file) {
+
+  if (!file) {
+    throw new Error(
+      "No reference image was received."
+    );
+  }
+
+  if (!isImage(file)) {
+    throw new Error(
+      "Reference image must be JPG, PNG, or WebP."
+    );
+  }
+
+  console.log(
+    "MAMAKI: Uploading reference image to Replicate..."
+  );
+
+  try {
+
+    /*
+     * Replicate's Node SDK accepts a Buffer
+     * as a file input.
+     */
+
+    const uploaded =
+      await replicate.files.create(
+        file.buffer,
+        {
+          filename:
+            file.originalname ||
+            `mamaki-${Date.now()}.jpg`
+        }
+      );
+
+    console.log(
+      "MAMAKI: Reference image uploaded."
+    );
+
+    /*
+     * The SDK normally returns a file object
+     * containing a URL.
+     */
+
+    if (
+      uploaded &&
+      typeof uploaded.url === "function"
+    ) {
+      return uploaded.url();
+    }
+
+    if (
+      uploaded &&
+      typeof uploaded.url === "string"
+    ) {
+      return uploaded.url;
+    }
+
+    if (
+      typeof uploaded === "string"
+    ) {
+      return uploaded;
+    }
+
+    throw new Error(
+      "Replicate did not return an image URL."
+    );
+
+  } catch (error) {
+
+    console.error(
+      "MAMAKI IMAGE UPLOAD ERROR:",
+      error?.stack ||
+      error?.message ||
+      error
+    );
+
+    throw new Error(
+      `Reference image upload failed: ${
+        error?.message ||
+        "Unknown error"
+      }`
+    );
+  }
+}
+
+
+/* =========================================================
+   DOWNLOAD VIDEO FROM REPLICATE
 ========================================================= */
 
 async function getVideoBuffer(output) {
 
   if (!output) {
-
     throw new Error(
       "Replicate returned no video output."
     );
   }
 
 
-  const item =
-    Array.isArray(output)
-      ? output[0]
-      : output;
-
-
-  if (!item) {
-
-    throw new Error(
-      "Replicate returned an empty video output."
-    );
-  }
-
+  /*
+   * Replicate Wan 2.5 normally returns
+   * a FileOutput/URI.
+   */
 
   if (
-    Buffer.isBuffer(item)
+    typeof output.url === "function"
   ) {
 
-    return item;
-  }
-
-
-  if (
-    item instanceof Uint8Array
-  ) {
-
-    return Buffer.from(item);
-  }
-
-
-  if (
-    typeof item.url ===
-    "function"
-  ) {
+    const url =
+      output.url();
 
     const response =
-      await fetch(
-        item.url()
-      );
-
+      await fetch(url);
 
     if (!response.ok) {
 
@@ -283,7 +366,6 @@ async function getVideoBuffer(output) {
       );
     }
 
-
     return Buffer.from(
       await response.arrayBuffer()
     );
@@ -291,13 +373,11 @@ async function getVideoBuffer(output) {
 
 
   if (
-    typeof item ===
-    "string"
+    typeof output.url === "string"
   ) {
 
     const response =
-      await fetch(item);
-
+      await fetch(output.url);
 
     if (!response.ok) {
 
@@ -306,7 +386,6 @@ async function getVideoBuffer(output) {
       );
     }
 
-
     return Buffer.from(
       await response.arrayBuffer()
     );
@@ -314,15 +393,11 @@ async function getVideoBuffer(output) {
 
 
   if (
-    typeof item.url ===
-    "string"
+    typeof output === "string"
   ) {
 
     const response =
-      await fetch(
-        item.url
-      );
-
+      await fetch(output);
 
     if (!response.ok) {
 
@@ -331,7 +406,6 @@ async function getVideoBuffer(output) {
       );
     }
 
-
     return Buffer.from(
       await response.arrayBuffer()
     );
@@ -339,12 +413,30 @@ async function getVideoBuffer(output) {
 
 
   if (
-    typeof item.arrayBuffer ===
-    "function"
+    Buffer.isBuffer(output)
+  ) {
+    return output;
+  }
+
+
+  if (
+    output instanceof Uint8Array
+  ) {
+    return Buffer.from(output);
+  }
+
+
+  /*
+   * Some Replicate SDK outputs can behave
+   * like readable file objects.
+   */
+
+  if (
+    typeof output.arrayBuffer === "function"
   ) {
 
     return Buffer.from(
-      await item.arrayBuffer()
+      await output.arrayBuffer()
     );
   }
 
@@ -356,34 +448,6 @@ async function getVideoBuffer(output) {
 
 
 /* =========================================================
-   IMAGE → REPLICATE FILE INPUT
-========================================================= */
-
-async function prepareReplicateImage(image) {
-
-  if (
-    !image ||
-    !image.buffer ||
-    !image.buffer.length
-  ) {
-
-    throw new Error(
-      "Reference image is empty."
-    );
-  }
-
-
-  /*
-   * Replicate's Node SDK can accept a
-   * Buffer as a file input and handle
-   * the upload for the prediction.
-   */
-
-  return image.buffer;
-}
-
-
-/* =========================================================
    AI VIDEO GENERATION
 ========================================================= */
 
@@ -391,7 +455,7 @@ async function generateVideo(
   prompt,
   seconds,
   ratio,
-  image
+  imageFile
 ) {
 
   if (!replicate) {
@@ -417,7 +481,7 @@ async function generateVideo(
 
 
   const videoDuration =
-    duration(seconds);
+    getDuration(seconds);
 
 
   console.log(
@@ -443,7 +507,7 @@ async function generateVideo(
      IMAGE → VIDEO
   ======================================================= */
 
-  if (image) {
+  if (imageFile) {
 
     console.log(
       "MODE: IMAGE TO VIDEO"
@@ -455,32 +519,25 @@ async function generateVideo(
     );
 
 
-    const imageInput =
-      await prepareReplicateImage(
-        image
+    /*
+     * Upload image first.
+     */
+
+    const imageUrl =
+      await uploadImageToReplicate(
+        imageFile
       );
 
 
     console.log(
-      "MAMAKI: Reference image prepared."
-    );
-
-    console.log(
-      "IMAGE MIME:",
-      image.mimetype
-    );
-
-    console.log(
-      "IMAGE SIZE:",
-      image.buffer.length,
-      "bytes"
+      "MAMAKI: I2V image URL obtained."
     );
 
 
     const input = {
 
       image:
-        imageInput,
+        imageUrl,
 
       prompt:
         cleanPrompt,
@@ -496,12 +553,11 @@ async function generateVideo(
 
       enable_prompt_expansion:
         true
-
     };
 
 
     console.log(
-      "MAMAKI: Calling Wan 2.5 Image-to-Video..."
+      "MAMAKI: Calling Wan 2.5 I2V..."
     );
 
 
@@ -521,40 +577,15 @@ async function generateVideo(
       );
 
 
-      const videoBuffer =
-        await getVideoBuffer(
-          output
-        );
-
-
-      if (
-        !videoBuffer ||
-        !videoBuffer.length
-      ) {
-
-        throw new Error(
-          "Wan 2.5 returned an empty video."
-        );
-      }
-
-
-      console.log(
-        "MAMAKI: I2V video received:",
-        videoBuffer.length,
-        "bytes"
+      return await getVideoBuffer(
+        output
       );
-
-
-      return videoBuffer;
 
 
     } catch (error) {
 
       console.error(
-        "MAMAKI I2V ERROR:"
-      );
-
-      console.error(
+        "MAMAKI I2V ERROR:",
         error?.stack ||
         error?.message ||
         error
@@ -564,7 +595,7 @@ async function generateVideo(
       throw new Error(
         `Replicate Image-to-Video failed: ${
           error?.message ||
-          "Unknown error"
+          "Unknown Replicate error"
         }`
       );
     }
@@ -588,7 +619,7 @@ async function generateVideo(
   const input = {
 
     size:
-      size(ratio),
+      getSize(ratio),
 
     prompt:
       cleanPrompt,
@@ -601,7 +632,6 @@ async function generateVideo(
 
     enable_prompt_expansion:
       true
-
   };
 
 
@@ -610,8 +640,9 @@ async function generateVideo(
     input.size
   );
 
+
   console.log(
-    "MAMAKI: Calling Wan 2.5 Text-to-Video..."
+    "MAMAKI: Calling Wan 2.5 T2V..."
   );
 
 
@@ -631,24 +662,9 @@ async function generateVideo(
     );
 
 
-    const videoBuffer =
-      await getVideoBuffer(
-        output
-      );
-
-
-    if (
-      !videoBuffer ||
-      !videoBuffer.length
-    ) {
-
-      throw new Error(
-        "Wan 2.5 returned an empty video."
-      );
-    }
-
-
-    return videoBuffer;
+    return await getVideoBuffer(
+      output
+    );
 
 
   } catch (error) {
@@ -664,7 +680,7 @@ async function generateVideo(
     throw new Error(
       `Replicate Text-to-Video failed: ${
         error?.message ||
-        "Unknown error"
+        "Unknown Replicate error"
       }`
     );
   }
@@ -702,8 +718,7 @@ function ffmpeg(args) {
         );
 
 
-      let stderr =
-        "";
+      let stderr = "";
 
 
       child.stderr.on(
@@ -727,9 +742,7 @@ function ffmpeg(args) {
         "close",
         code => {
 
-          if (
-            code === 0
-          ) {
+          if (code === 0) {
 
             resolve();
 
@@ -740,16 +753,19 @@ function ffmpeg(args) {
                 `FFmpeg error: ${stderr.slice(-5000)}`
               )
             );
+
           }
+
         }
       );
+
     }
   );
 }
 
 
 /* =========================================================
-   VOICE GENERATION
+   VOICE
 ========================================================= */
 
 async function createVoice(
@@ -787,9 +803,7 @@ async function createVoice(
     await tts.synthesize();
 
 
-  if (
-    !result?.audio
-  ) {
+  if (!result?.audio) {
 
     throw new Error(
       "Voice generation returned no audio."
@@ -809,7 +823,9 @@ async function createVoice(
     buffer =
       result.audio;
 
-  } else if (
+  }
+
+  else if (
     result.audio instanceof
     Uint8Array
   ) {
@@ -819,7 +835,9 @@ async function createVoice(
         result.audio
       );
 
-  } else if (
+  }
+
+  else if (
     typeof result.audio.arrayBuffer ===
     "function"
   ) {
@@ -829,7 +847,9 @@ async function createVoice(
         await result.audio.arrayBuffer()
       );
 
-  } else {
+  }
+
+  else {
 
     throw new Error(
       "Unable to read generated voice."
@@ -855,11 +875,9 @@ app.post(
   "/api/generate",
 
   upload.fields([
-
     {
       name:
         "referenceImage",
-
       maxCount:
         1
     },
@@ -867,7 +885,6 @@ app.post(
     {
       name:
         "music",
-
       maxCount:
         1
     },
@@ -875,11 +892,9 @@ app.post(
     {
       name:
         "effects",
-
       maxCount:
         1
     }
-
   ]),
 
   async (
@@ -901,8 +916,7 @@ app.post(
     await fs.mkdir(
       jobDir,
       {
-        recursive:
-          true
+        recursive: true
       }
     );
 
@@ -914,34 +928,25 @@ app.post(
         return res
           .status(503)
           .json({
-
-            ok:
-              false,
-
-            success:
-              false,
-
+            ok: false,
+            success: false,
             error:
               "REPLICATE_API_TOKEN is missing."
-
           });
       }
 
 
       const body =
-        req.body ||
-        {};
+        req.body || {};
 
 
       const files =
-        req.files ||
-        {};
+        req.files || {};
 
 
       const prompt =
         String(
-          body.prompt ||
-          ""
+          body.prompt || ""
         ).trim();
 
 
@@ -954,7 +959,7 @@ app.post(
 
 
       const seconds =
-        duration(
+        getDuration(
           body.duration
         );
 
@@ -970,116 +975,52 @@ app.post(
         return res
           .status(400)
           .json({
-
-            ok:
-              false,
-
-            success:
-              false,
-
+            ok: false,
+            success: false,
             error:
               "Enter a video prompt."
-
           });
       }
 
 
-      /* ===================================================
+      /* ====================================================
          REFERENCE IMAGE
-      =================================================== */
+      ==================================================== */
 
       let referenceImage =
         null;
 
 
-      const uploadedImage =
-        files.referenceImage?.[0];
+      if (
+        files.referenceImage &&
+        files.referenceImage[0]
+      ) {
+
+        const file =
+          files.referenceImage[0];
 
 
-      if (uploadedImage) {
-
-        console.log(
-          "MAMAKI: Image upload detected."
-        );
-
-
-        console.log(
-          "MIME:",
-          uploadedImage.mimetype
-        );
-
-
-        console.log(
-          "SIZE:",
-          uploadedImage.size
-        );
-
-
-        if (
-          !isImage(
-            uploadedImage
-          )
-        ) {
+        if (!isImage(file)) {
 
           return res
             .status(400)
             .json({
-
-              ok:
-                false,
-
-              success:
-                false,
-
+              ok: false,
+              success: false,
               error:
                 "Reference image must be JPG, PNG, or WebP."
-
             });
         }
 
 
-        if (
-          !uploadedImage.buffer ||
-          !uploadedImage.buffer.length
-        ) {
-
-          return res
-            .status(400)
-            .json({
-
-              ok:
-                false,
-
-              success:
-                false,
-
-              error:
-                "The uploaded reference image is empty."
-
-            });
-        }
-
-
-        referenceImage = {
-
-          buffer:
-            uploadedImage.buffer,
-
-          mimetype:
-            uploadedImage.mimetype
-
-        };
-
-
-        console.log(
-          "MAMAKI: Image ready for I2V."
-        );
+        referenceImage =
+          file;
       }
 
 
-      /* ===================================================
+      /* ====================================================
          GENERATE
-      =================================================== */
+      ==================================================== */
 
       const videoBuffer =
         await generateVideo(
@@ -1101,9 +1042,9 @@ app.post(
       }
 
 
-      /* ===================================================
+      /* ====================================================
          SAVE VIDEO
-      =================================================== */
+      ==================================================== */
 
       const videoName =
         `mamaki-${Date.now()}-${randomUUID()}.mp4`;
@@ -1128,13 +1069,12 @@ app.post(
       );
 
 
-      /* ===================================================
+      /* ====================================================
          OPTIONAL VOICE
-      =================================================== */
+      ==================================================== */
 
       if (
-        body.voiceEnabled !==
-          "false" &&
+        body.voiceEnabled !== "false" &&
         script
       ) {
 
@@ -1171,34 +1111,26 @@ app.post(
       }
 
 
-      /* ===================================================
+      /* ====================================================
          SUCCESS
-      =================================================== */
+      ==================================================== */
 
       return res.json({
 
-        ok:
-          true,
+        ok: true,
 
-        success:
-          true,
+        success: true,
 
         videoUrl:
-          `/api/video/${encodeURIComponent(videoName)}`,
+          `/api/video/${encodeURIComponent(
+            videoName
+          )}`,
 
         file:
           videoName,
 
-        mode:
-          referenceImage
-            ? "image-to-video"
-            : "text-to-video",
-
         message:
-          referenceImage
-            ? "MAMAKI Image-to-Video generated successfully."
-            : "MAMAKI Text-to-Video generated successfully."
-
+          "MAMAKI video generated successfully."
       });
 
 
@@ -1209,7 +1141,7 @@ app.post(
       );
 
       console.error(
-        "MAMAKI GENERATION ERROR"
+        "MAMAKI GENERATION ERROR:"
       );
 
       console.error(
@@ -1227,16 +1159,13 @@ app.post(
         .status(500)
         .json({
 
-          ok:
-            false,
+          ok: false,
 
-          success:
-            false,
+          success: false,
 
           error:
             error?.message ||
             "Video generation failed."
-
         });
 
 
@@ -1245,16 +1174,80 @@ app.post(
       await fs.rm(
         jobDir,
         {
-          recursive:
-            true,
-
-          force:
-            true
+          recursive: true,
+          force: true
         }
       ).catch(
         () => {}
       );
+
     }
+  }
+);
+
+
+/* =========================================================
+   MULTER / UPLOAD ERROR HANDLER
+========================================================= */
+
+app.use(
+  (
+    error,
+    req,
+    res,
+    next
+  ) => {
+
+    if (
+      error instanceof multer.MulterError
+    ) {
+
+      console.error(
+        "MULTER ERROR:",
+        error
+      );
+
+
+      return res
+        .status(400)
+        .json({
+
+          ok: false,
+
+          success: false,
+
+          error:
+            `Upload error: ${error.message}`
+        });
+    }
+
+
+    if (error) {
+
+      console.error(
+        "UPLOAD ERROR:",
+        error?.stack ||
+        error?.message ||
+        error
+      );
+
+
+      return res
+        .status(400)
+        .json({
+
+          ok: false,
+
+          success: false,
+
+          error:
+            error?.message ||
+            "File upload failed."
+        });
+    }
+
+
+    next();
   }
 );
 
@@ -1314,12 +1307,10 @@ app.get(
         .status(404)
         .json({
 
-          ok:
-            false,
+          ok: false,
 
           error:
             "Video not found."
-
         });
     }
   }
@@ -1350,9 +1341,7 @@ app.get(
         "online",
 
       replicate:
-        Boolean(
-          replicate
-        ),
+        Boolean(replicate),
 
       textToVideo:
         T2V_MODEL,
@@ -1360,23 +1349,17 @@ app.get(
       imageToVideo:
         I2V_MODEL,
 
-      imageUpload:
-        true,
-
       voiceOver:
         true,
 
       ffmpeg:
-        Boolean(
-          ffmpegPath
-        ),
+        Boolean(ffmpegPath),
 
       interface:
         "index.html",
 
       aiGeneration:
         true
-
     });
   }
 );
@@ -1403,21 +1386,14 @@ app.get(
         "MAMAKI AI VIDEO",
 
       version:
-        "5.3.0",
-
-      imageToVideo:
-        true,
-
-      textToVideo:
-        true
-
+        "5.3.0"
     });
   }
 );
 
 
 /* =========================================================
-   START SERVER
+   START
 ========================================================= */
 
 app.listen(
