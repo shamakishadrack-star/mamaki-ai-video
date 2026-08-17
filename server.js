@@ -18,9 +18,7 @@ const TOKEN = String(
 ).trim();
 
 const replicate = TOKEN
-  ? new Replicate({
-      auth: TOKEN
-    })
+  ? new Replicate({ auth: TOKEN })
   : null;
 
 /*
@@ -37,32 +35,42 @@ const I2V_MODEL =
 
 /*
 =========================================================
-MAMAKI CREDIT SYSTEM
+MAMAKI BUSINESS SETTINGS
 =========================================================
-
-1 credit = 1 second
-
-5 second video = 5 credits
-10 second video = 10 credits
-
-New user = 15 free credits
 */
 
-const NEW_USER_CREDITS = 15;
-const CREDIT_PER_SECOND = 1;
+const CREDIT_PRICE_USD =
+  0.068;
 
 /*
-Approximate Replicate provider cost.
+1 AI credit = 1 second of AI video.
 
-Wan 2.5 Fast 720p:
-$0.068 / second
+IMPORTANT:
+The final project can be much longer than the
+AI-generated video because MAMAKI can assemble:
+
+AI clips
+AI images
+photos
+templates
+text
+transitions
+user media
+narration
 */
 
-const PROVIDER_COST_PER_SECOND = 0.068;
+const FREE_CREDITS =
+  15;
+
+const MAX_SINGLE_AI_CLIP_SECONDS =
+  10;
+
+const MIN_AI_CLIP_SECONDS =
+  5;
 
 /*
 =========================================================
-FILES
+DIRECTORIES
 =========================================================
 */
 
@@ -75,69 +83,55 @@ const OUTPUT =
 const INDEX =
   path.join(ROOT, "index.html");
 
-await fs.mkdir(
-  TMP,
-  {
-    recursive: true
-  }
-);
+await fs.mkdir(TMP, {
+  recursive: true
+});
 
-await fs.mkdir(
-  OUTPUT,
-  {
-    recursive: true
-  }
-);
+await fs.mkdir(OUTPUT, {
+  recursive: true
+});
 
 /*
 =========================================================
-EXPRESS
+MIDDLEWARE
 =========================================================
 */
 
 app.use(
   express.json({
-    limit: "10mb"
+    limit: "20mb"
   })
 );
 
 app.use(
   express.urlencoded({
     extended: true,
-    limit: "10mb"
+    limit: "20mb"
+  })
+);
+
+app.use(
+  express.static(ROOT, {
+    index: false
   })
 );
 
 /*
 =========================================================
-MAMAKI INTERFACE
+HOME
 =========================================================
 */
 
-app.get(
-  "/",
-  async (req, res) => {
-    try {
-      await fs.access(INDEX);
-
-      return res.sendFile(INDEX);
-
-    } catch {
-      return res.status(404).send(
-        "MAMAKI interface not found."
-      );
-    }
+app.get("/", async (req, res) => {
+  try {
+    await fs.access(INDEX);
+    return res.sendFile(INDEX);
+  } catch {
+    return res.status(404).send(
+      "MAMAKI interface not found."
+    );
   }
-);
-
-app.use(
-  express.static(
-    ROOT,
-    {
-      index: false
-    }
-  )
-);
+});
 
 /*
 =========================================================
@@ -160,320 +154,100 @@ const upload =
 
 /*
 =========================================================
-TEMPORARY USER CREDIT SYSTEM
-=========================================================
-
-IMPORTANT:
-
-This is the first working version.
-
-Credits are associated with a browser
-using an HTTP cookie.
-
-For the final public Play Store/web
-version we should move this to a
-real database such as PostgreSQL.
-
+HELPERS
 =========================================================
 */
 
-const users =
-  new Map();
-
-function getUserId(req) {
-
-  let userId =
-    req.headers[
-      "x-mamaki-user"
-    ];
-
-  if (
-    !userId ||
-    typeof userId !== "string"
-  ) {
-    userId =
-      randomUUID();
-  }
-
-  return userId;
+function isImage(file) {
+  return !!file &&
+    [
+      "image/jpeg",
+      "image/png",
+      "image/webp"
+    ].includes(file.mimetype);
 }
-
-function getUser(req) {
-
-  const userId =
-    getUserId(req);
-
-  if (!users.has(userId)) {
-
-    users.set(
-      userId,
-      {
-        credits:
-          NEW_USER_CREDITS,
-
-        reserved:
-          0,
-
-        createdAt:
-          new Date().toISOString(),
-
-        generations:
-          0
-      }
-    );
-  }
-
-  return {
-    userId,
-    user:
-      users.get(userId)
-  };
-}
-
-/*
-=========================================================
-CREDIT RESERVATION
-=========================================================
-*/
-
-function reserveCredits(
-  req,
-  seconds
-) {
-
-  const {
-    userId,
-    user
-  } =
-    getUser(req);
-
-  const required =
-    seconds *
-    CREDIT_PER_SECOND;
-
-  if (
-    user.credits <
-    required
-  ) {
-
-    const error =
-      new Error(
-        `Not enough MAMAKI credits. You need ${required} credits but only have ${user.credits}.`
-      );
-
-    error.code =
-      "INSUFFICIENT_CREDITS";
-
-    throw error;
-  }
-
-  user.credits -=
-    required;
-
-  user.reserved +=
-    required;
-
-  return {
-    userId,
-    required
-  };
-}
-
-/*
-=========================================================
-CONFIRM CREDITS
-=========================================================
-*/
-
-function confirmCredits(
-  reservation
-) {
-
-  const user =
-    users.get(
-      reservation.userId
-    );
-
-  if (!user) {
-    return;
-  }
-
-  user.reserved -=
-    reservation.required;
-
-  user.generations += 1;
-}
-
-/*
-=========================================================
-REFUND CREDITS
-=========================================================
-*/
-
-function refundCredits(
-  reservation
-) {
-
-  const user =
-    users.get(
-      reservation.userId
-    );
-
-  if (!user) {
-    return;
-  }
-
-  user.reserved -=
-    reservation.required;
-
-  user.credits +=
-    reservation.required;
-}
-
-/*
-=========================================================
-DURATION
-=========================================================
-*/
 
 function duration(value) {
-
   const n =
     Number(value || 5);
 
-  if (
-    !Number.isFinite(n)
-  ) {
+  if (!Number.isFinite(n)) {
     return 5;
   }
 
   return Math.max(
-    5,
+    MIN_AI_CLIP_SECONDS,
     Math.min(
-      10,
+      MAX_SINGLE_AI_CLIP_SECONDS,
       Math.round(n)
     )
   );
 }
 
-/*
-=========================================================
-VIDEO SIZE
-=========================================================
-*/
-
 function size(ratio) {
-
-  if (
-    ratio === "9:16"
-  ) {
+  if (ratio === "9:16") {
     return "720*1280";
   }
 
-  if (
-    ratio === "16:9"
-  ) {
+  if (ratio === "16:9") {
     return "1280*720";
   }
 
-  if (
-    ratio === "1:1"
-  ) {
+  if (ratio === "1:1") {
     return "720*720";
   }
 
   return "1280*720";
 }
 
-/*
-=========================================================
-IMAGE VALIDATION
-=========================================================
-*/
-
-function isImage(file) {
-
-  return !!file &&
-    [
-      "image/jpeg",
-      "image/png",
-      "image/webp"
-    ].includes(
-      file.mimetype
-    );
-}
-
-/*
-=========================================================
-IMAGE → DATA URI
-=========================================================
-*/
-
 function imageToDataUri(
   buffer,
   mimetype
 ) {
-
   if (!buffer) {
     return null;
   }
 
-  const type =
-    mimetype ||
-    "image/jpeg";
-
   return (
-    `data:${type};base64,` +
+    `data:${mimetype || "image/jpeg"};base64,` +
     buffer.toString("base64")
   );
 }
 
 /*
 =========================================================
-REPLICATE OUTPUT
+REPLICATE VIDEO OUTPUT
 =========================================================
 */
 
-async function getVideoBuffer(
-  output
-) {
-
+async function getVideoBuffer(output) {
   const item =
     Array.isArray(output)
       ? output[0]
       : output;
 
   if (!item) {
-
     throw new Error(
-      "Replicate returned no video output."
+      "Replicate returned no video."
     );
   }
 
-  if (
-    Buffer.isBuffer(item)
-  ) {
+  if (Buffer.isBuffer(item)) {
     return item;
   }
 
-  if (
-    item instanceof Uint8Array
-  ) {
+  if (item instanceof Uint8Array) {
     return Buffer.from(item);
   }
 
   if (
-    typeof item.url ===
-    "function"
+    item &&
+    typeof item.url === "function"
   ) {
-
     const response =
-      await fetch(
-        item.url()
-      );
+      await fetch(item.url());
 
     if (!response.ok) {
-
       throw new Error(
         `Video download failed: HTTP ${response.status}`
       );
@@ -484,16 +258,11 @@ async function getVideoBuffer(
     );
   }
 
-  if (
-    typeof item ===
-    "string"
-  ) {
-
+  if (typeof item === "string") {
     const response =
       await fetch(item);
 
     if (!response.ok) {
-
       throw new Error(
         `Video download failed: HTTP ${response.status}`
       );
@@ -505,17 +274,13 @@ async function getVideoBuffer(
   }
 
   if (
-    typeof item.url ===
-    "string"
+    item &&
+    typeof item.url === "string"
   ) {
-
     const response =
-      await fetch(
-        item.url
-      );
+      await fetch(item.url);
 
     if (!response.ok) {
-
       throw new Error(
         `Video download failed: HTTP ${response.status}`
       );
@@ -527,78 +292,49 @@ async function getVideoBuffer(
   }
 
   throw new Error(
-    "Unsupported Replicate video output format."
+    "Unsupported Replicate video output."
   );
 }
 
 /*
 =========================================================
-MAMAKI AI GENERATION
+GENERATE ONE AI VIDEO CLIP
 =========================================================
 */
 
-async function generateVideo(
+async function generateAIClip({
   prompt,
   seconds,
   ratio,
   image
-) {
-
+}) {
   if (!replicate) {
-
     throw new Error(
       "REPLICATE_API_TOKEN is missing."
     );
   }
 
   const cleanPrompt =
-    String(
-      prompt || ""
-    ).trim();
+    String(prompt || "").trim();
 
   if (!cleanPrompt) {
-
     throw new Error(
-      "Video prompt is empty."
+      "AI video prompt is empty."
     );
   }
 
-  const videoDuration =
+  const clipDuration =
     duration(seconds);
 
-  console.log(
-    "======================================"
-  );
-
-  console.log(
-    "MAMAKI AI VIDEO GENERATION"
-  );
-
-  console.log(
-    "PROMPT:",
-    cleanPrompt
-  );
-
-  console.log(
-    "DURATION:",
-    videoDuration
-  );
-
   /*
-  =======================================================
+  -------------------------------------------------------
   IMAGE → VIDEO
-  =======================================================
+  -------------------------------------------------------
   */
 
   if (image) {
-
     console.log(
-      "MODE: IMAGE TO VIDEO"
-    );
-
-    console.log(
-      "MODEL:",
-      I2V_MODEL
+      "MAMAKI: IMAGE → VIDEO"
     );
 
     const imageUri =
@@ -607,282 +343,253 @@ async function generateVideo(
         image.mimetype
       );
 
-    if (!imageUri) {
-
-      throw new Error(
-        "Reference image could not be prepared."
-      );
-    }
-
-    const input = {
-
-      image:
-        imageUri,
-
-      prompt:
-        cleanPrompt,
-
-      duration:
-        videoDuration,
-
-      resolution:
-        "720p",
-
-      negative_prompt:
-        "blurry, distorted, flickering, deformed, low quality, bad anatomy",
-
-      enable_prompt_expansion:
-        true
-    };
-
-    try {
-
-      const output =
-        await replicate.run(
-          I2V_MODEL,
-          {
-            input
-          }
-        );
-
-      console.log(
-        "MAMAKI: Fast I2V completed."
-      );
-
-      return await getVideoBuffer(
-        output
-      );
-
-    } catch (error) {
-
-      console.error(
-        "MAMAKI FAST I2V ERROR:",
-        error?.stack ||
-        error?.message ||
-        error
-      );
-
-      throw new Error(
-        `Replicate Image-to-Video failed: ${
-          error?.message ||
-          "Unknown error"
-        }`
-      );
-    }
-  }
-
-  /*
-  =======================================================
-  TEXT → VIDEO
-  =======================================================
-  */
-
-  console.log(
-    "MODE: TEXT TO VIDEO"
-  );
-
-  console.log(
-    "MODEL:",
-    T2V_MODEL
-  );
-
-  const input = {
-
-    size:
-      size(ratio),
-
-    prompt:
-      cleanPrompt,
-
-    duration:
-      videoDuration,
-
-    negative_prompt:
-      "blurry, distorted, flickering, deformed, low quality",
-
-    enable_prompt_expansion:
-      true
-  };
-
-  try {
-
     const output =
       await replicate.run(
-        T2V_MODEL,
+        I2V_MODEL,
         {
-          input
+          input: {
+            image: imageUri,
+            prompt: cleanPrompt,
+            duration: clipDuration,
+            resolution: "720p",
+            negative_prompt:
+              "blurry, distorted, flickering, deformed, low quality",
+            enable_prompt_expansion: true
+          }
         }
       );
 
-    console.log(
-      "MAMAKI: Fast T2V completed."
-    );
-
-    return await getVideoBuffer(
-      output
-    );
-
-  } catch (error) {
-
-    console.error(
-      "MAMAKI FAST T2V ERROR:",
-      error?.stack ||
-      error?.message ||
-      error
-    );
-
-    throw new Error(
-      `Replicate Text-to-Video failed: ${
-        error?.message ||
-        "Unknown error"
-      }`
-    );
+    return getVideoBuffer(output);
   }
+
+  /*
+  -------------------------------------------------------
+  TEXT → VIDEO
+  -------------------------------------------------------
+  */
+
+  console.log(
+    "MAMAKI: TEXT → VIDEO"
+  );
+
+  const output =
+    await replicate.run(
+      T2V_MODEL,
+      {
+        input: {
+          prompt: cleanPrompt,
+          size: size(ratio),
+          duration: clipDuration,
+          negative_prompt:
+            "blurry, distorted, flickering, deformed, low quality",
+          enable_prompt_expansion: true
+        }
+      }
+    );
+
+  return getVideoBuffer(output);
 }
 
 /*
 =========================================================
-FFMPEG
+LONG SCRIPT PLANNER
 =========================================================
 */
 
-function ffmpeg(args) {
+function estimateScenes(
+  script
+) {
+  const text =
+    String(script || "").trim();
 
-  return new Promise(
-    (
-      resolve,
-      reject
-    ) => {
+  if (!text) {
+    return [];
+  }
 
-      if (!ffmpegPath) {
+  /*
+  Rough narration estimate.
 
-        reject(
-          new Error(
-            "FFmpeg unavailable."
+  Average spoken narration:
+  about 130 words/minute.
+  */
+
+  const words =
+    text.split(/\s+/).filter(Boolean);
+
+  const estimatedMinutes =
+    Math.max(
+      1,
+      Math.ceil(words.length / 130)
+    );
+
+  /*
+  One visual scene roughly every
+  20 seconds.
+
+  This is only a planning estimate.
+  */
+
+  const sceneCount =
+    Math.max(
+      1,
+      Math.ceil(
+        (estimatedMinutes * 60) / 20
+      )
+    );
+
+  const scenes = [];
+
+  for (
+    let i = 0;
+    i < sceneCount;
+    i++
+  ) {
+    scenes.push({
+      scene:
+        i + 1,
+
+      type:
+        i % 3 === 0
+          ? "ai-video"
+          : "ai-image-or-template",
+
+      estimatedDuration:
+        20
+    });
+  }
+
+  return {
+    wordCount:
+      words.length,
+
+    estimatedMinutes,
+
+    estimatedFinalSeconds:
+      estimatedMinutes * 60,
+
+    sceneCount,
+
+    scenes
+  };
+}
+
+/*
+=========================================================
+LONG VIDEO PLAN API
+
+THIS DOES NOT SPEND REPLICATE CREDIT.
+=========================================================
+*/
+
+app.post(
+  "/api/long-video/plan",
+
+  async (req, res) => {
+    try {
+      const script =
+        String(
+          req.body?.script || ""
+        ).trim();
+
+      if (!script) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "Paste your script first."
+        });
+      }
+
+      const plan =
+        estimateScenes(script);
+
+      /*
+      Conservative default:
+
+      Only a portion of the project
+      is initially planned as AI video.
+
+      The rest can use:
+      images
+      templates
+      text
+      transitions
+      user media
+      */
+
+      const aiVideoMinutes =
+        Math.min(
+          10,
+          Math.max(
+            1,
+            Math.ceil(
+              plan.estimatedMinutes * 0.08
+            )
           )
         );
 
-        return;
-      }
+      const aiVideoSeconds =
+        aiVideoMinutes * 60;
 
-      const child =
-        spawn(
-          ffmpegPath,
-          args
-        );
+      const estimatedAI =
+        aiVideoSeconds *
+        CREDIT_PRICE_USD;
 
-      let stderr = "";
+      return res.json({
+        ok: true,
 
-      child.stderr.on(
-        "data",
-        data => {
+        plan,
 
-          stderr +=
-            data.toString();
-        }
+        strategy: {
+          finalVideo:
+            `${plan.estimatedMinutes} minutes`,
+
+          aiVideoSeconds,
+
+          aiVideoMinutes,
+
+          estimatedAICostUSD:
+            Number(
+              estimatedAI.toFixed(2)
+            ),
+
+          freeAssembly:
+            true,
+
+          narration:
+            true,
+
+          images:
+            true,
+
+          templates:
+            true,
+
+          transitions:
+            true,
+
+          ffmpeg:
+            true
+        },
+
+        message:
+          "Plan created without spending AI credits."
+      });
+
+    } catch (error) {
+      console.error(
+        "LONG VIDEO PLAN ERROR:",
+        error
       );
 
-      child.on(
-        "error",
-        reject
-      );
-
-      child.on(
-        "close",
-        code => {
-
-          if (
-            code === 0
-          ) {
-
-            resolve();
-
-          } else {
-
-            reject(
-              new Error(
-                `FFmpeg error: ${stderr.slice(-5000)}`
-              )
-            );
-          }
-        }
-      );
+      return res.status(500).json({
+        ok: false,
+        error:
+          error?.message ||
+          "Could not create video plan."
+      });
     }
-  );
-}
-
-/*
-=========================================================
-MAMAKI WATERMARK
-=========================================================
-
-Adds:
-
-MAMAKI ✨
-
-to the top-right.
-
-It gently fades in/out continuously.
-=========================================================
-*/
-
-async function addMamakiWatermark(
-  inputVideo,
-  outputVideo
-) {
-
-  if (!ffmpegPath) {
-
-    throw new Error(
-      "FFmpeg is not available."
-    );
   }
-
-  /*
-  DejaVu Sans is normally available
-  in the Render Linux environment.
-
-  The emoji may not render on every
-  FFmpeg font installation, so we use
-  "MAMAKI" plus a sparkle character
-  where supported.
-  */
-
-  const fontPath =
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
-
-  const filter =
-    `drawtext=fontfile=${fontPath}:text='MAMAKI ✨':fontcolor=white:fontsize=28:borderw=2:bordercolor=black@0.55:x=w-tw-28:y=25:alpha='0.82+0.18*sin(2*PI*t/3)'`;
-
-  await ffmpeg([
-    "-y",
-
-    "-i",
-    inputVideo,
-
-    "-vf",
-    filter,
-
-    "-c:v",
-    "libx264",
-
-    "-preset",
-    "veryfast",
-
-    "-crf",
-    "23",
-
-    "-c:a",
-    "copy",
-
-    "-movflags",
-    "+faststart",
-
-    outputVideo
-  ]);
-
-  return outputVideo;
-}
+);
 
 /*
 =========================================================
@@ -894,14 +601,10 @@ async function createVoice(
   text,
   output
 ) {
-
   const narration =
-    String(
-      text || ""
-    ).trim();
+    String(text || "").trim();
 
   if (!narration) {
-
     throw new Error(
       "Voice text is empty."
     );
@@ -922,7 +625,6 @@ async function createVoice(
     await tts.synthesize();
 
   if (!result?.audio) {
-
     throw new Error(
       "Voice generation returned no audio."
     );
@@ -935,32 +637,25 @@ async function createVoice(
       result.audio
     )
   ) {
-
     buffer =
       result.audio;
-
   } else if (
     result.audio instanceof
     Uint8Array
   ) {
-
     buffer =
       Buffer.from(
         result.audio
       );
-
   } else if (
     typeof result.audio.arrayBuffer ===
     "function"
   ) {
-
     buffer =
       Buffer.from(
         await result.audio.arrayBuffer()
       );
-
   } else {
-
     throw new Error(
       "Unable to read generated voice."
     );
@@ -976,56 +671,65 @@ async function createVoice(
 
 /*
 =========================================================
-CREDIT API
+FFMPEG
 =========================================================
 */
 
-app.get(
-  "/api/credits",
-  (req, res) => {
+function ffmpeg(args) {
+  return new Promise(
+    (resolve, reject) => {
+      if (!ffmpegPath) {
+        reject(
+          new Error(
+            "FFmpeg unavailable."
+          )
+        );
 
-    const {
-      userId,
-      user
-    } =
-      getUser(req);
+        return;
+      }
 
-    res.setHeader(
-      "X-MAMAKI-USER",
-      userId
-    );
+      const child =
+        spawn(
+          ffmpegPath,
+          args
+        );
 
-    return res.json({
+      let stderr = "";
 
-      ok:
-        true,
+      child.stderr.on(
+        "data",
+        data => {
+          stderr +=
+            data.toString();
+        }
+      );
 
-      credits:
-        user.credits,
+      child.on(
+        "error",
+        reject
+      );
 
-      reserved:
-        user.reserved,
-
-      freeCredits:
-        NEW_USER_CREDITS,
-
-      creditPerSecond:
-        CREDIT_PER_SECOND,
-
-      providerCostPerSecond:
-        PROVIDER_COST_PER_SECOND,
-
-      freeVideos:
-        Math.floor(
-          user.credits / 5
-        )
-    });
-  }
-);
+      child.on(
+        "close",
+        code => {
+          if (code === 0) {
+            resolve();
+          } else {
+            reject(
+              new Error(
+                `FFmpeg error: ${stderr.slice(-5000)}`
+              )
+            );
+          }
+        }
+      );
+    }
+  );
+}
 
 /*
 =========================================================
-GENERATE API
+GENERATE NORMAL VIDEO API
 =========================================================
 */
 
@@ -1036,33 +740,23 @@ app.post(
     {
       name:
         "referenceImage",
-
-      maxCount:
-        1
+      maxCount: 1
     },
 
     {
       name:
         "music",
-
-      maxCount:
-        1
+      maxCount: 1
     },
 
     {
       name:
         "effects",
-
-      maxCount:
-        1
+      maxCount: 1
     }
   ]),
 
-  async (
-    req,
-    res
-  ) => {
-
+  async (req, res) => {
     const job =
       randomUUID();
 
@@ -1075,28 +769,18 @@ app.post(
     await fs.mkdir(
       jobDir,
       {
-        recursive:
-          true
+        recursive: true
       }
     );
 
-    let reservation =
-      null;
-
     try {
-
       if (!replicate) {
-
-        return res
-          .status(503)
-          .json({
-
-            ok:
-              false,
-
-            error:
-              "REPLICATE_API_TOKEN is missing."
-          });
+        return res.status(503).json({
+          ok: false,
+          success: false,
+          error:
+            "REPLICATE_API_TOKEN is missing."
+        });
       }
 
       const body =
@@ -1110,6 +794,13 @@ app.post(
           body.prompt || ""
         ).trim();
 
+      const script =
+        String(
+          body.script ||
+          body.voiceText ||
+          ""
+        ).trim();
+
       const seconds =
         duration(
           body.duration
@@ -1121,63 +812,13 @@ app.post(
         "16:9";
 
       if (!prompt) {
-
-        return res
-          .status(400)
-          .json({
-
-            ok:
-              false,
-
-            error:
-              "Enter a video prompt."
-          });
+        return res.status(400).json({
+          ok: false,
+          success: false,
+          error:
+            "Enter a video prompt."
+        });
       }
-
-      /*
-      =====================================================
-      RESERVE CREDITS
-      =====================================================
-      */
-
-      try {
-
-        reservation =
-          reserveCredits(
-            req,
-            seconds
-          );
-
-      } catch (creditError) {
-
-        if (
-          creditError.code ===
-          "INSUFFICIENT_CREDITS"
-        ) {
-
-          return res
-            .status(402)
-            .json({
-
-              ok:
-                false,
-
-              code:
-                "INSUFFICIENT_CREDITS",
-
-              error:
-                creditError.message
-            });
-        }
-
-        throw creditError;
-      }
-
-      /*
-      =====================================================
-      REFERENCE IMAGE
-      =====================================================
-      */
 
       let referenceImage =
         null;
@@ -1186,22 +827,17 @@ app.post(
         files
           .referenceImage?.[0]
       ) {
-
         const file =
           files
             .referenceImage[0];
 
-        if (
-          !isImage(file)
-        ) {
-
+        if (!isImage(file)) {
           throw new Error(
             "Reference image must be JPG, PNG, or WebP."
           );
         }
 
         referenceImage = {
-
           buffer:
             file.buffer,
 
@@ -1211,133 +847,61 @@ app.post(
       }
 
       /*
-      =====================================================
+      -------------------------------------------------------
       AI GENERATION
-      =====================================================
+      -------------------------------------------------------
       */
 
-      console.log(
-        "MAMAKI: Credits reserved:",
-        reservation.required
-      );
-
       const videoBuffer =
-        await generateVideo(
+        await generateAIClip({
           prompt,
           seconds,
           ratio,
-          referenceImage
-        );
+          image:
+            referenceImage
+        });
 
       if (
         !videoBuffer ||
         !videoBuffer.length
       ) {
-
         throw new Error(
-          "AI model returned an empty video."
+          "AI returned an empty video."
         );
       }
 
-      /*
-      =====================================================
-      SAVE ORIGINAL VIDEO
-      =====================================================
-      */
-
-      const rawName =
-        `raw-${Date.now()}-${randomUUID()}.mp4`;
-
-      const finalName =
+      const videoName =
         `mamaki-${Date.now()}-${randomUUID()}.mp4`;
 
-      const rawPath =
-        path.join(
-          jobDir,
-          rawName
-        );
-
-      const finalPath =
+      const videoPath =
         path.join(
           OUTPUT,
-          finalName
+          videoName
         );
 
       await fs.writeFile(
-        rawPath,
+        videoPath,
         videoBuffer
       );
 
-      /*
-      =====================================================
-      MAMAKI WATERMARK
-      =====================================================
-      */
-
       console.log(
-        "MAMAKI: Adding watermark..."
+        "MAMAKI: Video saved:",
+        videoName
       );
 
-      try {
-
-        await addMamakiWatermark(
-          rawPath,
-          finalPath
-        );
-
-      } catch (watermarkError) {
-
-        console.error(
-          "MAMAKI WATERMARK ERROR:",
-          watermarkError?.message ||
-          watermarkError
-        );
-
-        /*
-        If watermarking fails, do NOT
-        deliver an unwatermarked video.
-        */
-
-        throw new Error(
-          "MAMAKI could not add the required watermark."
-        );
-      }
-
       /*
-      =====================================================
-      CONFIRM CREDITS
-      =====================================================
-      */
-
-      confirmCredits(
-        reservation
-      );
-
-      reservation =
-        null;
-
-      /*
-      =====================================================
+      -------------------------------------------------------
       OPTIONAL VOICE
-      =====================================================
+      -------------------------------------------------------
       */
-
-      const script =
-        String(
-          body.script ||
-          body.voiceText ||
-          ""
-        ).trim();
 
       if (
         body.voiceEnabled !==
           "false" &&
         script
       ) {
-
         try {
-
-          const voice =
+          const voicePath =
             path.join(
               jobDir,
               "voice.mp3"
@@ -1345,13 +909,14 @@ app.post(
 
           await createVoice(
             script,
-            voice
+            voicePath
           );
 
-        } catch (
-          voiceError
-        ) {
+          console.log(
+            "MAMAKI: Voice generated."
+          );
 
+        } catch (voiceError) {
           console.error(
             "VOICE ERROR:",
             voiceError?.message ||
@@ -1360,74 +925,34 @@ app.post(
         }
       }
 
-      /*
-      =====================================================
-      USER CREDIT BALANCE
-      =====================================================
-      */
-
-      const {
-        user
-      } =
-        getUser(req);
-
-      console.log(
-        "MAMAKI: Video completed."
-      );
-
-      console.log(
-        "MAMAKI: Remaining credits:",
-        user.credits
-      );
-
       return res.json({
-
-        ok:
-          true,
-
-        success:
-          true,
+        ok: true,
+        success: true,
 
         videoUrl:
-          `/api/video/${encodeURIComponent(finalName)}`,
+          `/api/video/${encodeURIComponent(
+            videoName
+          )}`,
 
         file:
-          finalName,
+          videoName,
 
         creditsUsed:
           seconds,
 
-        creditsRemaining:
-          user.credits,
+        estimatedModelCostUSD:
+          Number(
+            (
+              seconds *
+              CREDIT_PRICE_USD
+            ).toFixed(3)
+          ),
 
         message:
           "MAMAKI video generated successfully."
       });
 
     } catch (error) {
-
-      /*
-      =====================================================
-      GENERATION FAILED
-      =====================================================
-
-      IMPORTANT:
-      Return reserved credits.
-      =====================================================
-      */
-
-      if (reservation) {
-
-        console.log(
-          "MAMAKI: Refunding credits:",
-          reservation.required
-        );
-
-        refundCredits(
-          reservation
-        );
-      }
-
       console.error(
         "======================================"
       );
@@ -1446,40 +971,23 @@ app.post(
         "======================================"
       );
 
-      return res
-        .status(500)
-        .json({
+      return res.status(500).json({
+        ok: false,
+        success: false,
 
-          ok:
-            false,
-
-          success:
-            false,
-
-          creditsRefunded:
-            reservation
-              ? reservation.required
-              : 0,
-
-          error:
-            error?.message ||
-            "Video generation failed."
-        });
+        error:
+          error?.message ||
+          "Video generation failed."
+      });
 
     } finally {
-
       await fs.rm(
         jobDir,
         {
-          recursive:
-            true,
-
-          force:
-            true
+          recursive: true,
+          force: true
         }
-      ).catch(
-        () => {}
-      );
+      ).catch(() => {});
     }
   }
 );
@@ -1493,11 +1001,7 @@ VIDEO DELIVERY
 app.get(
   "/api/video/:file",
 
-  async (
-    req,
-    res
-  ) => {
-
+  async (req, res) => {
     const filename =
       path.basename(
         req.params.file
@@ -1510,10 +1014,7 @@ app.get(
       );
 
     try {
-
-      await fs.access(
-        video
-      );
+      await fs.access(video);
 
       res.setHeader(
         "Content-Type",
@@ -1525,22 +1026,14 @@ app.get(
         `inline; filename="${filename}"`
       );
 
-      return res.sendFile(
-        video
-      );
+      return res.sendFile(video);
 
     } catch {
-
-      return res
-        .status(404)
-        .json({
-
-          ok:
-            false,
-
-          error:
-            "Video not found."
-        });
+      return res.status(404).json({
+        ok: false,
+        error:
+          "Video not found."
+      });
     }
   }
 );
@@ -1554,13 +1047,8 @@ STATUS
 app.get(
   "/api/status",
 
-  async (
-    req,
-    res
-  ) => {
-
+  async (req, res) => {
     return res.json({
-
       app:
         "MAMAKI AI VIDEO",
 
@@ -1571,9 +1059,7 @@ app.get(
         "online",
 
       replicate:
-        Boolean(
-          replicate
-        ),
+        Boolean(replicate),
 
       textToVideo:
         T2V_MODEL,
@@ -1581,31 +1067,29 @@ app.get(
       imageToVideo:
         I2V_MODEL,
 
-      providerCostPerSecond:
-        PROVIDER_COST_PER_SECOND,
+      pricePerAISecondUSD:
+        CREDIT_PRICE_USD,
 
-      mamakiCreditPerSecond:
-        CREDIT_PER_SECOND,
+      freeCreatorCredits:
+        FREE_CREDITS,
 
-      newUserCredits:
-        NEW_USER_CREDITS,
+      maxSingleAIClipSeconds:
+        MAX_SINGLE_AI_CLIP_SECONDS,
 
-      freeVideos:
-        3,
+      longVideoPlanning:
+        true,
 
-      watermark:
-        "MAMAKI ✨",
+      freeEditing:
+        true,
 
-      watermarkEngine:
-        "FFmpeg",
+      photoVideoMaker:
+        true,
 
-      voiceOver:
+      templates:
         true,
 
       ffmpeg:
-        Boolean(
-          ffmpegPath
-        ),
+        Boolean(ffmpegPath),
 
       interface:
         "index.html",
@@ -1625,13 +1109,8 @@ HEALTH
 app.get(
   "/health",
 
-  (
-    req,
-    res
-  ) => {
-
+  (req, res) => {
     return res.json({
-
       status:
         "ok",
 
@@ -1646,7 +1125,7 @@ app.get(
 
 /*
 =========================================================
-START SERVER
+START
 =========================================================
 */
 
@@ -1654,7 +1133,6 @@ app.listen(
   PORT,
   "0.0.0.0",
   () => {
-
     console.log(
       "======================================"
     );
@@ -1668,11 +1146,19 @@ app.listen(
     );
 
     console.log(
-      `REPLICATE TOKEN: ${
-        TOKEN
-          ? "FOUND"
-          : "MISSING"
-      }`
+      `TEXT → VIDEO: ${T2V_MODEL}`
+    );
+
+    console.log(
+      `IMAGE → VIDEO: ${I2V_MODEL}`
+    );
+
+    console.log(
+      `AI COST: $${CREDIT_PRICE_USD}/second`
+    );
+
+    console.log(
+      `FREE CREDITS: ${FREE_CREDITS}`
     );
 
     console.log(
@@ -1684,23 +1170,11 @@ app.listen(
     );
 
     console.log(
-      `TEXT TO VIDEO: ${T2V_MODEL}`
+      "LONG VIDEO PLANNER: ENABLED"
     );
 
     console.log(
-      `IMAGE TO VIDEO: ${I2V_MODEL}`
-    );
-
-    console.log(
-      "CREDIT SYSTEM: 1 CREDIT = 1 SECOND"
-    );
-
-    console.log(
-      "NEW USER: 15 FREE CREDITS"
-    );
-
-    console.log(
-      "WATERMARK: MAMAKI ✨"
+      "FREE CREATOR TOOLS: ENABLED"
     );
 
     console.log(
