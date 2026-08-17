@@ -2,536 +2,646 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>MAMAKI AI VIDEO</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>MAMAKI ✨ AI VIDEO</title>
 
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
-
 :root{
-  --bg:#070711;
-  --panel:#10101c;
-  --panel2:#151525;
-  --border:rgba(255,255,255,.10);
+  --bg:#07070d;
+  --panel:#10101b;
+  --panel2:#171727;
+  --border:#292944;
   --text:#f7f7ff;
-  --muted:#9999ad;
-  --purple:#7c3cff;
-  --purple2:#9b5cff;
-  --cyan:#00d9ff;
-  --green:#35e6a1;
+  --muted:#9696ae;
+  --purple:#7047ff;
+  --purple2:#9a72ff;
+  --cyan:#14d9ff;
+  --green:#32e6a1;
   --danger:#ff5577;
+  --shadow:0 25px 70px rgba(0,0,0,.38);
 }
+
+*{box-sizing:border-box}
 
 body{
-  font-family:Inter,Arial,sans-serif;
+  margin:0;
   background:
-    radial-gradient(circle at 15% 0%,rgba(124,60,255,.20),transparent 30%),
-    radial-gradient(circle at 85% 5%,rgba(0,217,255,.12),transparent 28%),
+    radial-gradient(circle at 50% -10%,rgba(112,71,255,.22),transparent 35%),
     var(--bg);
   color:var(--text);
-  min-height:100vh;
+  font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
 }
 
-button,input,textarea,select{font:inherit}
+button,input,textarea,select{
+  font:inherit;
+}
 
 button{
-  border:0;
   cursor:pointer;
 }
 
-.container{
+.app{
   width:min(1180px,94%);
   margin:auto;
+  padding:22px 0 70px;
 }
 
 /* HEADER */
-
 .header{
-  padding:25px 0 15px;
   display:flex;
   justify-content:space-between;
   align-items:center;
-  gap:20px;
+  gap:15px;
+  padding:12px 0 25px;
 }
 
-.logo{
-  font-size:25px;
+.brand{
+  display:flex;
+  align-items:center;
+  gap:10px;
   font-weight:900;
-  letter-spacing:-1px;
-}
-
-.logo span{
-  background:linear-gradient(90deg,#fff,var(--cyan),var(--purple2));
-  -webkit-background-clip:text;
-  color:transparent;
+  font-size:20px;
 }
 
 .status{
-  padding:8px 13px;
-  border:1px solid rgba(53,230,161,.25);
-  background:rgba(53,230,161,.07);
   color:var(--green);
-  border-radius:999px;
   font-size:12px;
-}
-
-/* HERO */
-
-.hero{
-  text-align:center;
-  padding:35px 10px 30px;
+  font-weight:800;
 }
 
 .badge{
-  display:inline-block;
-  padding:8px 13px;
+  border:1px solid rgba(50,230,161,.35);
+  color:var(--green);
+  background:rgba(50,230,161,.07);
   border-radius:999px;
-  background:rgba(124,60,255,.12);
-  border:1px solid rgba(124,60,255,.25);
-  color:#c9b3ff;
-  font-size:12px;
-  margin-bottom:16px;
+  padding:9px 13px;
+  font-size:11px;
+  font-weight:800;
+}
+
+/* HERO */
+.hero{
+  text-align:center;
+  padding:42px 15px 28px;
+}
+
+.hero .eyebrow{
+  color:var(--purple2);
+  font-weight:900;
+  letter-spacing:.12em;
+  font-size:11px;
 }
 
 .hero h1{
-  font-size:clamp(34px,6vw,65px);
+  margin:12px 0;
+  font-size:clamp(34px,7vw,68px);
   line-height:1;
-  margin-bottom:16px;
-  letter-spacing:-3px;
+  letter-spacing:-.045em;
 }
 
 .hero h1 span{
-  background:linear-gradient(90deg,#fff,#b99cff,#00e1ff);
+  background:linear-gradient(90deg,#fff,#a88cff,#14d9ff);
   -webkit-background-clip:text;
   color:transparent;
 }
 
 .hero p{
-  max-width:700px;
+  max-width:720px;
   margin:auto;
   color:var(--muted);
   line-height:1.7;
 }
 
-/* AI GENERATOR */
+/* AI */
+.section-title{
+  margin:28px 0 14px;
+}
 
-.ai-section{
-  background:
-    linear-gradient(145deg,rgba(124,60,255,.13),rgba(0,217,255,.04)),
-    var(--panel);
-  border:1px solid rgba(124,60,255,.25);
+.section-title h2{
+  margin:0 0 5px;
+  font-size:22px;
+}
+
+.section-title p{
+  margin:0;
+  color:var(--muted);
+  font-size:13px;
+}
+
+.ai-panel{
+  background:linear-gradient(145deg,#12121f,#0d0d16);
+  border:1px solid var(--border);
   border-radius:25px;
-  padding:25px;
-  box-shadow:0 25px 80px rgba(0,0,0,.35);
+  padding:22px;
+  box-shadow:var(--shadow);
 }
 
 .ai-top{
   display:flex;
   justify-content:space-between;
-  gap:15px;
   align-items:center;
+  gap:15px;
+  flex-wrap:wrap;
   margin-bottom:20px;
 }
 
-.ai-title{
-  font-size:19px;
+.ai-label{
+  font-weight:900;
+}
+
+.credits{
+  color:#ffd866;
+  font-weight:900;
+}
+
+.mode-tabs{
+  display:flex;
+  gap:8px;
+  margin-bottom:18px;
+}
+
+.mode-tabs button{
+  flex:1;
+  border:1px solid var(--border);
+  background:#0c0c15;
+  color:#aaaac0;
+  padding:13px;
+  border-radius:13px;
   font-weight:800;
 }
 
-.balance{
-  padding:10px 15px;
-  border-radius:12px;
-  background:rgba(53,230,161,.08);
-  border:1px solid rgba(53,230,161,.2);
-  color:var(--green);
-  font-weight:700;
+.mode-tabs button.active{
+  background:linear-gradient(135deg,var(--purple),#4d2bc7);
+  color:#fff;
+  border-color:transparent;
 }
 
 textarea{
   width:100%;
-  min-height:150px;
+  min-height:145px;
   resize:vertical;
-  background:#080812;
-  color:#fff;
   border:1px solid var(--border);
-  border-radius:16px;
-  padding:17px;
+  background:#090912;
+  color:#fff;
+  border-radius:17px;
+  padding:16px;
   outline:none;
 }
 
 textarea:focus,
 input:focus,
 select:focus{
-  border-color:var(--purple2);
+  border-color:var(--purple);
 }
 
 .field{
-  margin-top:17px;
+  margin-top:15px;
 }
 
-.label{
+.field label{
   display:block;
-  color:#c9c9d8;
-  font-size:13px;
   margin-bottom:8px;
+  color:#c7c7d8;
+  font-size:12px;
+  font-weight:800;
 }
 
-.options{
+.controls{
   display:grid;
   grid-template-columns:repeat(3,1fr);
   gap:12px;
+  margin-top:15px;
+}
+
+.control{
+  background:#0b0b14;
+  border:1px solid var(--border);
+  padding:12px;
+  border-radius:14px;
+}
+
+select,
+input[type=file],
+input[type=text],
+input[type=number],
+input[type=range]{
+  width:100%;
 }
 
 select,
 input[type=text],
 input[type=number]{
-  width:100%;
-  background:#080812;
-  color:#fff;
   border:1px solid var(--border);
-  padding:13px;
-  border-radius:12px;
-  outline:none;
-}
-
-.option-grid{
-  display:grid;
-  grid-template-columns:repeat(4,1fr);
-  gap:9px;
-}
-
-.option-btn{
-  padding:12px;
-  border-radius:12px;
-  color:#bbb;
-  background:#0a0a14;
-  border:1px solid var(--border);
-}
-
-.option-btn.active{
-  background:linear-gradient(135deg,var(--purple),#4b24b9);
+  background:#090912;
   color:#fff;
-  border-color:#a47aff;
+  padding:11px;
+  border-radius:10px;
+}
+
+input[type=file]{
+  color:#aaa;
 }
 
 .duration-row{
   display:grid;
-  grid-template-columns:1fr 130px;
-  gap:10px;
+  grid-template-columns:repeat(3,1fr);
+  gap:8px;
+}
+
+.duration-row button{
+  border:1px solid var(--border);
+  background:#0a0a12;
+  color:#aaa;
+  padding:11px;
+  border-radius:10px;
+}
+
+.duration-row button.active{
+  background:rgba(112,71,255,.2);
+  color:#fff;
+  border-color:var(--purple);
 }
 
 .generate{
   width:100%;
-  margin-top:20px;
-  padding:17px;
+  margin-top:18px;
+  padding:16px;
+  border:0;
   border-radius:15px;
-  color:white;
+  color:#fff;
   font-weight:900;
-  font-size:16px;
-  background:linear-gradient(135deg,#7c3cff,#b04cff,#00bde8);
-  box-shadow:0 12px 35px rgba(124,60,255,.25);
+  background:linear-gradient(135deg,#7047ff,#14bde5);
+  box-shadow:0 12px 35px rgba(112,71,255,.3);
 }
 
 .generate:disabled{
-  opacity:.5;
+  opacity:.55;
   cursor:not-allowed;
 }
 
-.ai-result{
-  margin-top:20px;
+.output{
   display:none;
-}
-
-.ai-result video{
-  width:100%;
+  margin-top:18px;
+  border:1px solid var(--border);
   border-radius:18px;
-  background:#000;
+  padding:15px;
+  background:#090912;
 }
 
-/* STUDIO */
+.output video{
+  width:100%;
+  max-height:520px;
+  border-radius:13px;
+}
 
+/* CREATIVE STUDIO */
 .studio{
-  margin-top:35px;
-  padding:25px;
-  background:var(--panel);
+  margin-top:32px;
+  background:linear-gradient(145deg,#12121f,#0c0c15);
   border:1px solid var(--border);
   border-radius:25px;
+  padding:18px;
+  box-shadow:var(--shadow);
 }
 
 .studio-head{
   display:flex;
   justify-content:space-between;
   align-items:center;
-  margin-bottom:18px;
+  gap:10px;
+  margin-bottom:15px;
 }
 
 .studio-head h2{
-  font-size:22px;
+  margin:0;
+  font-size:20px;
+}
+
+.studio-head p{
+  margin:5px 0 0;
+  color:var(--muted);
+  font-size:12px;
 }
 
 .free{
   color:var(--green);
-  font-size:11px;
-  padding:7px 10px;
+  font-size:10px;
+  font-weight:900;
+  border:1px solid rgba(50,230,161,.3);
+  padding:8px 10px;
   border-radius:999px;
-  background:rgba(53,230,161,.07);
-  border:1px solid rgba(53,230,161,.2);
 }
 
-/* TABS */
-
-.tabs{
-  display:flex;
+/* STUDIO TABS */
+.studio-tabs{
+  display:grid;
+  grid-template-columns:repeat(8,1fr);
   gap:7px;
   overflow-x:auto;
-  padding-bottom:7px;
+  padding-bottom:5px;
 }
 
-.tab{
-  flex:0 0 auto;
-  background:#0a0a14;
+.studio-tabs button{
+  min-width:100px;
   border:1px solid var(--border);
+  background:#0a0a12;
   color:#aaaabd;
+  padding:11px 8px;
   border-radius:12px;
-  padding:11px 14px;
-  font-size:12px;
-  font-weight:700;
+  font-size:11px;
+  font-weight:800;
 }
 
-.tab.active{
+.studio-tabs button.active{
+  background:linear-gradient(135deg,var(--purple),#4f2bc7);
   color:#fff;
-  background:linear-gradient(135deg,#6830e9,#8b4dff);
-  border-color:#9e73ff;
+  border-color:transparent;
 }
 
-/* PANELS */
-
-.studio-panel{
+/* EDITORS */
+.editor{
   display:none;
-  margin-top:20px;
-  background:#0a0a14;
+  margin-top:15px;
   border:1px solid var(--border);
-  border-radius:19px;
-  padding:20px;
+  background:#0a0a12;
+  border-radius:20px;
+  padding:17px;
 }
 
-.studio-panel.active{
+.editor.active{
   display:block;
 }
 
-.panel-title{
-  font-size:18px;
-  font-weight:800;
+.editor h3{
+  margin:0 0 5px;
+}
+
+.editor-description{
+  color:var(--muted);
+  font-size:12px;
+  margin-bottom:15px;
+}
+
+/* PREVIEW */
+.preview{
+  background:#030305;
+  border:1px solid #252538;
+  border-radius:15px;
+  min-height:230px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+  position:relative;
+}
+
+.preview video,
+.preview img{
+  width:100%;
+  max-height:500px;
+  object-fit:contain;
+  display:block;
+}
+
+.empty{
+  text-align:center;
+  color:#707087;
+  padding:35px;
+}
+
+/* TIMELINE */
+.timeline-wrap{
+  margin-top:14px;
+}
+
+.timeline-header{
+  display:flex;
+  justify-content:space-between;
+  color:#aaaabd;
+  font-size:11px;
   margin-bottom:7px;
 }
 
-.panel-desc{
-  color:var(--muted);
-  font-size:13px;
-  margin-bottom:18px;
-}
-
-.upload{
-  display:block;
-  padding:30px;
-  border:1px dashed rgba(155,92,255,.5);
-  border-radius:16px;
-  text-align:center;
-  color:#aaa;
-  cursor:pointer;
-  background:rgba(124,60,255,.04);
-}
-
-.upload input{
-  display:none;
-}
-
-/* VIDEO */
-
-.preview{
-  width:100%;
-  max-height:500px;
-  background:#000;
-  border-radius:16px;
-  margin-top:15px;
-  display:none;
-}
-
 .timeline{
-  margin-top:17px;
+  height:75px;
+  background:#171725;
+  border:1px solid #292942;
+  border-radius:12px;
+  position:relative;
+  overflow:hidden;
 }
 
-.range-row{
-  display:grid;
-  grid-template-columns:90px 1fr 70px;
-  gap:10px;
+.timeline-video{
+  position:absolute;
+  inset:0;
+  display:flex;
   align-items:center;
-  margin-top:12px;
+  overflow:hidden;
 }
 
-.range-row input{
-  width:100%;
+.timeline-video span{
+  height:48px;
+  min-width:60px;
+  margin:3px;
+  border-radius:7px;
+  background:linear-gradient(135deg,#272746,#15152a);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#77778e;
+  font-size:9px;
 }
 
-.range-value{
-  background:#11111d;
-  padding:8px;
-  border-radius:9px;
-  text-align:center;
-  font-size:12px;
+.selection{
+  position:absolute;
+  top:0;
+  bottom:0;
+  border-left:4px solid var(--cyan);
+  border-right:4px solid var(--cyan);
+  background:rgba(20,217,255,.08);
+  pointer-events:none;
 }
 
-/* PHOTO */
+.handle{
+  position:absolute;
+  top:0;
+  bottom:0;
+  width:18px;
+  background:var(--cyan);
+  cursor:ew-resize;
+  z-index:5;
+}
 
-.photo-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(110px,1fr));
-  gap:12px;
-  margin-top:16px;
+.handle.left{
+  left:0;
+  border-radius:10px 0 0 10px;
+}
+
+.handle.right{
+  right:0;
+  border-radius:0 10px 10px 0;
+}
+
+.handle::after{
+  content:"";
+  position:absolute;
+  width:4px;
+  height:30px;
+  top:22px;
+  left:7px;
+  background:#001319;
+  border-radius:5px;
+}
+
+/* PHOTOS */
+.photo-list{
+  display:flex;
+  gap:10px;
+  overflow-x:auto;
+  padding:10px 0;
 }
 
 .photo-card{
-  position:relative;
-  border-radius:13px;
-  overflow:hidden;
+  min-width:125px;
+  width:125px;
+  height:105px;
+  background:#151522;
   border:1px solid var(--border);
-  background:#11111d;
+  border-radius:12px;
+  position:relative;
+  overflow:hidden;
+  cursor:grab;
 }
 
 .photo-card img{
   width:100%;
-  aspect-ratio:1;
+  height:75px;
   object-fit:cover;
-  display:block;
 }
 
-.photo-card button{
+.photo-card small{
+  display:block;
+  text-align:center;
+  color:#aaa;
+  font-size:9px;
+  padding:6px;
+}
+
+.remove-photo{
   position:absolute;
-  top:5px;
   right:5px;
-  width:25px;
-  height:25px;
+  top:5px;
+  width:24px;
+  height:24px;
+  border:0;
   border-radius:50%;
   background:rgba(0,0,0,.75);
   color:#fff;
 }
 
-.photo-card .move{
-  position:absolute;
-  bottom:5px;
-  left:5px;
-  right:5px;
-  display:flex;
-  gap:4px;
-}
-
-.photo-card .move button{
-  position:static;
-  width:auto;
-  height:auto;
-  flex:1;
-  border-radius:6px;
-  font-size:10px;
-}
-
-/* CONTROLS */
-
-.controls{
-  display:grid;
-  grid-template-columns:repeat(2,1fr);
-  gap:12px;
-  margin-top:17px;
-}
-
-.control{
-  background:#11111d;
-  border:1px solid var(--border);
-  padding:14px;
-  border-radius:13px;
-}
-
-.control label{
-  display:block;
-  font-size:12px;
-  color:#aaa;
-  margin-bottom:8px;
-}
-
-.action{
-  margin-top:18px;
-  padding:13px 17px;
-  border-radius:11px;
-  background:linear-gradient(135deg,#6632e5,#934fff);
-  color:#fff;
+.add-photo{
+  min-width:125px;
+  height:105px;
+  border:1px dashed #45455f;
+  background:#11111c;
+  color:#aaaabd;
+  border-radius:12px;
   font-weight:800;
 }
 
-.secondary{
-  background:#171725;
+/* TOOLS */
+.tool-grid{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:12px;
+  margin-top:15px;
+}
+
+.tool{
   border:1px solid var(--border);
-  margin-left:7px;
+  border-radius:13px;
+  padding:12px;
+  background:#0e0e18;
 }
 
-/* PHOTO PREVIEW */
-
-.photo-preview-wrap{
-  margin-top:18px;
+.tool label{
+  display:block;
+  color:#bdbdd0;
+  font-size:11px;
+  font-weight:800;
+  margin-bottom:7px;
 }
 
-.photo-preview{
-  width:100%;
-  max-height:500px;
-  border-radius:16px;
-  background:#000;
-  display:none;
+.range{
+  accent-color:var(--purple);
+}
+
+.actions{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:15px;
+}
+
+.action{
+  border:1px solid var(--border);
+  background:#131321;
+  color:#fff;
+  padding:12px 15px;
+  border-radius:11px;
+  font-weight:800;
+}
+
+.action.primary{
+  background:linear-gradient(135deg,var(--purple),#4f2bc7);
+  border:0;
+}
+
+.action:disabled{
+  opacity:.45;
+}
+
+/* WATERMARK */
+.watermark-note{
+  margin-top:12px;
+  padding:11px;
+  border-radius:11px;
+  background:rgba(112,71,255,.08);
+  border:1px solid rgba(112,71,255,.25);
+  color:#bdb1ff;
+  font-size:11px;
+  font-weight:800;
 }
 
 /* FOOTER */
-
 .footer{
   text-align:center;
-  padding:35px 10px;
-  color:#777;
-  font-size:12px;
+  margin-top:30px;
+  color:#66667b;
+  font-size:11px;
 }
 
-.watermark{
-  position:fixed;
-  top:17px;
-  right:17px;
-  z-index:9999;
-  color:#fff;
-  font-weight:900;
-  font-size:13px;
-  opacity:.7;
-  pointer-events:none;
-  text-shadow:0 2px 8px #000;
-}
-
-@media(max-width:700px){
-  .options,
-  .option-grid,
+/* MOBILE */
+@media(max-width:760px){
   .controls{
-    grid-template-columns:1fr 1fr;
+    grid-template-columns:1fr;
   }
 
-  .ai-section,
-  .studio{
-    padding:16px;
-    border-radius:18px;
+  .studio-tabs{
+    grid-template-columns:none;
+  }
+
+  .tool-grid{
+    grid-template-columns:1fr;
   }
 
   .hero{
-    padding-top:22px;
+    padding-top:25px;
   }
 
-  .ai-top{
-    align-items:flex-start;
-    flex-direction:column;
-  }
-
-  .duration-row{
-    grid-template-columns:1fr;
+  .ai-panel,
+  .studio{
+    padding:14px;
   }
 }
 </style>
@@ -539,17 +649,18 @@ input[type=number]{
 
 <body>
 
-<div class="watermark">MAMAKI ✨</div>
-
-<div class="container">
+<div class="app">
 
 <header class="header">
-  <div class="logo">MAMAKI <span>✨ AI VIDEO</span></div>
-  <div class="status">● MAMAKI AI ENGINE ONLINE</div>
+  <div>
+    <div class="brand">🚀 MAMAKI ✨ AI VIDEO</div>
+    <div class="status">● MAMAKI AI ENGINE ONLINE</div>
+  </div>
+  <div class="badge">FREE STUDIO • NO AI CREDITS</div>
 </header>
 
 <section class="hero">
-  <div class="badge">✨ MAMAKI CREATIVE INTELLIGENCE</div>
+  <div class="eyebrow">✨ MAMAKI CREATIVE INTELLIGENCE</div>
   <h1>Imagine it. <span>MAMAKI creates it.</span></h1>
   <p>
     Turn ideas, scripts and images into cinematic videos.
@@ -558,632 +669,587 @@ input[type=number]{
   </p>
 </section>
 
-
 <!-- ================= AI GENERATOR ================= -->
 
-<section class="ai-section">
+<section>
 
-<div class="ai-top">
-  <div>
-    <div class="ai-title">✨ Create with AI</div>
-    <div style="color:#888;font-size:12px;margin-top:4px">
-      Text → Video / Image → Video
+<div class="section-title">
+  <h2>✨ Create with AI</h2>
+  <p>Text → Video / Image → Video</p>
+</div>
+
+<div class="ai-panel">
+
+  <div class="ai-top">
+    <div class="ai-label">● MAMAKI AI</div>
+    <div class="credits">🎟️ <span id="creditBalance">15</span> credits</div>
+  </div>
+
+  <div class="mode-tabs">
+    <button id="textMode" class="active">✍️ Text → Video</button>
+    <button id="imageMode">🖼️ Image → Video</button>
+  </div>
+
+  <div class="field">
+    <label>🎟️ Describe your video / script</label>
+    <textarea id="prompt" maxlength="5000"
+      placeholder="Describe the scene, action, characters, camera movement and style..."></textarea>
+    <small id="counter" style="color:#777;display:block;margin-top:5px">0 / 5000</small>
+  </div>
+
+  <div class="field">
+    <label>🖼️ Reference image — optional</label>
+    <input id="referenceImage" type="file" accept="image/png,image/jpeg,image/webp">
+  </div>
+
+  <div class="controls">
+
+    <div class="control">
+      <label>🎬 AI model</label>
+      <select id="model">
+        <option value="wan-2.5-fast">Wan 2.5 Fast</option>
+      </select>
+    </div>
+
+    <div class="control">
+      <label>📐 Video format</label>
+      <select id="aspect">
+        <option value="9:16">9:16 — Shorts</option>
+        <option value="16:9">16:9 — YouTube</option>
+        <option value="1:1">1:1 — Social</option>
+      </select>
+    </div>
+
+    <div class="control">
+      <label>🎨 Visual style</label>
+      <select id="style">
+        <option>Realistic</option>
+        <option>Cinematic</option>
+        <option>Cartoon</option>
+        <option>3D Animation</option>
+      </select>
+    </div>
+
+  </div>
+
+  <div class="field">
+    <label>⏱️ Project duration</label>
+
+    <div class="duration-row">
+      <button class="duration-unit active" data-unit="seconds">Seconds</button>
+      <button class="duration-unit" data-unit="minutes">Minutes</button>
+      <button class="duration-unit" data-unit="hours">Hours</button>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:10px">
+      <input id="durationValue" type="number" min="5" value="5">
+      <div style="display:flex;align-items:center;color:#aaa;font-size:12px">
+        <span id="durationUnitText">seconds</span>
+      </div>
+    </div>
+
+    <div id="estimate"
+      style="color:#aaa;font-size:12px;margin-top:8px">
+      5 seconds • project estimate: 5 AI credits
     </div>
   </div>
 
-  <div class="balance">
-    🎟️ <span id="creditBalance">15</span> credits
+  <div class="field">
+    <label>📝 Narration / script — optional</label>
+    <textarea id="narration"
+      style="min-height:90px"
+      placeholder="Optional narration or voice-over script..."></textarea>
   </div>
-</div>
 
+  <button id="generateBtn" class="generate">
+    ✨ GENERATE VIDEO
+  </button>
 
-<div class="field">
-<label class="label">🎟️ Describe your video / script</label>
-
-<textarea
- id="prompt"
- maxlength="5000"
- placeholder="Describe the scene, action, camera movement, characters, environment or paste your script..."
-></textarea>
-
-<div style="text-align:right;color:#777;font-size:11px;margin-top:5px">
-<span id="count">0</span> / 5000
-</div>
-</div>
-
-
-<div class="field">
-<label class="label">🖼️ Reference image — optional</label>
-
-<label class="upload">
-📷 Choose JPG, PNG or WebP
-<input id="referenceImage" type="file" accept="image/png,image/jpeg,image/webp">
-</label>
-</div>
-
-
-<div class="options field">
-
-<div>
-<label class="label">🎬 AI model</label>
-<select id="model">
-<option value="wan-2.5-t2v-fast">Wan 2.5 Fast</option>
-</select>
-</div>
-
-<div>
-<label class="label">📐 Video format</label>
-<select id="aspect">
-<option value="9:16">9:16 — Shorts</option>
-<option value="16:9">16:9 — YouTube</option>
-<option value="1:1">1:1 — Social</option>
-</select>
-</div>
-
-<div>
-<label class="label">🎨 Visual style</label>
-<select id="style">
-<option>Realistic</option>
-<option>Cinematic</option>
-<option>Cartoon</option>
-<option>3D Animation</option>
-</select>
-</div>
+  <div id="aiOutput" class="output"></div>
 
 </div>
-
-
-<div class="field">
-<label class="label">⏱️ Project duration</label>
-
-<div class="duration-row">
-
-<input
- id="duration"
- type="number"
- min="5"
- max="10800"
- value="5"
- step="1"
->
-
-<select id="durationUnit">
-<option value="seconds">Seconds</option>
-<option value="minutes">Minutes</option>
-<option value="hours">Hours</option>
-</select>
-
-</div>
-
-<div id="durationInfo"
-style="margin-top:8px;color:#aaa;font-size:12px">
-5 seconds • project estimate: 5 AI credits
-</div>
-</div>
-
-
-<div class="field">
-<label class="label">📝 Narration / script — optional</label>
-
-<textarea
- id="narration"
- style="min-height:90px"
- placeholder="Optional narration or voice-over script..."
-></textarea>
-</div>
-
-
-<button class="generate" id="generateBtn">
-✨ GENERATE VIDEO
-</button>
-
-<div id="generateStatus"
-style="margin-top:13px;text-align:center;color:#aaa;font-size:13px">
-</div>
-
-<div class="ai-result" id="aiResult">
-<video id="aiVideo" controls playsinline></video>
-</div>
-
 </section>
 
-
-<!-- ================= FREE STUDIO ================= -->
+<!-- ================= CREATIVE STUDIO ================= -->
 
 <section class="studio">
 
-<div class="studio-head">
-<div>
-<h2>🚀 MAMAKI Creative Studio</h2>
-<p style="color:#888;font-size:12px;margin-top:5px">
-Professional creator tools without AI credits.
-</p>
-</div>
+  <div class="studio-head">
+    <div>
+      <h2>🚀 MAMAKI Creative Studio</h2>
+      <p>Professional creator tools without AI credits.</p>
+    </div>
+    <div class="free">FREE • NO AI CREDITS</div>
+  </div>
 
-<div class="free">FREE • NO AI CREDITS</div>
-</div>
+  <div class="studio-tabs">
 
+    <button class="studio-tab active" data-editor="trimmer">
+      ✂️ Trimmer
+    </button>
 
-<div class="tabs">
+    <button class="studio-tab" data-editor="photo">
+      🖼️ Photo → Video
+    </button>
 
-<button class="tab active" data-tab="trimmer">✂️ Trimmer</button>
-<button class="tab" data-tab="photo">🖼️ Photo → Video</button>
-<button class="tab" data-tab="templates">🎬 Templates</button>
-<button class="tab" data-tab="combine">🎞️ Combine</button>
-<button class="tab" data-tab="music">🎵 Music</button>
-<button class="tab" data-tab="narration">🔊 Narration</button>
-<button class="tab" data-tab="captions">📝 Captions</button>
-<button class="tab" data-tab="projects">📁 Projects</button>
+    <button class="studio-tab" data-editor="templates">
+      🎬 Templates
+    </button>
+
+    <button class="studio-tab" data-editor="combine">
+      🎞️ Combine
+    </button>
+
+    <button class="studio-tab" data-editor="music">
+      🎵 Music
+    </button>
+
+    <button class="studio-tab" data-editor="narration">
+      🔊 Narration
+    </button>
+
+    <button class="studio-tab" data-editor="captions">
+      📝 Captions
+    </button>
+
+    <button class="studio-tab" data-editor="projects">
+      📁 Projects
+    </button>
+
+  </div>
+
+  <!-- ================= TRIMMER ================= -->
+
+  <div id="trimmer" class="editor active">
+
+    <h3>✂️ Professional Video Trimmer</h3>
+
+    <div class="editor-description">
+      Watch your video, drag the start and end points and edit the audio
+      without spending MAMAKI AI credits.
+    </div>
+
+    <input id="trimVideoInput" type="file"
+      accept="video/mp4,video/webm,video/quicktime">
+
+    <div id="trimPreview" class="preview" style="margin-top:12px">
+      <div class="empty">
+        🎥<br>
+        Choose a video to start editing
+      </div>
+    </div>
 
-</div>
+    <div id="trimTimelineArea" style="display:none">
 
+      <div class="timeline-wrap">
 
-<!-- TRIMMER -->
+        <div class="timeline-header">
+          <span id="trimStartLabel">00:00</span>
+          <span id="trimDurationLabel">00:00</span>
+        </div>
 
-<div class="studio-panel active" id="trimmer">
+        <div id="trimTimeline" class="timeline">
 
-<div class="panel-title">✂️ Professional Video Trimmer</div>
+          <div id="timelineVideo"
+               class="timeline-video"></div>
+
+          <div id="trimSelection"
+               class="selection"></div>
+
+          <div id="trimLeft"
+               class="handle left"
+               draggable="true"></div>
+
+          <div id="trimRight"
+               class="handle right"
+               draggable="true"></div>
+
+        </div>
+
+        <div style="color:#777;font-size:10px;margin-top:7px">
+          Drag the left handle to choose the beginning.
+          Drag the right handle to choose the ending.
+        </div>
 
-<div class="panel-desc">
-Watch your video, select the exact section and optionally remove
-the original sound or add music.
-</div>
-
-<label class="upload">
-🎥 Choose video
-<div style="font-size:11px;margin-top:5px">
-MP4 • WebM • MOV
-</div>
-<input id="trimVideoInput" type="file" accept="video/*">
-</label>
-
-<video id="trimPreview" class="preview" controls playsinline></video>
-
-<div id="trimControls" style="display:none">
-
-<div class="timeline">
-
-<div class="range-row">
-<span>Start</span>
-<input id="trimStart" type="range" min="0" max="100" value="0" step=".1">
-<div class="range-value" id="trimStartValue">0.0s</div>
-</div>
-
-<div class="range-row">
-<span>End</span>
-<input id="trimEnd" type="range" min="0" max="100" value="100" step=".1">
-<div class="range-value" id="trimEndValue">0.0s</div>
-</div>
-
-</div>
-
-
-<div class="controls">
-
-<div class="control">
-<label>🔊 Original video volume</label>
-<input id="originalVolume" type="range" min="0" max="1" value="1" step=".01">
-</div>
-
-<div class="control">
-<label>🎵 Music volume</label>
-<input id="musicVolume" type="range" min="0" max="1" value=".8" step=".01">
-</div>
-
-</div>
-
-
-<div style="margin-top:15px">
-
-<label class="upload" style="padding:18px">
-🎵 Add music
-<input id="trimMusic" type="file" accept="audio/*">
-</label>
-
-</div>
-
-
-<div class="controls">
-
-<div class="control">
-<label>📝 Text / caption</label>
-<input id="trimCaption" type="text" placeholder="Optional text">
-</div>
-
-<div class="control">
-<label>✨ Watermark</label>
-<select id="trimWatermark">
-<option value="yes">MAMAKI ✨</option>
-<option value="no">Off</option>
-</select>
-</div>
-
-</div>
-
-
-<button class="action" id="trimExport">
-🎬 Export trimmed MP4
-</button>
-
-<div id="trimStatus" style="margin-top:12px;color:#aaa"></div>
-
-</div>
-
-</div>
-
-
-<!-- PHOTO VIDEO -->
-
-<div class="studio-panel" id="photo">
-
-<div class="panel-title">🖼️ Photo → Video</div>
-
-<div class="panel-desc">
-Create a slideshow from multiple photos, reorder them, preview the
-combined video and add music, narration, captions and MAMAKI branding.
-</div>
-
-<label class="upload">
-➕ Add multiple photos
-<input id="photoInput" type="file" accept="image/*" multiple>
-</label>
-
-<div class="photo-grid" id="photoGrid"></div>
-
-
-<div class="controls">
-
-<div class="control">
-<label>⏱️ Photo duration</label>
-<input id="photoDuration" type="number" min="1" max="60" value="3">
-</div>
-
-<div class="control">
-<label>✨ Watermark</label>
-<select id="photoWatermark">
-<option value="yes">MAMAKI ✨</option>
-<option value="no">Off</option>
-</select>
-</div>
-
-</div>
-
-
-<div style="margin-top:15px">
-
-<label class="upload" style="padding:18px">
-🎵 Add music
-<input id="photoMusic" type="file" accept="audio/*">
-</label>
-
-</div>
-
-
-<div class="controls">
-
-<div class="control">
-<label>🎵 Music volume</label>
-<input id="photoMusicVolume" type="range" min="0" max="1" value=".8" step=".01">
-</div>
-
-<div class="control">
-<label>📝 Text / caption</label>
-<input id="photoCaption" type="text" placeholder="Optional caption">
-</div>
-
-</div>
-
-
-<div style="margin-top:15px">
-
-<label class="upload" style="padding:18px">
-🔊 Add narration
-<input id="photoNarration" type="file" accept="audio/*">
-</label>
-
-</div>
-
-
-<div class="photo-preview-wrap">
-
-<canvas id="photoCanvas" class="photo-preview"></canvas>
-
-</div>
-
-
-<button class="action" id="photoPreviewBtn">
-▶️ Preview combined photo video
-</button>
-
-<button class="action secondary" id="photoExport">
-🎬 Export MP4
-</button>
-
-<div id="photoStatus" style="margin-top:12px;color:#aaa"></div>
-
-</div>
-
-
-<!-- OTHER STUDIO TABS -->
-
-<div class="studio-panel" id="templates">
-
-<div class="panel-title">🎬 Templates</div>
-
-<div class="panel-desc">
-Choose a ready-made MAMAKI creative layout.
-</div>
-
-<div class="controls">
-
-<button class="action">🎬 YouTube Intro</button>
-<button class="action">📱 Shorts</button>
-<button class="action">📢 Advertisement</button>
-<button class="action">🎓 Education</button>
-
-</div>
-
-</div>
-
-
-<div class="studio-panel" id="combine">
-
-<div class="panel-title">🎞️ Combine Multiple Clips</div>
-
-<div class="panel-desc">
-Select multiple videos. Your selected clips can be arranged into one
-project.
-</div>
-
-<label class="upload">
-➕ Add multiple video clips
-<input id="combineInput" type="file" accept="video/*" multiple>
-</label>
-
-<div id="combineList" style="margin-top:15px"></div>
-
-</div>
-
-
-<div class="studio-panel" id="music">
-
-<div class="panel-title">🎵 Music</div>
-
-<div class="panel-desc">
-Add music to your current free-studio project.
-</div>
-
-<label class="upload">
-🎵 Choose audio
-<input type="file" accept="audio/*">
-</label>
-
-</div>
-
-
-<div class="studio-panel" id="narration">
-
-<div class="panel-title">🔊 Narration</div>
-
-<div class="panel-desc">
-Add a recorded narration or voice-over to your project.
-</div>
-
-<label class="upload">
-🔊 Choose narration
-<input type="file" accept="audio/*">
-</label>
-
-</div>
-
-
-<div class="studio-panel" id="captions">
-
-<div class="panel-title">📝 Text & Captions</div>
-
-<div class="panel-desc">
-Add captions and text to your free-studio project.
-</div>
-
-<textarea
-placeholder="Type your caption here..."
-style="min-height:100px"
-></textarea>
-
-<button class="action">➕ Add Caption</button>
-
-</div>
-
-
-<div class="studio-panel" id="projects">
-
-<div class="panel-title">📁 My Projects</div>
-
-<div class="panel-desc">
-Projects are saved locally in your browser.
-</div>
-
-<div id="projectList">
-No saved projects yet.
-</div>
-
-</div>
+      </div>
+
+      <div class="tool-grid">
+
+        <div class="tool">
+          <label>🔊 Original video volume</label>
+          <input id="originalVolume"
+                 class="range"
+                 type="range"
+                 min="0"
+                 max="1"
+                 step=".01"
+                 value="1">
+        </div>
+
+        <div class="tool">
+          <label>🎵 Music volume</label>
+          <input id="trimMusicVolume"
+                 class="range"
+                 type="range"
+                 min="0"
+                 max="1"
+                 step=".01"
+                 value=".7">
+        </div>
+
+        <div class="tool">
+          <label>🎵 Add music</label>
+          <input id="trimMusic"
+                 type="file"
+                 accept="audio/*">
+        </div>
+
+        <div class="tool">
+          <label>📝 Text / caption</label>
+          <input id="trimCaption"
+                 type="text"
+                 placeholder="Enter caption">
+        </div>
+
+      </div>
+
+      <div class="actions">
+        <button id="trimMute" class="action">
+          🔇 Mute Original Sound
+        </button>
+
+        <button id="trimPreviewBtn" class="action">
+          ▶️ Preview Selection
+        </button>
+
+        <button id="trimExport" class="action primary">
+          🎬 Export Final MP4
+        </button>
+      </div>
+
+      <div class="watermark-note">
+        ✨ MAMAKI watermark is automatically applied to every export.
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ================= PHOTO VIDEO ================= -->
+
+  <div id="photo" class="editor">
+
+    <h3>🖼️ Photo → Video</h3>
+
+    <div class="editor-description">
+      Add multiple photos, reorder them, preview the combined video,
+      add music, narration, captions and automatic MAMAKI branding.
+    </div>
+
+    <div id="photoPreview" class="preview">
+      <div class="empty">
+        🖼️<br>
+        Add photos to create your video
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="addPhotosBtn" class="action primary">
+        ➕ Add Multiple Photos
+      </button>
+
+      <input id="photoInput"
+             type="file"
+             accept="image/png,image/jpeg,image/webp"
+             multiple
+             hidden>
+    </div>
+
+    <div id="photoList" class="photo-list"></div>
+
+    <div class="tool-grid">
+
+      <div class="tool">
+        <label>⏱️ Photo duration</label>
+        <input id="photoDuration"
+               type="number"
+               min="0.5"
+               max="60"
+               step=".5"
+               value="3">
+      </div>
+
+      <div class="tool">
+        <label>🎬 Transition</label>
+        <select id="transition">
+          <option value="none">None</option>
+          <option value="fade">Fade</option>
+          <option value="dissolve">Dissolve</option>
+          <option value="slide-left">Slide Left</option>
+          <option value="slide-right">Slide Right</option>
+          <option value="slide-up">Slide Up</option>
+          <option value="slide-down">Slide Down</option>
+          <option value="zoom">Zoom</option>
+          <option value="wipe">Wipe</option>
+          <option value="blur">Blur</option>
+        </select>
+      </div>
+
+      <div class="tool">
+        <label>🎵 Add music</label>
+        <input id="photoMusic"
+               type="file"
+               accept="audio/*">
+      </div>
+
+      <div class="tool">
+        <label>🎵 Music volume</label>
+        <input id="photoMusicVolume"
+               class="range"
+               type="range"
+               min="0"
+               max="1"
+               step=".01"
+               value=".7">
+      </div>
+
+      <div class="tool">
+        <label>🔊 Add narration</label>
+        <input id="photoNarration"
+               type="file"
+               accept="audio/*">
+      </div>
+
+      <div class="tool">
+        <label>📝 Text / caption</label>
+        <input id="photoCaption"
+               type="text"
+               placeholder="Enter caption">
+      </div>
+
+    </div>
+
+    <div class="actions">
+
+      <button id="photoPlay"
+              class="action">
+        ▶️ Preview Combined Video
+      </button>
+
+      <button id="photoExport"
+              class="action primary">
+        🎬 Export MP4
+      </button>
+
+    </div>
+
+    <div class="watermark-note">
+      ✨ MAMAKI watermark is automatically applied to every photo-video export.
+    </div>
+
+  </div>
+
+  <!-- ================= OTHER TABS ================= -->
+
+  <div id="templates" class="editor">
+    <h3>🎬 Templates</h3>
+    <div class="editor-description">
+      Choose a MAMAKI creative template to start a project.
+    </div>
+
+    <div class="tool-grid">
+      <button class="action">🎞️ Cinematic</button>
+      <button class="action">📱 Social Short</button>
+      <button class="action">🎓 Educational</button>
+      <button class="action">📢 Advertisement</button>
+    </div>
+  </div>
+
+  <div id="combine" class="editor">
+    <h3>🎞️ Combine Clips</h3>
+    <div class="editor-description">
+      Select multiple videos and arrange them into one project.
+    </div>
+
+    <input type="file"
+           id="combineInput"
+           accept="video/*"
+           multiple>
+
+    <div class="watermark-note">
+      ✨ MAMAKI branding will automatically be included in the exported video.
+    </div>
+  </div>
+
+  <div id="music" class="editor">
+    <h3>🎵 Music</h3>
+    <div class="editor-description">
+      Add music to your current project.
+    </div>
+    <input type="file" accept="audio/*">
+  </div>
+
+  <div id="narration" class="editor">
+    <h3>🔊 Narration</h3>
+    <div class="editor-description">
+      Add a narration or voice-over track.
+    </div>
+    <input type="file" accept="audio/*">
+  </div>
+
+  <div id="captions" class="editor">
+    <h3>📝 Captions</h3>
+    <div class="editor-description">
+      Add text and captions to your project.
+    </div>
+    <input type="text"
+           placeholder="Write your caption"
+           style="margin-bottom:10px">
+    <button class="action">➕ Add Caption</button>
+  </div>
+
+  <div id="projects" class="editor">
+    <h3>📁 My Projects</h3>
+    <div class="editor-description">
+      Projects saved in this browser.
+    </div>
+
+    <button id="saveProject"
+            class="action primary">
+      📁 Save Current Project
+    </button>
+
+    <div id="projectsList"
+         style="margin-top:15px"></div>
+  </div>
 
 </section>
 
-
-<footer class="footer">
-MAMAKI ✨ AI VIDEO<br>
-Create beyond imagination.
-</footer>
+<div class="footer">
+  MAMAKI ✨ AI VIDEO • Create beyond imagination.
+</div>
 
 </div>
 
-
 <script>
-/* =========================================================
-   MAMAKI AI GENERATOR
-========================================================= */
+/* ============================================================
+   MAMAKI FRONTEND
+   ============================================================ */
 
-const promptBox = document.getElementById("prompt");
-const count = document.getElementById("count");
+const $ = id => document.getElementById(id);
 
-promptBox.addEventListener("input",()=>{
-  count.textContent = promptBox.value.length;
+/* ---------------- AI GENERATOR ---------------- */
+
+let aiMode = "text";
+let selectedUnit = "seconds";
+
+$("textMode").onclick = () => {
+  aiMode = "text";
+  $("textMode").classList.add("active");
+  $("imageMode").classList.remove("active");
+};
+
+$("imageMode").onclick = () => {
+  aiMode = "image";
+  $("imageMode").classList.add("active");
+  $("textMode").classList.remove("active");
+};
+
+$("prompt").addEventListener("input", () => {
+  $("counter").textContent =
+    `${$("prompt").value.length} / 5000`;
 });
 
+document.querySelectorAll(".duration-unit").forEach(btn => {
 
-const duration = document.getElementById("duration");
-const durationUnit = document.getElementById("durationUnit");
-const durationInfo = document.getElementById("durationInfo");
+  btn.onclick = () => {
 
-function durationSeconds(){
-  let value = Number(duration.value) || 5;
+    document.querySelectorAll(".duration-unit")
+      .forEach(x => x.classList.remove("active"));
 
-  if(durationUnit.value==="minutes")
-    value *= 60;
+    btn.classList.add("active");
 
-  if(durationUnit.value==="hours")
-    value *= 3600;
+    selectedUnit = btn.dataset.unit;
 
-  return Math.max(5,Math.min(10800,value));
-}
+    $("durationUnitText").textContent = selectedUnit;
 
-function updateDuration(){
-  const seconds=durationSeconds();
-
-  const credits=seconds;
-
-  let text;
-
-  if(seconds>=3600){
-    text=(seconds/3600).toFixed(2)+" hours";
-  }else if(seconds>=60){
-    text=(seconds/60).toFixed(2)+" minutes";
-  }else{
-    text=seconds+" seconds";
-  }
-
-  durationInfo.textContent=
-    text+" • project estimate: "+credits+" AI credits";
-}
-
-duration.addEventListener("input",updateDuration);
-durationUnit.addEventListener("change",updateDuration);
-updateDuration();
-
-
-/* =========================================================
-   AI GENERATE
-========================================================= */
-
-document.getElementById("generateBtn").addEventListener("click",async()=>{
-
-  const btn=document.getElementById("generateBtn");
-  const status=document.getElementById("generateStatus");
-
-  const text=promptBox.value.trim();
-
-  if(!text){
-    status.textContent="Please describe what you want MAMAKI to create.";
-    return;
-  }
-
-  const seconds=durationSeconds();
-
-  btn.disabled=true;
-  status.textContent="✨ MAMAKI is preparing your video...";
-
-  try{
-
-    const image=document.getElementById("referenceImage").files[0];
-
-    const form=new FormData();
-
-    form.append("prompt",text);
-    form.append("duration",seconds);
-    form.append("model",document.getElementById("model").value);
-    form.append("aspect_ratio",document.getElementById("aspect").value);
-    form.append("style",document.getElementById("style").value);
-    form.append("narration",document.getElementById("narration").value);
-
-    if(image){
-      form.append("image",image);
-      form.append("referenceImage",image);
-    }
-
-    /*
-      Keep your existing backend route if it differs.
-      This is the MAMAKI AI generation endpoint.
-    */
-
-    const response=await fetch("/api/generate-video",{
-      method:"POST",
-      body:form
-    });
-
-    const data=await response.json();
-
-    if(!response.ok){
-      throw new Error(data.error || data.message || "Video generation failed");
-    }
-
-    const videoUrl=
-      data.videoUrl ||
-      data.video ||
-      data.url ||
-      data.output;
-
-    if(!videoUrl){
-      throw new Error("MAMAKI completed the request but no video URL was returned.");
-    }
-
-    const video=document.getElementById("aiVideo");
-
-    video.src=videoUrl;
-    video.style.display="block";
-
-    document.getElementById("aiResult").style.display="block";
-
-    status.textContent="✅ MAMAKI video generated successfully.";
-
-  }catch(error){
-
-    console.error(error);
-
-    status.textContent="❌ "+error.message;
-
-  }finally{
-
-    btn.disabled=false;
-
-  }
+    updateEstimate();
+  };
 
 });
 
+$("durationValue").addEventListener("input", updateEstimate);
 
-/* =========================================================
-   TAB SYSTEM
-========================================================= */
+function getDurationSeconds(){
 
-document.querySelectorAll(".tab").forEach(tab=>{
+  let value = Number($("durationValue").value) || 5;
 
-  tab.addEventListener("click",()=>{
+  if(selectedUnit === "minutes"){
+    return value * 60;
+  }
 
-    document.querySelectorAll(".tab").forEach(t=>{
-      t.classList.remove("active");
-    });
+  if(selectedUnit === "hours"){
+    return value * 3600;
+  }
 
-    document.querySelectorAll(".studio-panel").forEach(p=>{
-      p.classList.remove("active");
-    });
+  return value;
+}
+
+function updateEstimate(){
+
+  const seconds = Math.max(5,getDurationSeconds());
+
+  $("estimate").textContent =
+    `${formatDuration(seconds)} • project estimate: ${seconds} AI credits`;
+}
+
+function formatDuration(sec){
+
+  sec = Math.floor(sec);
+
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+
+  if(h > 0){
+    return `${h}h ${m}m ${s}s`;
+  }
+
+  if(m > 0){
+    return `${m}m ${s}s`;
+  }
+
+  return `${s} seconds`;
+}
+
+
+/* ---------------- STUDIO TABS ---------------- */
+
+document.querySelectorAll(".studio-tab").forEach(tab => {
+
+  tab.addEventListener("click", () => {
+
+    const editor = tab.dataset.editor;
+
+    document.querySelectorAll(".studio-tab")
+      .forEach(x => x.classList.remove("active"));
+
+    document.querySelectorAll(".editor")
+      .forEach(x => x.classList.remove("active"));
 
     tab.classList.add("active");
 
-    const panel=document.getElementById(tab.dataset.tab);
+    const selected = $(editor);
 
-    if(panel){
-      panel.classList.add("active");
+    if(selected){
+      selected.classList.add("active");
+
+      setTimeout(() => {
+        selected.scrollIntoView({
+          behavior:"smooth",
+          block:"nearest"
+        });
+      },50);
     }
 
   });
@@ -1191,133 +1257,244 @@ document.querySelectorAll(".tab").forEach(tab=>{
 });
 
 
-/* =========================================================
-   VIDEO TRIMMER
-========================================================= */
+/* ---------------- VIDEO TRIMMER ---------------- */
 
-let trimVideoFile=null;
-let trimDuration=0;
+let trimVideo = null;
+let trimDuration = 0;
+let trimStart = 0;
+let trimEnd = 0;
+let muted = false;
 
-const trimInput=document.getElementById("trimVideoInput");
-const trimVideo=document.getElementById("trimPreview");
+$("trimVideoInput").addEventListener("change", e => {
 
-trimInput.addEventListener("change",()=>{
+  const file = e.target.files[0];
 
-  const file=trimInput.files[0];
+  if(!file) return;
 
-  if(!file)return;
+  trimVideo = URL.createObjectURL(file);
 
-  trimVideoFile=file;
+  $("trimPreview").innerHTML = `
+    <video id="trimVideoPlayer"
+           controls
+           playsinline
+           src="${trimVideo}">
+    </video>
+  `;
 
-  trimVideo.src=URL.createObjectURL(file);
+  const video = $("trimVideoPlayer");
 
-  trimVideo.style.display="block";
+  video.onloadedmetadata = () => {
+
+    trimDuration = video.duration;
+    trimStart = 0;
+    trimEnd = trimDuration;
+
+    $("trimDurationLabel").textContent =
+      formatClock(trimDuration);
+
+    $("trimTimelineArea").style.display = "block";
+
+    drawTimeline();
+  };
 
 });
 
+function formatClock(seconds){
 
-trimVideo.addEventListener("loadedmetadata",()=>{
+  seconds = Math.max(0,seconds);
 
-  trimDuration=trimVideo.duration;
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
 
-  document.getElementById("trimControls").style.display="block";
+  return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+}
 
-  const start=document.getElementById("trimStart");
-  const end=document.getElementById("trimEnd");
+function drawTimeline(){
 
-  start.value=0;
-  end.value=100;
+  $("trimStartLabel").textContent =
+    formatClock(trimStart);
 
-  updateTrimValues();
+  $("trimDurationLabel").textContent =
+    formatClock(trimEnd);
 
-});
+  const left =
+    (trimStart / trimDuration) * 100;
 
+  const right =
+    (trimEnd / trimDuration) * 100;
 
-function updateTrimValues(){
+  $("trimSelection").style.left =
+    left + "%";
 
-  const startPercent=
-    Number(document.getElementById("trimStart").value);
+  $("trimSelection").style.right =
+    (100-right) + "%";
 
-  const endPercent=
-    Number(document.getElementById("trimEnd").value);
+  $("trimLeft").style.left =
+    `calc(${left}% - 9px)`;
 
-  const start=
-    trimDuration*startPercent/100;
-
-  const end=
-    trimDuration*endPercent/100;
-
-  document.getElementById("trimStartValue").textContent=
-    start.toFixed(1)+"s";
-
-  document.getElementById("trimEndValue").textContent=
-    end.toFixed(1)+"s";
+  $("trimRight").style.right =
+    `calc(${100-right}% - 9px)`;
 }
 
 
-document.getElementById("trimStart")
-.addEventListener("input",updateTrimValues);
+/* Dragging handles */
 
-document.getElementById("trimEnd")
-.addEventListener("input",updateTrimValues);
+let dragging = null;
 
+$("trimLeft").addEventListener("pointerdown", e => {
+  dragging = "left";
+  e.currentTarget.setPointerCapture(e.pointerId);
+});
 
-/*
-  When the user clicks on the timeline sliders,
-  the preview jumps to that exact position.
-*/
+$("trimRight").addEventListener("pointerdown", e => {
+  dragging = "right";
+  e.currentTarget.setPointerCapture(e.pointerId);
+});
 
-document.getElementById("trimStart")
-.addEventListener("change",e=>{
+$("trimTimeline").addEventListener("pointermove", e => {
 
-  if(!trimDuration)return;
+  if(!dragging || !trimDuration) return;
 
-  const t=trimDuration*Number(e.target.value)/100;
+  const rect =
+    $("trimTimeline").getBoundingClientRect();
 
-  trimVideo.currentTime=t;
+  let percent =
+    (e.clientX - rect.left) / rect.width;
+
+  percent =
+    Math.max(0,Math.min(1,percent));
+
+  const time = percent * trimDuration;
+
+  if(dragging === "left"){
+    trimStart =
+      Math.min(time,trimEnd - .1);
+  }
+
+  if(dragging === "right"){
+    trimEnd =
+      Math.max(time,trimStart + .1);
+  }
+
+  drawTimeline();
 
 });
 
+$("trimTimeline").addEventListener("pointerup",()=>{
+  dragging = null;
+});
 
-document.getElementById("trimEnd")
-.addEventListener("change",e=>{
+$("trimTimeline").addEventListener("pointerleave",()=>{
+  dragging = null;
+});
 
-  if(!trimDuration)return;
 
-  const t=trimDuration*Number(e.target.value)/100;
+/* Clicking timeline */
 
-  trimVideo.currentTime=t;
+$("trimTimeline").addEventListener("click", e => {
+
+  if(!trimVideo) return;
+
+  if(e.target.classList.contains("handle")) return;
+
+  const rect =
+    $("trimTimeline").getBoundingClientRect();
+
+  const percent =
+    Math.max(0,Math.min(1,
+      (e.clientX-rect.left)/rect.width
+    ));
+
+  const time = percent * trimDuration;
+
+  const video = $("trimVideoPlayer");
+
+  if(video){
+    video.currentTime = time;
+  }
 
 });
 
 
 /* Original volume */
 
-document.getElementById("originalVolume")
-.addEventListener("input",e=>{
+$("originalVolume").addEventListener("input", e => {
 
-  trimVideo.volume=Number(e.target.value);
+  const video = $("trimVideoPlayer");
+
+  if(video){
+    video.volume = Number(e.target.value);
+  }
 
 });
 
 
-/* =========================================================
-   PHOTO VIDEO MAKER
-========================================================= */
+$("trimMute").onclick = () => {
 
-let photos=[];
+  muted = !muted;
 
-const photoInput=document.getElementById("photoInput");
-const photoGrid=document.getElementById("photoGrid");
+  const video = $("trimVideoPlayer");
 
-photoInput.addEventListener("change",()=>{
+  if(video){
+    video.muted = muted;
+  }
 
-  const files=[...photoInput.files];
+  $("trimMute").textContent =
+    muted
+      ? "🔊 Restore Original Sound"
+      : "🔇 Mute Original Sound";
 
-  files.forEach(file=>{
+};
 
-    photos.push({
-      file:file,
+
+$("trimPreviewBtn").onclick = async () => {
+
+  const video = $("trimVideoPlayer");
+
+  if(!video) return;
+
+  video.currentTime = trimStart;
+
+  await video.play();
+
+  const watcher = () => {
+
+    if(video.currentTime >= trimEnd){
+
+      video.pause();
+
+      video.removeEventListener(
+        "timeupdate",
+        watcher
+      );
+
+    }
+
+  };
+
+  video.addEventListener("timeupdate",watcher);
+
+};
+
+
+/* ---------------- PHOTO VIDEO ---------------- */
+
+let photoItems = [];
+let currentPhoto = 0;
+let photoTimer = null;
+
+$("addPhotosBtn").onclick = () => {
+  $("photoInput").click();
+};
+
+$("photoInput").addEventListener("change", e => {
+
+  const files = Array.from(e.target.files);
+
+  files.forEach(file => {
+
+    photoItems.push({
+      file,
       url:URL.createObjectURL(file)
     });
 
@@ -1325,188 +1502,497 @@ photoInput.addEventListener("change",()=>{
 
   renderPhotos();
 
-});
+  $("photoInput").value = "";
 
+});
 
 function renderPhotos(){
 
-  photoGrid.innerHTML="";
+  const list = $("photoList");
 
-  photos.forEach((photo,index)=>{
+  list.innerHTML = "";
 
-    const card=document.createElement("div");
+  photoItems.forEach((item,index) => {
 
-    card.className="photo-card";
+    const card =
+      document.createElement("div");
 
-    card.innerHTML=`
-      <img src="${photo.url}">
-      <button onclick="removePhoto(${index})">×</button>
+    card.className = "photo-card";
 
-      <div class="move">
-        <button onclick="movePhoto(${index},-1)">←</button>
-        <button onclick="movePhoto(${index},1)">→</button>
-      </div>
+    card.draggable = true;
+
+    card.innerHTML = `
+      <img src="${item.url}">
+      <small>Photo ${index+1}</small>
+      <button class="remove-photo">×</button>
     `;
 
-    photoGrid.appendChild(card);
+    card.querySelector(".remove-photo").onclick = e => {
+
+      e.stopPropagation();
+
+      URL.revokeObjectURL(item.url);
+
+      photoItems.splice(index,1);
+
+      renderPhotos();
+
+      if(photoItems.length){
+        showPhoto(0);
+      }else{
+        $("photoPreview").innerHTML = `
+          <div class="empty">
+            🖼️<br>
+            Add photos to create your video
+          </div>
+        `;
+      }
+
+    };
+
+    card.addEventListener("dragstart", e => {
+      e.dataTransfer.setData("text/plain",index);
+    });
+
+    card.addEventListener("dragover", e => {
+      e.preventDefault();
+    });
+
+    card.addEventListener("drop", e => {
+
+      e.preventDefault();
+
+      const from =
+        Number(e.dataTransfer.getData("text/plain"));
+
+      const to = index;
+
+      if(from === to) return;
+
+      const moved =
+        photoItems.splice(from,1)[0];
+
+      photoItems.splice(to,0,moved);
+
+      renderPhotos();
+
+    });
+
+    list.appendChild(card);
+
+  });
+
+  if(photoItems.length){
+    showPhoto(0);
+  }
+
+}
+
+function showPhoto(index){
+
+  if(!photoItems.length) return;
+
+  currentPhoto =
+    Math.max(0,
+      Math.min(index,photoItems.length-1)
+    );
+
+  $("photoPreview").innerHTML = `
+    <img
+      id="currentPhoto"
+      src="${photoItems[currentPhoto].url}"
+      alt="Photo preview">
+  `;
+
+}
+
+
+/* Photo preview */
+
+$("photoPlay").onclick = () => {
+
+  if(!photoItems.length){
+    alert("Add at least one photo.");
+    return;
+  }
+
+  clearInterval(photoTimer);
+
+  let index = 0;
+
+  showPhoto(index);
+
+  const duration =
+    Math.max(
+      .5,
+      Number($("photoDuration").value)||3
+    ) * 1000;
+
+  photoTimer = setInterval(() => {
+
+    index++;
+
+    if(index >= photoItems.length){
+
+      clearInterval(photoTimer);
+      index = photoItems.length - 1;
+
+    }
+
+    showPhoto(index);
+
+  },duration);
+
+};
+
+
+/* ---------------- WATERMARK ---------------- */
+
+function drawMamakiWatermark(ctx,width,height){
+
+  ctx.save();
+
+  ctx.font =
+    `bold ${Math.max(18,width*.025)}px Arial`;
+
+  ctx.textAlign = "right";
+  ctx.textBaseline = "top";
+
+  ctx.shadowColor =
+    "rgba(0,0,0,.7)";
+
+  ctx.shadowBlur = 8;
+
+  ctx.fillStyle = "#ffffff";
+
+  ctx.fillText(
+    "MAMAKI ✨",
+    width - 20,
+    20
+  );
+
+  ctx.restore();
+
+}
+
+
+/* ---------------- PHOTO CANVAS PREVIEW ---------------- */
+
+let photoRecorder = null;
+let photoChunks = [];
+
+$("photoExport").onclick = async () => {
+
+  if(!photoItems.length){
+
+    alert("Add at least one photo.");
+    return;
+
+  }
+
+  try{
+
+    const canvas =
+      document.createElement("canvas");
+
+    canvas.width = 1280;
+    canvas.height = 720;
+
+    const ctx = canvas.getContext("2d");
+
+    const stream =
+      canvas.captureStream(30);
+
+    const music =
+      $("photoMusic").files[0];
+
+    let audioContext = null;
+    let audioDestination = null;
+
+    if(music){
+
+      const audio =
+        new Audio(URL.createObjectURL(music));
+
+      audio.loop = true;
+      audio.volume =
+        Number($("photoMusicVolume").value);
+
+      audioContext =
+        new AudioContext();
+
+      const source =
+        audioContext.createMediaElementSource(audio);
+
+      audioDestination =
+        audioContext.createMediaStreamDestination();
+
+      source.connect(audioDestination);
+
+      source.connect(audioContext.destination);
+
+      audio.play();
+
+      audioDestination.stream
+        .getAudioTracks()
+        .forEach(track =>
+          stream.addTrack(track)
+        );
+
+    }
+
+    const mime =
+      MediaRecorder.isTypeSupported(
+        "video/webm;codecs=vp9"
+      )
+      ? "video/webm;codecs=vp9"
+      : "video/webm";
+
+    photoChunks = [];
+
+    photoRecorder =
+      new MediaRecorder(
+        stream,
+        {mimeType:mime}
+      );
+
+    photoRecorder.ondataavailable =
+      e => {
+        if(e.data.size)
+          photoChunks.push(e.data);
+      };
+
+    photoRecorder.onstop = () => {
+
+      const blob =
+        new Blob(
+          photoChunks,
+          {type:"video/webm"}
+        );
+
+      downloadBlob(
+        blob,
+        "MAMAKI-photo-video.webm"
+      );
+
+      if(audioContext){
+        audioContext.close();
+      }
+
+    };
+
+    photoRecorder.start();
+
+    const duration =
+      Math.max(
+        .5,
+        Number($("photoDuration").value)||3
+      ) * 1000;
+
+    for(let i=0;i<photoItems.length;i++){
+
+      const img =
+        await loadImage(photoItems[i].url);
+
+      const start =
+        performance.now();
+
+      while(performance.now()-start < duration){
+
+        ctx.fillStyle="#000";
+        ctx.fillRect(
+          0,0,canvas.width,canvas.height
+        );
+
+        drawPhotoCover(
+          ctx,
+          img,
+          canvas.width,
+          canvas.height
+        );
+
+        drawMamakiWatermark(
+          ctx,
+          canvas.width,
+          canvas.height
+        );
+
+        const caption =
+          $("photoCaption").value.trim();
+
+        if(caption){
+
+          ctx.font="bold 34px Arial";
+          ctx.textAlign="center";
+          ctx.textBaseline="bottom";
+          ctx.fillStyle="#fff";
+
+          ctx.shadowColor="#000";
+          ctx.shadowBlur=7;
+
+          ctx.fillText(
+            caption,
+            canvas.width/2,
+            canvas.height-35
+          );
+
+        }
+
+        await new Promise(
+          requestAnimationFrame
+        );
+
+      }
+
+    }
+
+    photoRecorder.stop();
+
+  }catch(err){
+
+    console.error(err);
+
+    alert(
+      "Photo video export failed: " +
+      err.message
+    );
+
+  }
+
+};
+
+function loadImage(url){
+
+  return new Promise((resolve,reject)=>{
+
+    const img = new Image();
+
+    img.onload = () => resolve(img);
+
+    img.onerror = reject;
+
+    img.src = url;
 
   });
 
 }
 
+function drawPhotoCover(
+  ctx,
+  img,
+  width,
+  height
+){
 
-window.removePhoto=function(index){
+  const ratio =
+    Math.max(
+      width/img.width,
+      height/img.height
+    );
 
-  photos.splice(index,1);
+  const w =
+    img.width * ratio;
 
-  renderPhotos();
+  const h =
+    img.height * ratio;
 
-};
+  ctx.drawImage(
+    img,
+    (width-w)/2,
+    (height-h)/2,
+    w,
+    h
+  );
 
-
-window.movePhoto=function(index,direction){
-
-  const newIndex=index+direction;
-
-  if(newIndex<0 || newIndex>=photos.length)return;
-
-  const item=photos.splice(index,1)[0];
-
-  photos.splice(newIndex,0,item);
-
-  renderPhotos();
-
-};
+}
 
 
-/* =========================================================
-   PHOTO PREVIEW
-========================================================= */
+/* ---------------- DOWNLOAD ---------------- */
 
-const canvas=document.getElementById("photoCanvas");
-const ctx=canvas.getContext("2d");
+function downloadBlob(blob,name){
 
-let photoPreviewTimer=null;
-let currentPhoto=0;
+  const url =
+    URL.createObjectURL(blob);
 
-document.getElementById("photoPreviewBtn")
-.addEventListener("click",async()=>{
+  const a =
+    document.createElement("a");
 
-  if(!photos.length){
+  a.href = url;
+  a.download = name;
 
-    document.getElementById("photoStatus").textContent=
-      "Please add at least one photo.";
+  document.body.appendChild(a);
+
+  a.click();
+
+  a.remove();
+
+  setTimeout(
+    ()=>URL.revokeObjectURL(url),
+    5000
+  );
+
+}
+
+
+/* ---------------- LOCAL PROJECTS ---------------- */
+
+function loadProjects(){
+
+  const projects =
+    JSON.parse(
+      localStorage.getItem(
+        "mamakiProjects"
+      ) || "[]"
+    );
+
+  const list =
+    $("projectsList");
+
+  if(!projects.length){
+
+    list.innerHTML =
+      `<div style="color:#777;font-size:12px">
+        No saved projects yet.
+       </div>`;
 
     return;
 
   }
 
-  canvas.style.display="block";
-
-  currentPhoto=0;
-
-  showPhoto();
-
-});
-
-
-function showPhoto(){
-
-  if(!photos.length)return;
-
-  const img=new Image();
-
-  img.onload=()=>{
-
-    canvas.width=img.naturalWidth || 1280;
-    canvas.height=img.naturalHeight || 720;
-
-    ctx.fillStyle="#000";
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-
-    const scale=Math.min(
-      canvas.width/img.width,
-      canvas.height/img.height
-    );
-
-    const w=img.width*scale;
-    const h=img.height*scale;
-
-    const x=(canvas.width-w)/2;
-    const y=(canvas.height-h)/2;
-
-    ctx.drawImage(img,x,y,w,h);
-
-    /* watermark */
-
-    if(document.getElementById("photoWatermark").value==="yes"){
-
-      ctx.font=
-        Math.max(20,canvas.width*.025)+"px Arial";
-
-      ctx.fillStyle="rgba(255,255,255,.85)";
-      ctx.textAlign="right";
-
-      ctx.fillText(
-        "MAMAKI ✨",
-        canvas.width-30,
-        45
-      );
-
-    }
-
-    /* caption */
-
-    const caption=
-      document.getElementById("photoCaption").value.trim();
-
-    if(caption){
-
-      ctx.font="bold 28px Arial";
-      ctx.textAlign="center";
-      ctx.fillStyle="#fff";
-
-      ctx.fillText(
-        caption,
-        canvas.width/2,
-        canvas.height-40
-      );
-
-    }
-
-  };
-
-  img.src=photos[currentPhoto].url;
-
-  clearTimeout(photoPreviewTimer);
-
-  photoPreviewTimer=setTimeout(()=>{
-
-    currentPhoto++;
-
-    if(currentPhoto>=photos.length)
-      currentPhoto=0;
-
-    showPhoto();
-
-  },Number(document.getElementById("photoDuration").value)*1000);
+  list.innerHTML =
+    projects.map(
+      (p,i)=>`
+      <div style="
+        padding:12px;
+        margin-bottom:8px;
+        border:1px solid #292944;
+        border-radius:10px;
+        background:#11111b">
+        <b>${escapeHtml(p.name)}</b>
+        <div style="color:#777;font-size:10px">
+          ${escapeHtml(p.date)}
+        </div>
+      </div>
+      `
+    ).join("");
 
 }
 
+$("saveProject").onclick = () => {
 
-/* =========================================================
-   LOCAL PROJECT SAVING
-========================================================= */
-
-function saveProject(name,data){
-
-  const projects=
-    JSON.parse(localStorage.getItem("mamakiProjects")||"[]");
+  const projects =
+    JSON.parse(
+      localStorage.getItem(
+        "mamakiProjects"
+      ) || "[]"
+    );
 
   projects.push({
-    name:name,
-    date:new Date().toISOString(),
-    data:data
+    name:
+      $("prompt").value.trim()
+      || "MAMAKI Project",
+    date:
+      new Date().toLocaleString()
   });
 
   localStorage.setItem(
@@ -1514,49 +2000,15 @@ function saveProject(name,data){
     JSON.stringify(projects)
   );
 
-}
+  loadProjects();
 
+  alert("Project saved.");
 
-function loadProjects(){
+};
 
-  const projects=
-    JSON.parse(localStorage.getItem("mamakiProjects")||"[]");
+function escapeHtml(value){
 
-  const list=document.getElementById("projectList");
-
-  if(!projects.length){
-
-    list.textContent="No saved projects yet.";
-
-    return;
-
-  }
-
-  list.innerHTML="";
-
-  projects.reverse().forEach(project=>{
-
-    const item=document.createElement("div");
-
-    item.style.cssText=
-      "padding:13px;margin-top:8px;background:#11111d;border-radius:10px";
-
-    item.innerHTML=
-      "<b>"+escapeHtml(project.name)+"</b><br>"+
-      "<small style='color:#777'>"+
-      new Date(project.date).toLocaleString()+
-      "</small>";
-
-    list.appendChild(item);
-
-  });
-
-}
-
-
-function escapeHtml(text){
-
-  return String(text)
+  return String(value)
     .replaceAll("&","&amp;")
     .replaceAll("<","&lt;")
     .replaceAll(">","&gt;")
@@ -1568,53 +2020,226 @@ function escapeHtml(text){
 loadProjects();
 
 
-/* =========================================================
-   COMBINE CLIPS
-========================================================= */
+/* ---------------- AI GENERATE ---------------- */
 
-document.getElementById("combineInput")
-.addEventListener("change",e=>{
+/*
+   IMPORTANT:
+   Keep your existing server-side generation endpoint if it
+   already exists. The frontend sends the generation request
+   to /api/generate.
+*/
 
-  const list=document.getElementById("combineList");
+$("generateBtn").onclick = async () => {
 
-  list.innerHTML="";
+  const prompt =
+    $("prompt").value.trim();
 
-  [...e.target.files].forEach((file,index)=>{
+  if(!prompt){
 
-    const row=document.createElement("div");
+    alert(
+      "Please describe what you want MAMAKI to create."
+    );
 
-    row.style.cssText=
-      "padding:12px;background:#11111d;border-radius:10px;margin-bottom:7px";
+    return;
 
-    row.textContent=
-      (index+1)+". "+file.name;
+  }
 
-    list.appendChild(row);
+  const seconds =
+    Math.max(
+      5,
+      getDurationSeconds()
+    );
 
-  });
+  const credits =
+    Math.ceil(seconds);
 
-});
+  const balance =
+    Number(
+      $("creditBalance").textContent
+    ) || 0;
 
+  if(balance < credits){
 
-/* =========================================================
-   SIMPLE LOCAL PROJECT AUTO-SAVE
-========================================================= */
+    alert(
+      `You need ${credits} credits but have ${balance}.`
+    );
 
-setInterval(()=>{
+    return;
 
-  const prompt=promptBox.value.trim();
+  }
 
-  if(!prompt && !photos.length)return;
+  const button =
+    $("generateBtn");
 
-  saveProject(
-    "MAMAKI Project",
-    {
-      prompt:prompt,
-      photoCount:photos.length
+  button.disabled = true;
+
+  button.textContent =
+    "⏳ MAMAKI IS CREATING YOUR VIDEO...";
+
+  try{
+
+    const form =
+      new FormData();
+
+    form.append(
+      "prompt",
+      prompt
+    );
+
+    form.append(
+      "mode",
+      aiMode
+    );
+
+    form.append(
+      "model",
+      $("model").value
+    );
+
+    form.append(
+      "aspect_ratio",
+      $("aspect").value
+    );
+
+    form.append(
+      "style",
+      $("style").value
+    );
+
+    form.append(
+      "duration",
+      seconds
+    );
+
+    form.append(
+      "narration",
+      $("narration").value
+    );
+
+    const image =
+      $("referenceImage").files[0];
+
+    if(image){
+
+      form.append(
+        "image",
+        image
+      );
+
     }
-  );
 
-},60000);
+    /*
+      Reserve credits locally for the UI.
+      The server should perform the real reservation/refund.
+    */
+
+    $("creditBalance").textContent =
+      Math.max(
+        0,
+        balance - credits
+      );
+
+    const response =
+      await fetch(
+        "/api/generate",
+        {
+          method:"POST",
+          body:form
+        }
+      );
+
+    if(!response.ok){
+
+      throw new Error(
+        await response.text()
+      );
+
+    }
+
+    const data =
+      await response.json();
+
+    const url =
+      data.videoUrl ||
+      data.video_url ||
+      data.url ||
+      data.output;
+
+    if(!url){
+
+      throw new Error(
+        "MAMAKI did not receive a video file."
+      );
+
+    }
+
+    $("aiOutput").style.display =
+      "block";
+
+    $("aiOutput").innerHTML = `
+      <div style="
+        color:#32e6a1;
+        font-weight:900;
+        margin-bottom:10px">
+        ✅ MAMAKI video ready
+      </div>
+
+      <video
+        controls
+        playsinline
+        src="${url}">
+      </video>
+
+      <div class="watermark-note">
+        ✨ MAMAKI watermark applied.
+      </div>
+    `;
+
+  }catch(error){
+
+    console.error(error);
+
+    /*
+      Failed generation:
+      return the reserved credits in the UI.
+      The server should also refund its authoritative balance.
+    */
+
+    $("creditBalance").textContent =
+      Number(
+        $("creditBalance").textContent
+      ) + credits;
+
+    $("aiOutput").style.display =
+      "block";
+
+    $("aiOutput").innerHTML = `
+      <div style="color:#ff5577;font-weight:900">
+        ❌ Generation failed
+      </div>
+
+      <div style="
+        color:#aaa;
+        margin-top:7px;
+        font-size:12px">
+        ${escapeHtml(error.message)}
+      </div>
+
+      <div class="watermark-note">
+        Your MAMAKI credits were returned.
+      </div>
+    `;
+
+  }finally{
+
+    button.disabled = false;
+
+    button.textContent =
+      "✨ GENERATE VIDEO";
+
+  }
+
+};
 
 </script>
 
