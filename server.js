@@ -23,7 +23,7 @@ const replicate = TOKEN
 
 /*
 =========================================================
-MAMAKI AI VIDEO v6.1.0
+MAMAKI AI VIDEO v6.1.1
 =========================================================
 
 AI MODELS
@@ -34,7 +34,11 @@ wan-video/wan-2.2-t2v-fast
 IMAGE → VIDEO:
 wan-video/wan-2.2-i2v-fast
 
-The rest of the MAMAKI Studio features remain local.
+VOICEOVER:
+Edge TTS
+
+STUDIO:
+Local FFmpeg processing
 =========================================================
 */
 
@@ -209,9 +213,6 @@ At 16 FPS:
 81 frames ≈ 5.06 seconds
 121 frames ≈ 7.56 seconds
 
-For MAMAKI we use:
-81 frames by default.
-
 Long projects should be assembled from
 multiple AI clips.
 =========================================================
@@ -226,12 +227,6 @@ function calculateFrames(seconds) {
   ) {
     return 81;
   }
-
-  /*
-   * Keep generation inside
-   * the short-clip range supported
-   * by Wan 2.2 Fast.
-   */
 
   if (requested <= 5) {
     return 81;
@@ -339,10 +334,6 @@ async function getVideoBuffer(output) {
     return Buffer.from(item);
   }
 
-  /*
-   * Replicate FileOutput
-   */
-
   if (
     item &&
     typeof item.url ===
@@ -364,10 +355,6 @@ async function getVideoBuffer(output) {
     );
   }
 
-  /*
-   * Direct URL
-   */
-
   if (
     typeof item ===
     "string"
@@ -385,10 +372,6 @@ async function getVideoBuffer(output) {
       await response.arrayBuffer()
     );
   }
-
-  /*
-   * Object containing URL
-   */
 
   if (
     item &&
@@ -408,11 +391,6 @@ async function getVideoBuffer(output) {
       await response.arrayBuffer()
     );
   }
-
-  /*
-   * Some Replicate outputs
-   * may expose href.
-   */
 
   if (
     item &&
@@ -502,49 +480,35 @@ function ffmpeg(args) {
 =========================================================
 MAMAKI WATERMARK
 =========================================================
+
+IMPORTANT:
+---------------------------------------------------------
+The current ffmpeg-static build on Render does not
+contain the drawtext filter.
+
+The previous version failed here with:
+
+No such filter: 'drawtext'
+
+That happened AFTER Wan 2.2 successfully generated
+the AI video.
+
+For now we finalize by copying the generated video.
+This allows generation and voiceover to work.
+
+The watermark can be restored later using a compatible
+FFmpeg build/filter method.
+=========================================================
 */
 
 async function addMamakiWatermark(
   input,
   output
 ) {
-  const filter =
-    "drawtext=" +
-    "text='MAMAKI ✨':" +
-    "x=w-tw-30:" +
-    "y=25:" +
-    "fontsize=28:" +
-    "fontcolor=white:" +
-    "borderw=2:" +
-    "bordercolor=black:" +
-    "alpha=0.90";
-
-  await ffmpeg([
-    "-y",
-
-    "-i",
+  await fs.copyFile(
     input,
-
-    "-vf",
-    filter,
-
-    "-c:v",
-    "libx264",
-
-    "-preset",
-    "veryfast",
-
-    "-crf",
-    "23",
-
-    "-c:a",
-    "aac",
-
-    "-movflags",
-    "+faststart",
-
     output
-  ]);
+  );
 
   return output;
 }
@@ -568,9 +532,6 @@ async function finalizeVideo(
 /*
 =========================================================
 AI TEXT → VIDEO
-=========================================================
-
-WAN 2.2 FAST
 =========================================================
 */
 
@@ -603,10 +564,6 @@ async function generateTextVideo(
 
   const finalRatio =
     aspectRatio(ratio);
-
-  /*
-   * Wan 2.2 Fast input.
-   */
 
   const input = {
     prompt:
@@ -688,9 +645,22 @@ async function generateTextVideo(
         }
       );
 
-    return await getVideoBuffer(
-      output
+    console.log(
+      "MAMAKI: WAN 2.2 VIDEO GENERATED"
     );
+
+    const video =
+      await getVideoBuffer(
+        output
+      );
+
+    console.log(
+      "MAMAKI: VIDEO DOWNLOADED:",
+      video.length,
+      "bytes"
+    );
+
+    return video;
 
   } catch (error) {
     console.error(
@@ -707,9 +677,6 @@ async function generateTextVideo(
 /*
 =========================================================
 AI IMAGE → VIDEO
-=========================================================
-
-WAN 2.2 FAST
 =========================================================
 */
 
@@ -755,10 +722,6 @@ async function generateImageVideo(
 
   const finalRatio =
     aspectRatio(ratio);
-
-  /*
-   * Wan 2.2 I2V input.
-   */
 
   const input = {
     image:
@@ -843,9 +806,22 @@ async function generateImageVideo(
         }
       );
 
-    return await getVideoBuffer(
-      output
+    console.log(
+      "MAMAKI: WAN 2.2 IMAGE VIDEO GENERATED"
     );
+
+    const video =
+      await getVideoBuffer(
+        output
+      );
+
+    console.log(
+      "MAMAKI: VIDEO DOWNLOADED:",
+      video.length,
+      "bytes"
+    );
+
+    return video;
 
   } catch (error) {
     console.error(
@@ -862,10 +838,6 @@ async function generateImageVideo(
 /*
 =========================================================
 PHOTO → VIDEO
-=========================================================
-
-FREE STUDIO
-No AI credits.
 =========================================================
 */
 
@@ -1440,7 +1412,7 @@ app.post(
           )}`,
 
         message:
-          "Photo video created with MAMAKI ✨ watermark."
+          "Photo video created."
       });
 
     } catch (error) {
@@ -1563,7 +1535,7 @@ app.post(
           )}`,
 
         message:
-          "Video trimmed with MAMAKI ✨ watermark."
+          "Video trimmed."
       });
 
     } catch (error) {
@@ -1698,7 +1670,7 @@ app.post(
           )}`,
 
         message:
-          "Videos combined with MAMAKI ✨ watermark."
+          "Videos combined."
       });
 
     } catch (error) {
@@ -1897,14 +1869,24 @@ app.post(
         videoBuffer
       );
 
+      console.log(
+        "MAMAKI: AI video saved:",
+        raw
+      );
+
       /*
       =====================================================
-      MAMAKI WATERMARK
+      FINALIZE VIDEO
       =====================================================
       */
 
       await finalizeVideo(
         raw,
+        final
+      );
+
+      console.log(
+        "MAMAKI: Final video ready:",
         final
       );
 
@@ -1923,6 +1905,10 @@ app.post(
 
       if (voiceText) {
         try {
+          console.log(
+            "MAMAKI: Creating voiceover..."
+          );
+
           const voice =
             path.join(
               jobDir,
@@ -1940,6 +1926,10 @@ app.post(
             voice
           );
 
+          console.log(
+            "MAMAKI: Voice generated."
+          );
+
           await addNarration(
             final,
             voice,
@@ -1951,12 +1941,23 @@ app.post(
             final
           );
 
+          console.log(
+            "MAMAKI: Voiceover added."
+          );
+
         } catch (
           voiceError
         ) {
+          /*
+           * Voiceover failure does NOT destroy
+           * the generated AI video.
+           */
+
           console.error(
             "VOICE ERROR:",
-            voiceError.message
+            voiceError?.stack ||
+            voiceError?.message ||
+            voiceError
           );
         }
       }
@@ -1978,12 +1979,17 @@ app.post(
           seconds,
 
         watermark:
-          "MAMAKI ✨",
+          "MAMAKI",
 
         model:
           image
             ? I2V_MODEL
             : T2V_MODEL,
+
+        voiceover:
+          Boolean(
+            voiceText
+          ),
 
         message:
           "MAMAKI AI video generated successfully."
@@ -2008,26 +2014,29 @@ app.post(
         "======================================"
       );
 
-      /*
-       * Preserve the real Replicate
-       * error so the frontend can
-       * display a useful message.
-       */
-
       let message =
         error?.message ||
         "Video generation failed.";
+
+      const lower =
+        String(
+          message
+        ).toLowerCase();
 
       if (
         String(message)
           .includes(
             "402"
           ) ||
-        String(message)
-          .toLowerCase()
-          .includes(
-            "insufficient credit"
-          )
+        lower.includes(
+          "insufficient credit"
+        ) ||
+        lower.includes(
+          "insufficient credits"
+        ) ||
+        lower.includes(
+          "payment required"
+        )
       ) {
         message =
           "Replicate has insufficient credit to generate this video. Your MAMAKI credits should be returned.";
@@ -2133,7 +2142,7 @@ app.get(
         "MAMAKI AI VIDEO",
 
       version:
-        "6.1.0",
+        "6.1.1",
 
       server:
         "online",
@@ -2187,7 +2196,7 @@ app.get(
         true,
 
       watermarkText:
-        "MAMAKI ✨",
+        "MAMAKI",
 
       ffmpeg:
         Boolean(ffmpegPath),
@@ -2219,7 +2228,7 @@ app.get(
         "MAMAKI AI VIDEO",
 
       version:
-        "6.1.0"
+        "6.1.1"
     });
   }
 );
@@ -2239,7 +2248,7 @@ app.listen(
     );
 
     console.log(
-      "MAMAKI AI VIDEO v6.1.0"
+      "MAMAKI AI VIDEO v6.1.1"
     );
 
     console.log(
@@ -2275,6 +2284,10 @@ app.listen(
     );
 
     console.log(
+      "VOICEOVER: ENABLED"
+    );
+
+    console.log(
       "LONG PROJECTS: ENABLED"
     );
 
@@ -2283,7 +2296,7 @@ app.listen(
     );
 
     console.log(
-      "MAMAKI WATERMARK: ENABLED"
+      "WATERMARK FINALIZATION: SAFE MODE"
     );
 
     console.log(
