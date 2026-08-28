@@ -1,6 +1,6 @@
 {
   "name": "mamaki-ai-video",
-  "version": "6.0.0",
+  "version": "8.0.0",
   "description": "MAMAKI AI VIDEO - AI creative video studio",
   "type": "module",
   "main": "server.js",
@@ -8,7 +8,7 @@
     "start": "node server.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": "20.x"
   },
   "dependencies": {
     "edge-tts-universal": "^1.1.3",
