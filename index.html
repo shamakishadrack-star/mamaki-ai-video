@@ -1,534 +1,1577 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  >
+<title>MAMAKI AI VIDEO</title>
 
-  <title>MAMAKI AI VIDEO</title>
+<style>
+*{
+  box-sizing:border-box;
+  margin:0;
+  padding:0;
+}
 
-  <style>
-    * {
-      box-sizing: border-box;
-    }
+:root{
+  --bg:#06070b;
+  --panel:#0d1018;
+  --panel2:#111522;
+  --line:rgba(255,255,255,.09);
+  --text:#f6f7fb;
+  --muted:#9299aa;
+  --accent:#8b5cf6;
+  --accent2:#06b6d4;
+  --danger:#ef4444;
+  --success:#22c55e;
+}
 
-    body {
-      margin: 0;
-      min-height: 100vh;
-      font-family: Arial, sans-serif;
-      background:
-        radial-gradient(
-          circle at top,
-          #172554,
-          #020617 55%
-        );
-      color: white;
-      padding: 20px;
-    }
+body{
+  min-height:100vh;
+  color:var(--text);
+  background:
+    radial-gradient(circle at 15% 10%,rgba(139,92,246,.20),transparent 30%),
+    radial-gradient(circle at 90% 20%,rgba(6,182,212,.14),transparent 28%),
+    var(--bg);
+  font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
 
-    .container {
-      width: 100%;
-      max-width: 700px;
-      margin: auto;
-    }
+button,
+input,
+textarea,
+select{
+  font:inherit;
+}
 
-    .header {
-      text-align: center;
-      margin-bottom: 25px;
-    }
+button{
+  cursor:pointer;
+}
 
-    .logo {
-      font-size: 32px;
-      font-weight: 900;
-      letter-spacing: 1px;
-    }
+.app{
+  min-height:100vh;
+  display:flex;
+}
 
-    .subtitle {
-      color: #94a3b8;
-      margin-top: 8px;
-    }
+/* SIDEBAR */
 
-    .card {
-      background: rgba(15, 23, 42, .92);
-      border: 1px solid #334155;
-      border-radius: 20px;
-      padding: 20px;
-      box-shadow:
-        0 20px 60px rgba(0,0,0,.35);
-    }
+.sidebar{
+  width:245px;
+  min-height:100vh;
+  padding:24px 16px;
+  background:rgba(7,9,15,.88);
+  border-right:1px solid var(--line);
+  backdrop-filter:blur(20px);
+  position:fixed;
+  left:0;
+  top:0;
+  bottom:0;
+  z-index:10;
+}
 
-    label {
-      display: block;
-      margin-top: 16px;
-      margin-bottom: 8px;
-      font-weight: 700;
-    }
+.logo{
+  display:flex;
+  align-items:center;
+  gap:11px;
+  padding:8px 10px 28px;
+}
 
-    textarea,
-    select,
-    input[type="file"] {
-      width: 100%;
-      border: 1px solid #475569;
-      background: #020617;
-      color: white;
-      border-radius: 12px;
-      padding: 13px;
-      font-size: 15px;
-    }
+.logoMark{
+  width:42px;
+  height:42px;
+  display:grid;
+  place-items:center;
+  border-radius:13px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  box-shadow:0 0 30px rgba(139,92,246,.28);
+  font-size:21px;
+}
 
-    textarea {
-      min-height: 140px;
-      resize: vertical;
-    }
+.logoText strong{
+  display:block;
+  font-size:18px;
+  letter-spacing:.5px;
+}
 
-    .row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
+.logoText span{
+  display:block;
+  color:var(--muted);
+  font-size:11px;
+  margin-top:2px;
+}
 
-    button {
-      width: 100%;
-      margin-top: 22px;
-      padding: 16px;
-      border: 0;
-      border-radius: 14px;
-      background: linear-gradient(
-        135deg,
-        #7c3aed,
-        #2563eb
-      );
-      color: white;
-      font-size: 17px;
-      font-weight: 900;
-      cursor: pointer;
-    }
+.nav{
+  display:grid;
+  gap:7px;
+}
 
-    button:disabled {
-      opacity: .55;
-      cursor: wait;
-    }
+.nav button{
+  border:0;
+  background:transparent;
+  color:#aab0bf;
+  text-align:left;
+  padding:13px 14px;
+  border-radius:12px;
+  transition:.2s;
+}
 
-    .status {
-      margin-top: 18px;
-      padding: 14px;
-      border-radius: 12px;
-      background: #020617;
-      border: 1px solid #334155;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
+.nav button:hover,
+.nav button.active{
+  color:#fff;
+  background:rgba(139,92,246,.13);
+}
 
-    .video-box {
-      margin-top: 20px;
-      display: none;
-    }
+.sidebarBottom{
+  position:absolute;
+  bottom:22px;
+  left:16px;
+  right:16px;
+}
 
-    video {
-      width: 100%;
-      border-radius: 15px;
-      background: black;
-    }
+.status{
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:13px;
+  background:rgba(255,255,255,.025);
+}
 
-    .download {
-      display: block;
-      text-align: center;
-      margin-top: 12px;
-      padding: 13px;
-      border-radius: 12px;
-      background: #16a34a;
-      color: white;
-      text-decoration: none;
-      font-weight: 800;
-    }
+.statusLine{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  color:#b9bfcc;
+  font-size:12px;
+}
 
-    .small {
-      color: #94a3b8;
-      font-size: 13px;
-      margin-top: 10px;
-      line-height: 1.5;
-    }
+.dot{
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:var(--success);
+  box-shadow:0 0 10px var(--success);
+}
 
-    @media (max-width: 600px) {
-      .row {
-        grid-template-columns: 1fr;
-      }
+/* MAIN */
 
-      body {
-        padding: 12px;
-      }
+.main{
+  margin-left:245px;
+  width:calc(100% - 245px);
+  min-height:100vh;
+  padding:30px;
+}
 
-      .card {
-        padding: 15px;
-      }
-    }
-  </style>
+.topbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:30px;
+}
+
+.topbar h1{
+  font-size:28px;
+  letter-spacing:-.8px;
+}
+
+.topbar p{
+  color:var(--muted);
+  margin-top:5px;
+  font-size:14px;
+}
+
+.badge{
+  padding:8px 12px;
+  border:1px solid rgba(139,92,246,.28);
+  border-radius:999px;
+  background:rgba(139,92,246,.08);
+  color:#c4b5fd;
+  font-size:12px;
+}
+
+/* GENERATOR */
+
+.generator{
+  display:grid;
+  grid-template-columns:minmax(0,1.5fr) minmax(310px,.8fr);
+  gap:20px;
+}
+
+.card{
+  background:linear-gradient(
+    145deg,
+    rgba(17,21,34,.94),
+    rgba(10,12,20,.94)
+  );
+  border:1px solid var(--line);
+  border-radius:22px;
+  padding:24px;
+  box-shadow:0 20px 60px rgba(0,0,0,.18);
+}
+
+.cardTitle{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:20px;
+}
+
+.cardTitle h2{
+  font-size:18px;
+}
+
+.cardTitle span{
+  color:var(--muted);
+  font-size:12px;
+}
+
+label{
+  display:block;
+  color:#c7ccd7;
+  font-size:13px;
+  margin-bottom:8px;
+}
+
+textarea{
+  width:100%;
+  min-height:175px;
+  resize:vertical;
+  color:#fff;
+  background:#080a10;
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:16px;
+  outline:none;
+  transition:.2s;
+}
+
+textarea:focus,
+input:focus,
+select:focus{
+  border-color:rgba(139,92,246,.7);
+  box-shadow:0 0 0 3px rgba(139,92,246,.09);
+}
+
+.field{
+  margin-bottom:18px;
+}
+
+.row{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px;
+}
+
+select,
+input[type=file]{
+  width:100%;
+  color:#ddd;
+  background:#080a10;
+  border:1px solid var(--line);
+  border-radius:13px;
+  padding:12px;
+  outline:none;
+}
+
+.quick{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
+.quick button{
+  border:1px solid var(--line);
+  background:#0a0d14;
+  color:#aeb4c2;
+  padding:8px 11px;
+  border-radius:10px;
+}
+
+.quick button:hover{
+  border-color:rgba(139,92,246,.5);
+  color:#fff;
+}
+
+/* GENERATE */
+
+.generate{
+  width:100%;
+  margin-top:5px;
+  padding:16px 20px;
+  border:0;
+  border-radius:15px;
+  color:#fff;
+  font-weight:800;
+  font-size:15px;
+  background:linear-gradient(
+    100deg,
+    var(--accent),
+    #6366f1,
+    var(--accent2)
+  );
+  box-shadow:0 15px 35px rgba(99,102,241,.22);
+  transition:.2s;
+}
+
+.generate:hover{
+  transform:translateY(-1px);
+  filter:brightness(1.08);
+}
+
+.generate:disabled{
+  opacity:.55;
+  cursor:not-allowed;
+  transform:none;
+}
+
+/* PREVIEW */
+
+.preview{
+  min-height:480px;
+  display:flex;
+  flex-direction:column;
+}
+
+.previewBox{
+  flex:1;
+  min-height:370px;
+  border-radius:17px;
+  border:1px dashed rgba(255,255,255,.12);
+  background:
+    radial-gradient(circle at center,rgba(139,92,246,.08),transparent 55%),
+    #080a10;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+}
+
+.previewEmpty{
+  text-align:center;
+  color:#6f7685;
+  padding:25px;
+}
+
+.previewEmpty .icon{
+  font-size:45px;
+  margin-bottom:12px;
+}
+
+video{
+  width:100%;
+  height:100%;
+  max-height:600px;
+  object-fit:contain;
+  background:#000;
+}
+
+.resultActions{
+  display:flex;
+  gap:9px;
+  margin-top:14px;
+}
+
+.resultActions a{
+  flex:1;
+  text-decoration:none;
+  text-align:center;
+  padding:11px;
+  border-radius:12px;
+  background:#171b27;
+  border:1px solid var(--line);
+  color:#fff;
+}
+
+/* LOADING */
+
+.loading{
+  display:none;
+  margin-top:15px;
+  padding:13px;
+  border-radius:13px;
+  background:rgba(139,92,246,.08);
+  border:1px solid rgba(139,92,246,.2);
+  color:#c4b5fd;
+  font-size:13px;
+}
+
+.loading.show{
+  display:block;
+}
+
+.progress{
+  height:5px;
+  background:#171b26;
+  border-radius:20px;
+  overflow:hidden;
+  margin-top:9px;
+}
+
+.progress i{
+  display:block;
+  width:35%;
+  height:100%;
+  background:linear-gradient(90deg,var(--accent),var(--accent2));
+  animation:load 1.3s infinite;
+}
+
+@keyframes load{
+  0%{transform:translateX(-120%)}
+  100%{transform:translateX(350%)}
+}
+
+/* FREE STUDIO */
+
+.studio{
+  display:none;
+  margin-top:20px;
+}
+
+.studio.active{
+  display:block;
+}
+
+.tools{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:14px;
+}
+
+.tool{
+  padding:20px;
+  min-height:145px;
+  border:1px solid var(--line);
+  border-radius:17px;
+  background:#0c0f17;
+  text-align:left;
+  transition:.2s;
+}
+
+.tool:hover{
+  transform:translateY(-2px);
+  border-color:rgba(139,92,246,.4);
+}
+
+.tool .toolIcon{
+  font-size:28px;
+  margin-bottom:13px;
+}
+
+.tool strong{
+  display:block;
+  margin-bottom:6px;
+}
+
+.tool span{
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.5;
+}
+
+/* MESSAGE */
+
+.message{
+  margin-top:16px;
+  padding:13px 15px;
+  border-radius:13px;
+  display:none;
+  font-size:13px;
+  line-height:1.5;
+}
+
+.message.show{
+  display:block;
+}
+
+.message.error{
+  background:rgba(239,68,68,.08);
+  border:1px solid rgba(239,68,68,.2);
+  color:#fca5a5;
+}
+
+.message.success{
+  background:rgba(34,197,94,.08);
+  border:1px solid rgba(34,197,94,.2);
+  color:#86efac;
+}
+
+/* MOBILE */
+
+.mobileNav{
+  display:none;
+}
+
+@media(max-width:950px){
+  .sidebar{
+    display:none;
+  }
+
+  .main{
+    margin-left:0;
+    width:100%;
+    padding:18px;
+    padding-bottom:85px;
+  }
+
+  .generator{
+    grid-template-columns:1fr;
+  }
+
+  .tools{
+    grid-template-columns:1fr 1fr;
+  }
+
+  .mobileNav{
+    display:flex;
+    position:fixed;
+    z-index:20;
+    left:10px;
+    right:10px;
+    bottom:10px;
+    padding:8px;
+    background:rgba(12,15,23,.94);
+    border:1px solid var(--line);
+    border-radius:16px;
+    backdrop-filter:blur(20px);
+  }
+
+  .mobileNav button{
+    flex:1;
+    border:0;
+    background:transparent;
+    color:#aeb4c2;
+    padding:9px;
+  }
+}
+
+@media(max-width:560px){
+  .row{
+    grid-template-columns:1fr;
+  }
+
+  .tools{
+    grid-template-columns:1fr;
+  }
+
+  .topbar h1{
+    font-size:23px;
+  }
+
+  .card{
+    padding:17px;
+  }
+}
+</style>
 </head>
 
 <body>
 
-<div class="container">
+<div class="app">
 
-  <div class="header">
-    <div class="logo">
-      ✨ MAMAKI AI VIDEO
-    </div>
+<aside class="sidebar">
 
-    <div class="subtitle">
-      Turn your imagination into video
+  <div class="logo">
+    <div class="logoMark">✨</div>
+    <div class="logoText">
+      <strong>MAMAKI</strong>
+      <span>AI VIDEO STUDIO</span>
     </div>
   </div>
 
-  <div class="card">
-
-    <label for="prompt">
-      Video Prompt
-    </label>
-
-    <textarea
-      id="prompt"
-      placeholder="Example: A cinematic drone shot flying over Lagos at sunset, realistic ocean waves, beautiful golden lighting..."
-    ></textarea>
-
-    <div class="row">
-
-      <div>
-        <label for="duration">
-          Duration
-        </label>
-
-        <select id="duration">
-          <option value="5">5 seconds</option>
-          <option value="10">10 seconds</option>
-          <option value="15">15 seconds</option>
-          <option value="20">20 seconds</option>
-          <option value="30">30 seconds</option>
-          <option value="60">60 seconds</option>
-        </select>
-      </div>
-
-      <div>
-        <label for="ratio">
-          Format
-        </label>
-
-        <select id="ratio">
-          <option value="16:9">
-            16:9 YouTube
-          </option>
-
-          <option value="9:16">
-            9:16 TikTok / Reels
-          </option>
-
-          <option value="1:1">
-            1:1 Social
-          </option>
-        </select>
-      </div>
-
-    </div>
-
-    <label for="referenceImage">
-      Optional Reference Image
-    </label>
-
-    <input
-      id="referenceImage"
-      type="file"
-      accept="image/jpeg,image/png,image/webp"
-    >
-
-    <div class="small">
-      Leave the image empty for Text-to-Video.
-      Add an image for Image-to-Video.
-    </div>
-
-    <button
-      id="generateButton"
-      onclick="generateVideo()"
-    >
-      ✨ GENERATE VIDEO
+  <div class="nav">
+    <button class="active" onclick="showPage('create',this)">
+      🎬 Create Video
     </button>
 
-    <div
-      id="status"
-      class="status"
-    >
-      Ready.
-    </div>
+    <button onclick="showPage('studio',this)">
+      🧰 Free Studio
+    </button>
 
-    <div
-      id="videoBox"
-      class="video-box"
-    >
-
-      <video
-        id="video"
-        controls
-        playsinline
-      ></video>
-
-      <a
-        id="download"
-        class="download"
-        href="#"
-        target="_blank"
-        download
-      >
-        ⬇️ Download Video
-      </a>
-
-    </div>
-
+    <button onclick="showPage('projects',this)">
+      📁 Projects
+    </button>
   </div>
+
+  <div class="sidebarBottom">
+    <div class="status">
+      <div class="statusLine">
+        <span class="dot"></span>
+        <span id="serverStatus">
+          Checking MAMAKI server...
+        </span>
+      </div>
+    </div>
+  </div>
+
+</aside>
+
+<main class="main">
+
+  <div class="topbar">
+    <div>
+      <h1 id="pageTitle">
+        Create AI Video
+      </h1>
+      <p id="pageSubtitle">
+        Turn your imagination into cinematic video.
+      </p>
+    </div>
+
+    <div class="badge">
+      WAN 2.2 FAST • AI
+    </div>
+  </div>
+
+  <!-- CREATE -->
+
+  <section id="createPage">
+
+    <div class="generator">
+
+      <div class="card">
+
+        <div class="cardTitle">
+          <h2>🎬 AI Video Generator</h2>
+          <span>Text → Video / Image → Video</span>
+        </div>
+
+        <form id="generateForm">
+
+          <div class="field">
+            <label for="prompt">
+              Describe your video
+            </label>
+
+            <textarea
+              id="prompt"
+              name="prompt"
+              placeholder="Example: A cinematic drone shot of a futuristic African city at sunset, glowing buildings, people walking through a modern street, realistic lighting, smooth camera movement..."
+              required></textarea>
+          </div>
+
+          <div class="field">
+            <label>Quick styles</label>
+
+            <div class="quick">
+              <button type="button" data-prompt="cinematic">🎥 Cinematic</button>
+              <button type="button" data-prompt="realistic">📷 Realistic</button>
+              <button type="button" data-prompt="anime">🌌 Anime</button>
+              <button type="button" data-prompt="3d">🧊 3D</button>
+              <button type="button" data-prompt="documentary">🎞️ Documentary</button>
+            </div>
+          </div>
+
+          <div class="row">
+
+            <div class="field">
+              <label for="duration">
+                Duration
+              </label>
+
+              <select id="duration" name="duration">
+                <option value="5">5 seconds</option>
+                <option value="10">10 seconds</option>
+                <option value="15">15 seconds</option>
+                <option value="20">20 seconds</option>
+                <option value="30">30 seconds</option>
+                <option value="60">60 seconds</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="ratio">
+                Format
+              </label>
+
+              <select id="ratio" name="ratio">
+                <option value="16:9">
+                  16:9 • YouTube
+                </option>
+                <option value="9:16">
+                  9:16 • TikTok / Reels
+                </option>
+                <option value="1:1">
+                  1:1 • Social
+                </option>
+              </select>
+            </div>
+
+          </div>
+
+          <div class="field">
+
+            <label for="referenceImage">
+              Optional reference image
+            </label>
+
+            <input
+              id="referenceImage"
+              name="referenceImage"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+            >
+
+            <small style="display:block;color:#72798a;margin-top:7px">
+              Empty = Text to Video.
+              Add an image = Image to Video.
+            </small>
+
+          </div>
+
+          <button
+            class="generate"
+            id="generateButton"
+            type="submit"
+          >
+            ✨ Generate Video
+          </button>
+
+          <div
+            class="loading"
+            id="loading"
+          >
+            <strong id="loadingText">
+              MAMAKI is creating your video...
+            </strong>
+
+            <div class="progress">
+              <i></i>
+            </div>
+
+            <div style="margin-top:7px;color:#7f8798;font-size:11px">
+              AI generation can take some time.
+            </div>
+          </div>
+
+          <div
+            id="message"
+            class="message"
+          ></div>
+
+        </form>
+
+      </div>
+
+      <div class="card preview">
+
+        <div class="cardTitle">
+          <h2>🎞️ Preview</h2>
+          <span id="previewLabel">
+            Your result appears here
+          </span>
+        </div>
+
+        <div
+          class="previewBox"
+          id="previewBox"
+        >
+          <div class="previewEmpty">
+            <div class="icon">🎬</div>
+            <strong>Your generated video</strong>
+            <p style="margin-top:7px">
+              Create something amazing with MAMAKI.
+            </p>
+          </div>
+        </div>
+
+        <div
+          class="resultActions"
+          id="resultActions"
+          style="display:none"
+        >
+          <a id="openVideo" target="_blank">
+            ▶ Open
+          </a>
+
+          <a id="downloadVideo" download>
+            ⬇ Download
+          </a>
+        </div>
+
+      </div>
+
+    </div>
+
+  </section>
+
+  <!-- FREE STUDIO -->
+
+  <section
+    id="studioPage"
+    class="studio"
+  >
+
+    <div class="card">
+
+      <div class="cardTitle">
+        <h2>🧰 MAMAKI Free Studio</h2>
+        <span>No AI credits required for these tools</span>
+      </div>
+
+      <div class="tools">
+
+        <button
+          class="tool"
+          onclick="photoVideo()"
+        >
+          <div class="toolIcon">🖼️</div>
+          <strong>Photo → Video</strong>
+          <span>
+            Turn your photos into a smooth video slideshow.
+          </span>
+        </button>
+
+        <button
+          class="tool"
+          onclick="trimmer()"
+        >
+          <div class="toolIcon">✂️</div>
+          <strong>Video Trimmer</strong>
+          <span>
+            Cut unwanted sections from your videos.
+          </span>
+        </button>
+
+        <button
+          class="tool"
+          onclick="combine()"
+        >
+          <div class="toolIcon">🎞️</div>
+          <strong>Combine Clips</strong>
+          <span>
+            Join multiple video clips together.
+          </span>
+        </button>
+
+        <button
+          class="tool"
+          onclick="audioTool()"
+        >
+          <div class="toolIcon">🎵</div>
+          <strong>Audio Tools</strong>
+          <span>
+            Prepare your videos for music and audio editing.
+          </span>
+        </button>
+
+      </div>
+
+      <div
+        id="studioMessage"
+        class="message"
+      ></div>
+
+    </div>
+
+  </section>
+
+  <!-- PROJECTS -->
+
+  <section
+    id="projectsPage"
+    class="studio"
+  >
+
+    <div class="card">
+
+      <div class="cardTitle">
+        <h2>📁 Projects</h2>
+        <span>MAMAKI workspace</span>
+      </div>
+
+      <p style="color:#9299aa;line-height:1.7">
+        Project saving is available through the MAMAKI
+        backend. Generated videos are stored temporarily
+        by the Render service.
+      </p>
+
+    </div>
+
+  </section>
+
+</main>
+
+</div>
+
+<div class="mobileNav">
+
+  <button onclick="showPage('create')">
+    🎬<br>
+    <small>Create</small>
+  </button>
+
+  <button onclick="showPage('studio')">
+    🧰<br>
+    <small>Studio</small>
+  </button>
+
+  <button onclick="showPage('projects')">
+    📁<br>
+    <small>Projects</small>
+  </button>
 
 </div>
 
 <script>
 
-async function generateVideo() {
+/* =====================================================
+   NAVIGATION
+===================================================== */
 
-  const button =
-    document.getElementById(
-      "generateButton"
+function showPage(page, button){
+
+  const create =
+    document.getElementById("createPage");
+
+  const studio =
+    document.getElementById("studioPage");
+
+  const projects =
+    document.getElementById("projectsPage");
+
+  create.style.display =
+    page === "create"
+      ? "block"
+      : "none";
+
+  studio.classList.toggle(
+    "active",
+    page === "studio"
+  );
+
+  projects.classList.toggle(
+    "active",
+    page === "projects"
+  );
+
+  const title =
+    document.getElementById("pageTitle");
+
+  const subtitle =
+    document.getElementById("pageSubtitle");
+
+  if(page === "create"){
+    title.textContent =
+      "Create AI Video";
+
+    subtitle.textContent =
+      "Turn your imagination into cinematic video.";
+  }
+
+  if(page === "studio"){
+    title.textContent =
+      "Free Studio";
+
+    subtitle.textContent =
+      "Powerful video tools without AI generation.";
+  }
+
+  if(page === "projects"){
+    title.textContent =
+      "Projects";
+
+    subtitle.textContent =
+      "Your MAMAKI creative workspace.";
+  }
+
+  document
+    .querySelectorAll(".nav button")
+    .forEach(
+      b => b.classList.remove("active")
     );
+
+  if(button){
+    button.classList.add("active");
+  }
+}
+
+/* =====================================================
+   QUICK PROMPTS
+===================================================== */
+
+document
+  .querySelectorAll("[data-prompt]")
+  .forEach(button => {
+
+    button.addEventListener(
+      "click",
+      () => {
+
+        const prompt =
+          document.getElementById("prompt");
+
+        const style =
+          button.dataset.prompt;
+
+        prompt.value =
+          `${style} cinematic video, highly detailed, smooth camera movement, realistic lighting, professional filmmaking. ` +
+          prompt.value;
+
+        prompt.focus();
+      }
+    );
+
+  });
+
+/* =====================================================
+   MESSAGE
+===================================================== */
+
+function showMessage(
+  text,
+  type = "error"
+){
+
+  const box =
+    document.getElementById("message");
+
+  box.className =
+    `message show ${type}`;
+
+  box.textContent =
+    text;
+}
+
+function hideMessage(){
+
+  const box =
+    document.getElementById("message");
+
+  box.className =
+    "message";
+
+  box.textContent =
+    "";
+}
+
+/* =====================================================
+   GENERATE
+===================================================== */
+
+document
+  .getElementById("generateForm")
+  .addEventListener(
+    "submit",
+    async event => {
+
+      event.preventDefault();
+
+      hideMessage();
+
+      const button =
+        document.getElementById(
+          "generateButton"
+        );
+
+      const loading =
+        document.getElementById(
+          "loading"
+        );
+
+      const loadingText =
+        document.getElementById(
+          "loadingText"
+        );
+
+      const preview =
+        document.getElementById(
+          "previewBox"
+        );
+
+      const actions =
+        document.getElementById(
+          "resultActions"
+        );
+
+      button.disabled = true;
+
+      loading.classList.add("show");
+
+      loadingText.textContent =
+        "MAMAKI is preparing your AI video...";
+
+      actions.style.display =
+        "none";
+
+      preview.innerHTML = `
+        <div class="previewEmpty">
+          <div class="icon">✨</div>
+          <strong>Generating...</strong>
+          <p style="margin-top:7px">
+            Your video is being created.
+          </p>
+        </div>
+      `;
+
+      try {
+
+        const form =
+          document.getElementById(
+            "generateForm"
+          );
+
+        const data =
+          new FormData(form);
+
+        loadingText.textContent =
+          "MAMAKI is contacting the AI engine...";
+
+        const response =
+          await fetch(
+            "/api/generate",
+            {
+              method:"POST",
+              body:data
+            }
+          );
+
+        const contentType =
+          response.headers.get(
+            "content-type"
+          ) || "";
+
+        let result;
+
+        if(
+          contentType.includes(
+            "application/json"
+          )
+        ){
+
+          result =
+            await response.json();
+
+        }else{
+
+          const text =
+            await response.text();
+
+          throw new Error(
+            `Server returned HTTP ${response.status}: ${text.slice(0,250)}`
+          );
+
+        }
+
+        if(
+          !response.ok ||
+          !result.ok ||
+          !result.videoUrl
+        ){
+
+          throw new Error(
+            result.error ||
+            `Generation failed. HTTP ${response.status}`
+          );
+
+        }
+
+        loadingText.textContent =
+          "Finalizing your MAMAKI video...";
+
+        const videoURL =
+          result.videoUrl;
+
+        preview.innerHTML = `
+          <video
+            controls
+            playsinline
+            src="${videoURL}"
+          ></video>
+        `;
+
+        const open =
+          document.getElementById(
+            "openVideo"
+          );
+
+        const download =
+          document.getElementById(
+            "downloadVideo"
+          );
+
+        open.href =
+          videoURL;
+
+        download.href =
+          videoURL;
+
+        actions.style.display =
+          "flex";
+
+        showMessage(
+          "✨ Video generated successfully.",
+          "success"
+        );
+
+      } catch(error){
+
+        console.error(
+          "MAMAKI FRONTEND ERROR:",
+          error
+        );
+
+        preview.innerHTML = `
+          <div class="previewEmpty">
+            <div class="icon">⚠️</div>
+            <strong>Generation failed</strong>
+            <p style="margin-top:7px">
+              Please check the server and try again.
+            </p>
+          </div>
+        `;
+
+        showMessage(
+          error.message ||
+          "Video generation failed."
+        );
+
+      } finally {
+
+        button.disabled = false;
+
+        loading.classList.remove(
+          "show"
+        );
+
+      }
+
+    }
+  );
+
+/* =====================================================
+   SERVER STATUS
+===================================================== */
+
+async function checkServer(){
 
   const status =
     document.getElementById(
-      "status"
+      "serverStatus"
     );
 
-  const videoBox =
-    document.getElementById(
-      "videoBox"
-    );
-
-  const video =
-    document.getElementById(
-      "video"
-    );
-
-  const download =
-    document.getElementById(
-      "download"
-    );
-
-  const prompt =
-    document.getElementById(
-      "prompt"
-    ).value.trim();
-
-  const duration =
-    document.getElementById(
-      "duration"
-    ).value;
-
-  const ratio =
-    document.getElementById(
-      "ratio"
-    ).value;
-
-  const image =
-    document.getElementById(
-      "referenceImage"
-    ).files[0];
-
-  if (!prompt) {
-    status.textContent =
-      "❌ Please enter a video prompt.";
-
-    return;
-  }
-
-  const form =
-    new FormData();
-
-  form.append(
-    "prompt",
-    prompt
-  );
-
-  form.append(
-    "duration",
-    duration
-  );
-
-  form.append(
-    "ratio",
-    ratio
-  );
-
-  if (image) {
-    form.append(
-      "referenceImage",
-      image
-    );
-  }
-
-  button.disabled = true;
-
-  button.textContent =
-    "⏳ GENERATING...";
-
-  status.textContent =
-    "MAMAKI is generating your video...\n\nPlease wait. The first generation may take some time.";
-
-  videoBox.style.display =
-    "none";
-
-  try {
+  try{
 
     const response =
       await fetch(
-        "/api/generate",
+        "/api/status",
         {
-          method: "POST",
-          body: form
+          cache:"no-store"
         }
       );
 
-    const contentType =
-      response.headers.get(
-        "content-type"
-      ) || "";
-
-    /*
-     * This prevents the huge Render HTML
-     * error page from appearing to the user.
-     */
-
-    if (
-      !contentType.includes(
-        "application/json"
-      )
-    ) {
-
-      const text =
-        await response.text();
-
-      throw new Error(
-        "Server did not return JSON. HTTP " +
-        response.status +
-        ". Render may still be deploying or the service is unavailable."
-      );
-    }
-
     const data =
       await response.json();
 
-    if (
-      !response.ok ||
-      !data.ok
-    ) {
-
-      throw new Error(
-        data.error ||
-        "Video generation failed."
-      );
-    }
-
-    const videoUrl =
-      data.videoUrl;
-
-    if (!videoUrl) {
-      throw new Error(
-        "Server generated a response but did not provide a video URL."
-      );
-    }
-
-    /*
-     * Convert relative URL into absolute URL.
-     */
-
-    const absoluteUrl =
-      new URL(
-        videoUrl,
-        window.location.origin
-      ).href;
-
-    video.src =
-      absoluteUrl;
-
-    download.href =
-      absoluteUrl;
-
-    videoBox.style.display =
-      "block";
-
-    status.textContent =
-      "✅ MAMAKI video generated successfully!";
-
-    video.load();
-
-  } catch (error) {
-
-    console.error(
-      "MAMAKI FRONTEND ERROR:",
-      error
-    );
-
-    status.textContent =
-      "❌ Generation failed\n\n" +
-      error.message;
-
-  } finally {
-
-    button.disabled = false;
-
-    button.textContent =
-      "✨ GENERATE VIDEO";
-  }
-}
-
-/*
-=========================================================
-CHECK SERVER
-=========================================================
-*/
-
-async function checkServer() {
-
-  const status =
-    document.getElementById(
-      "status"
-    );
-
-  try {
-
-    const response =
-      await fetch(
-        "/api/status"
-      );
-
-    const data =
-      await response.json();
-
-    if (data.ok) {
+    if(data.replicate){
 
       status.textContent =
-        "🟢 MAMAKI server online.\n" +
-        "Replicate: " +
-        (data.replicate
-          ? "Connected"
-          : "Missing token") +
-        "\nFFmpeg: " +
-        (data.ffmpeg
-          ? "Available"
-          : "Missing");
+        "MAMAKI online • AI connected";
+
+    }else{
+
+      status.textContent =
+        "MAMAKI online • AI token missing";
+
     }
 
-  } catch {
+  }catch{
 
     status.textContent =
-      "🟠 MAMAKI is loading...";
+      "MAMAKI server unavailable";
+
   }
+
 }
 
 checkServer();
+
+/* =====================================================
+   FREE STUDIO
+===================================================== */
+
+function studioMessage(text){
+
+  const box =
+    document.getElementById(
+      "studioMessage"
+    );
+
+  box.className =
+    "message show success";
+
+  box.textContent =
+    text;
+
+}
+
+/*
+ * The following tools use the browser's file picker.
+ * They submit directly to the existing MAMAKI APIs.
+ */
+
+async function photoVideo(){
+
+  const input =
+    document.createElement("input");
+
+  input.type = "file";
+  input.multiple = true;
+  input.accept =
+    "image/jpeg,image/png,image/webp";
+
+  input.onchange =
+    async () => {
+
+      if(!input.files.length) return;
+
+      const form =
+        new FormData();
+
+      for(
+        const file of input.files
+      ){
+        form.append(
+          "images",
+          file
+        );
+      }
+
+      form.append(
+        "duration",
+        "3"
+      );
+
+      form.append(
+        "ratio",
+        "16:9"
+      );
+
+      studioMessage(
+        "Creating your photo video..."
+      );
+
+      try{
+
+        const response =
+          await fetch(
+            "/api/studio/photo-video",
+            {
+              method:"POST",
+              body:form
+            }
+          );
+
+        const data =
+          await response.json();
+
+        if(!response.ok || !data.ok){
+          throw new Error(
+            data.error ||
+            "Photo video failed."
+          );
+        }
+
+        window.open(
+          data.videoUrl,
+          "_blank"
+        );
+
+        studioMessage(
+          "✨ Photo video created successfully."
+        );
+
+      }catch(error){
+
+        studioMessage(
+          "❌ " + error.message
+        );
+
+      }
+
+    };
+
+  input.click();
+
+}
+
+async function trimmer(){
+
+  const input =
+    document.createElement("input");
+
+  input.type = "file";
+  input.accept =
+    "video/mp4,video/webm,video/quicktime";
+
+  input.onchange =
+    async () => {
+
+      if(!input.files.length) return;
+
+      const start =
+        prompt(
+          "Start time in seconds:",
+          "0"
+        );
+
+      const end =
+        prompt(
+          "End time in seconds:",
+          ""
+        );
+
+      const form =
+        new FormData();
+
+      form.append(
+        "video",
+        input.files[0]
+      );
+
+      form.append(
+        "start",
+        start || "0"
+      );
+
+      if(end){
+        form.append(
+          "end",
+          end
+        );
+      }
+
+      studioMessage(
+        "Trimming your video..."
+      );
+
+      try{
+
+        const response =
+          await fetch(
+            "/api/studio/trim",
+            {
+              method:"POST",
+              body:form
+            }
+          );
+
+        const data =
+          await response.json();
+
+        if(!response.ok || !data.ok){
+          throw new Error(
+            data.error ||
+            "Trim failed."
+          );
+        }
+
+        window.open(
+          data.videoUrl,
+          "_blank"
+        );
+
+        studioMessage(
+          "✂️ Video trimmed successfully."
+        );
+
+      }catch(error){
+
+        studioMessage(
+          "❌ " + error.message
+        );
+
+      }
+
+    };
+
+  input.click();
+
+}
+
+async function combine(){
+
+  const input =
+    document.createElement("input");
+
+  input.type = "file";
+  input.multiple = true;
+  input.accept =
+    "video/mp4,video/webm,video/quicktime";
+
+  input.onchange =
+    async () => {
+
+      if(input.files.length < 2){
+        studioMessage(
+          "Select at least two videos."
+        );
+        return;
+      }
+
+      const form =
+        new FormData();
+
+      for(
+        const file of input.files
+      ){
+        form.append(
+          "videos",
+          file
+        );
+      }
+
+      studioMessage(
+        "Combining your video clips..."
+      );
+
+      try{
+
+        const response =
+          await fetch(
+            "/api/studio/combine",
+            {
+              method:"POST",
+              body:form
+            }
+          );
+
+        const data =
+          await response.json();
+
+        if(!response.ok || !data.ok){
+          throw new Error(
+            data.error ||
+            "Combine failed."
+          );
+        }
+
+        window.open(
+          data.videoUrl,
+          "_blank"
+        );
+
+        studioMessage(
+          "🎞️ Clips combined successfully."
+        );
+
+      }catch(error){
+
+        studioMessage(
+          "❌ " + error.message
+        );
+
+      }
+
+    };
+
+  input.click();
+
+}
+
+function audioTool(){
+
+  studioMessage(
+    "Audio mixing is available through the MAMAKI studio backend. Select a video with the trimmer/audio workflow."
+  );
+
+}
 
 </script>
 
