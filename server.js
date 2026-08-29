@@ -1,79 +1,85 @@
 import express from "express";
 import multer from "multer";
 import Replicate from "replicate";
+import { EdgeTTS } from "edge-tts-universal";
 import ffmpegPath from "ffmpeg-static";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 
 const app = express();
 
 const PORT = Number(process.env.PORT || 10000);
-const ROOT = process.cwd();
+
+/*
+ * IMPORTANT:
+ * Use the actual directory where server.js is located.
+ * This is safer on Render than relying on process.cwd().
+ */
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
 
 const REPLICATE_API_TOKEN =
   String(process.env.REPLICATE_API_TOKEN || "").trim();
 
 const replicate = REPLICATE_API_TOKEN
-  ? new Replicate({
-      auth: REPLICATE_API_TOKEN
-    })
+  ? new Replicate({ auth: REPLICATE_API_TOKEN })
   : null;
 
 /*
-=========================================================
-MAMAKI AI VIDEO
-FINAL SERVER
-=========================================================
+ * ==========================================
+ * MAMAKI AI VIDEO VERSION 10.0
+ * ==========================================
+ *
+ * TEXT → VIDEO
+ * IMAGE → VIDEO
+ *
+ * FREE STUDIO
+ * PHOTO → VIDEO + MUSIC
+ * VIDEO TRIMMER
+ * COMBINE VIDEOS
+ * MUTE VIDEO
+ * ADD MUSIC
+ *
+ * AI TOOLS
+ * PROMPT ENHANCER
+ * STYLE PRESETS
+ * AI NARRATION
+ *
+ * PROJECTS
+ * GENERATION JOBS
+ * VIDEO LIBRARY
+ *
+ * WATERMARK MAMAKI - REQUIRED
+ *
+ * LONG DURATION
+ * 5 seconds → 2 hours
+ */
 
-KEEPING WORKING:
-- WAN 2.2 Text → Video
-- WAN 2.2 Image → Video
-- 16:9
-- 9:16
-- 1:1
-- 5 seconds → 2 hours
-- Projects
-- Free Studio
-- Photo → Video
-- Photo → Video + Music
-- Video Trimmer
-- Combine Videos
-- Mute Video
-- Add Music
-- MAMAKI watermark
-- Health/status APIs
-=========================================================
-*/
+/*
+ * MODELS
+ */
 
-const T2V_MODEL =
-  "wan-video/wan-2.2-t2v-fast";
+const T2V_MODEL = "wan-video/wan-2.2-t2v-fast";
+const I2V_MODEL = "wan-video/wan-2.2-i2v-fast";
 
-const I2V_MODEL =
-  "wan-video/wan-2.2-i2v-fast";
+/*
+ * DIRECTORIES
+ */
 
-const TMP =
-  path.join(ROOT, "tmp");
-
-const OUTPUT =
-  path.join(ROOT, "outputs");
-
-const PROJECTS =
-  path.join(ROOT, "projects");
-
-const INDEX =
-  path.join(ROOT, "index.html");
+const TMP = path.join(ROOT, "tmp");
+const OUTPUT = path.join(ROOT, "outputs");
+const PROJECTS = path.join(ROOT, "projects");
+const INDEX = path.join(ROOT, "index.html");
 
 await fs.mkdir(TMP, { recursive: true });
 await fs.mkdir(OUTPUT, { recursive: true });
 await fs.mkdir(PROJECTS, { recursive: true });
 
 /*
-=========================================================
-EXPRESS
-=========================================================
-*/
+ * BODY
+ */
 
 app.use(
   express.json({
@@ -89,27 +95,14 @@ app.use(
 );
 
 /*
-=========================================================
-FRONTEND
-IMPORTANT: ROOT ROUTE BEFORE STATIC
-=========================================================
-*/
+ * FRONTEND
+ *
+ * IMPORTANT:
+ * ROOT is now based on server.js location.
+ */
 
-app.get("/", async (req, res) => {
-  try {
-    await fs.access(INDEX);
-
-    return res.sendFile(
-      INDEX,
-      {
-        root: ROOT
-      }
-    );
-  } catch {
-    return res.status(404).send(
-      "MAMAKI index.html is missing."
-    );
-  }
+app.get("/", (req, res) => {
+  res.sendFile(INDEX);
 });
 
 app.use(
@@ -119,114 +112,71 @@ app.use(
 );
 
 /*
-=========================================================
-UPLOAD
-=========================================================
-*/
+ * UPLOAD
+ */
 
-const upload =
-  multer({
-    storage:
-      multer.memoryStorage(),
-
-    limits: {
-      fileSize:
-        500 * 1024 * 1024,
-
-      files: 50
-    }
-  });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 500 * 1024 * 1024,
+    files: 50
+  }
+});
 
 /*
-=========================================================
-HELPERS
-=========================================================
-*/
+ * JOBS
+ */
 
-function safeNumber(
-  value,
-  fallback = 0
-) {
-  const n =
-    Number(value);
+const jobs = new Map();
 
-  return Number.isFinite(n)
-    ? n
-    : fallback;
+/*
+ * HELPERS
+ */
+
+function safeNumber(value, fallback = 0) {
+  const n = Number(value);
+
+  return Number.isFinite(n) ? n : fallback;
 }
 
-function clamp(
-  value,
-  min,
-  max
-) {
-  return Math.min(
-    max,
-    Math.max(
-      min,
-      value
-    )
-  );
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
-function normalizeRatio(
-  value
-) {
-  if (
-    value === "9:16"
-  ) {
+function normalizeRatio(value) {
+  if (value === "9:16") {
     return "9:16";
   }
 
-  if (
-    value === "1:1"
-  ) {
+  if (value === "1:1") {
     return "1:1";
   }
 
   return "16:9";
 }
 
-/*
-  5 seconds → 2 hours
-*/
-
-function normalizeDuration(
-  value
-) {
-  const seconds =
-    Math.round(
-      safeNumber(
-        value,
-        5
-      )
-    );
-
+function normalizeDuration(value) {
   return clamp(
-    seconds,
+    Math.round(
+      safeNumber(value, 5)
+    ),
     5,
     7200
   );
 }
 
-function isImage(
-  file
-) {
+function isImage(file) {
   return (
     !!file &&
     [
       "image/jpeg",
       "image/png",
       "image/webp"
-    ].includes(
-      file.mimetype
-    )
+    ].includes(file.mimetype)
   );
 }
 
-function isVideo(
-  file
-) {
+function isVideo(file) {
   return (
     !!file &&
     [
@@ -234,15 +184,11 @@ function isVideo(
       "video/webm",
       "video/quicktime",
       "video/x-matroska"
-    ].includes(
-      file.mimetype
-    )
+    ].includes(file.mimetype)
   );
 }
 
-function isAudio(
-  file
-) {
+function isAudio(file) {
   return (
     !!file &&
     [
@@ -254,82 +200,132 @@ function isAudio(
       "audio/aac",
       "audio/ogg",
       "audio/webm"
-    ].includes(
-      file.mimetype
-    )
+    ].includes(file.mimetype)
   );
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /*
-=========================================================
-REPLICATE OUTPUT
-=========================================================
-*/
+ * PROMPT ENHANCER
+ */
 
-async function downloadUrl(
-  url
+function enhancePrompt(
+  prompt,
+  style = "Cinematic"
 ) {
-  const response =
-    await fetch(url);
+  const clean = String(prompt || "").trim();
 
-  if (!response.ok) {
-    throw new Error(
-      `Video download failed: HTTP ${response.status}`
-    );
+  if (!clean) {
+    return "";
   }
 
-  return Buffer.from(
-    await response.arrayBuffer()
-  );
+  const styleMap = {
+    Cinematic:
+      "cinematic filmmaking, professional camera movement, realistic lighting, natural motion, detailed environment, depth of field, high visual quality",
+
+    Realistic:
+      "photorealistic, physically accurate movement, natural lighting, realistic textures, realistic human motion",
+
+    Documentary:
+      "documentary filmmaking style, authentic environment, natural camera movement, realistic lighting, observational cinematography",
+
+    Commercial:
+      "premium commercial advertisement, polished cinematography, studio-quality lighting, elegant camera movement, highly detailed product presentation",
+
+    "3D Animation":
+      "high-quality 3D animation, detailed models, smooth animation, cinematic lighting, polished rendering",
+
+    Anime:
+      "high-quality anime visual style, expressive characters, dynamic camera movement, detailed anime environment",
+
+    Fantasy:
+      "cinematic fantasy world, magical atmosphere, dramatic lighting, detailed environment, epic visual composition",
+
+    "Sci-Fi":
+      "cinematic science-fiction environment, futuristic technology, atmospheric lighting, detailed production design",
+
+    Horror:
+      "cinematic horror atmosphere, dramatic shadows, suspenseful camera movement, realistic environment",
+
+    Cartoon:
+      "high-quality animated cartoon style, expressive movement, colorful environment, smooth animation"
+  };
+
+  return `${clean}. ${
+    styleMap[style] || styleMap.Cinematic
+  }. Smooth coherent motion, consistent subjects, professional composition.`;
 }
 
-async function replicateOutputToBuffer(
-  output
-) {
+/*
+ * REPLICATE OUTPUT
+ */
+
+async function replicateOutputToBuffer(output) {
   if (!output) {
     throw new Error(
       "MAMAKI did not receive a video file."
     );
   }
 
-  if (
-    Buffer.isBuffer(output)
-  ) {
+  if (Buffer.isBuffer(output)) {
     return output;
   }
 
-  if (
-    output instanceof Uint8Array
-  ) {
+  if (output instanceof Uint8Array) {
     return Buffer.from(output);
   }
 
   if (
-    typeof output.url === "function"
+    typeof output === "string" &&
+    /^https?:\/\//i.test(output)
   ) {
-    const url =
-      output.url();
+    const response = await fetch(output);
 
-    if (!url) {
+    if (!response.ok) {
       throw new Error(
-        "MAMAKI received an empty video URL."
+        `Video download failed: HTTP ${response.status}`
       );
     }
 
-    return downloadUrl(url);
-  }
-
-  if (
-    typeof output.url === "string"
-  ) {
-    return downloadUrl(
-      output.url
+    return Buffer.from(
+      await response.arrayBuffer()
     );
   }
 
-  if (
-    Array.isArray(output)
-  ) {
+  if (typeof output.url === "function") {
+    const url = await output.url();
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(
+        `Video download failed: HTTP ${response.status}`
+      );
+    }
+
+    return Buffer.from(
+      await response.arrayBuffer()
+    );
+  }
+
+  if (typeof output.url === "string") {
+    const response = await fetch(output.url);
+
+    if (!response.ok) {
+      throw new Error(
+        `Video download failed: HTTP ${response.status}`
+      );
+    }
+
+    return Buffer.from(
+      await response.arrayBuffer()
+    );
+  }
+
+  if (Array.isArray(output)) {
     if (!output.length) {
       throw new Error(
         "MAMAKI did not receive a video file."
@@ -342,49 +338,42 @@ async function replicateOutputToBuffer(
   }
 
   if (
-    typeof output === "string" &&
-    (
-      output.startsWith("http://") ||
-      output.startsWith("https://")
-    )
+    output &&
+    typeof output.getReader === "function"
   ) {
-    return downloadUrl(
-      output
-    );
-  }
+    const reader = output.getReader();
+    const chunks = [];
 
-  if (
-    typeof output === "object"
-  ) {
-    const possible =
-      output.video ||
-      output.file ||
-      output.output;
+    while (true) {
+      const {
+        done,
+        value
+      } = await reader.read();
 
-    if (
-      possible &&
-      possible !== output
-    ) {
-      return replicateOutputToBuffer(
-        possible
-      );
+      if (done) {
+        break;
+      }
+
+      if (value) {
+        chunks.push(
+          Buffer.from(value)
+        );
+      }
     }
+
+    return Buffer.concat(chunks);
   }
 
   throw new Error(
-    "MAMAKI did not receive a video file."
+    "MAMAKI did not receive a usable video file."
   );
 }
 
 /*
-=========================================================
-FFMPEG
-=========================================================
-*/
+ * FFMPEG
+ */
 
-function runFFmpeg(
-  args
-) {
+function runFFmpeg(args) {
   return new Promise(
     (resolve, reject) => {
       if (!ffmpegPath) {
@@ -397,19 +386,17 @@ function runFFmpeg(
         return;
       }
 
-      const child =
-        spawn(
-          ffmpegPath,
-          args
-        );
+      const child = spawn(
+        ffmpegPath,
+        args
+      );
 
       let stderr = "";
 
       child.stderr.on(
         "data",
-        data => {
-          stderr +=
-            data.toString();
+        (data) => {
+          stderr += data.toString();
         }
       );
 
@@ -420,10 +407,8 @@ function runFFmpeg(
 
       child.on(
         "close",
-        code => {
-          if (
-            code === 0
-          ) {
+        (code) => {
+          if (code === 0) {
             resolve();
           } else {
             reject(
@@ -439,62 +424,27 @@ function runFFmpeg(
 }
 
 /*
-=========================================================
-FIND FONT
-=========================================================
-*/
+ * WATERMARK
+ */
 
-async function findFont() {
-  const fonts = [
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
-    "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"
-  ];
-
-  for (
-    const font of fonts
-  ) {
-    try {
-      await fs.access(font);
-      return font;
-    } catch {}
-  }
-
-  return null;
-}
-
-/*
-=========================================================
-MAMAKI WATERMARK
-=========================================================
-*/
-
-async function addWatermark(
+async function addMamakiWatermark(
   input,
   output
 ) {
-  const font =
-    await findFont();
-
-  let filter;
-
-  if (font) {
-    filter =
-      `drawtext=fontfile='${font}':text='MAMAKI':fontcolor=white:fontsize=30:borderw=3:bordercolor=black@0.75:x=w-tw-28:y=h-th-28`;
-  } else {
-    filter =
-      "drawtext=text='MAMAKI':fontcolor=white:fontsize=30:borderw=3:bordercolor=black@0.75:x=w-tw-28:y=h-th-28";
-  }
+  /*
+   * Watermark is mandatory.
+   *
+   * Do NOT silently copy the original
+   * if watermarking fails.
+   */
 
   await runFFmpeg([
     "-y",
-
     "-i",
     input,
 
     "-vf",
-    filter,
+    "drawtext=text='MAMAKI':font='DejaVu Sans':fontcolor=white@0.92:fontsize=30:borderw=3:bordercolor=black@0.75:box=1:boxcolor=black@0.28:boxborderw=10:x=w-tw-28:y=h-th-28",
 
     "-c:v",
     "libx264",
@@ -514,12 +464,11 @@ async function addWatermark(
     output
   ]);
 
-  const stats =
-    await fs.stat(output);
+  const stats = await fs.stat(output);
 
   if (!stats.size) {
     throw new Error(
-      "MAMAKI watermark output is empty."
+      "MAMAKI watermark process created an empty file."
     );
   }
 
@@ -527,11 +476,8 @@ async function addWatermark(
 }
 
 /*
-=========================================================
-WAN TEXT → VIDEO
-KEEPING WORKING INPUT
-=========================================================
-*/
+ * TEXT → VIDEO
+ */
 
 async function generateTextVideo(
   prompt,
@@ -544,35 +490,26 @@ async function generateTextVideo(
   }
 
   const input = {
-    prompt:
-      String(prompt).trim(),
+    prompt: String(prompt).trim(),
 
-    go_fast:
-      true,
+    go_fast: true,
 
-    num_frames:
-      81,
+    num_frames: 81,
 
-    resolution:
-      "480p",
+    resolution: "480p",
 
     aspect_ratio:
       normalizeRatio(ratio),
 
-    sample_shift:
-      12,
+    sample_shift: 12,
 
-    frames_per_second:
-      16,
+    frames_per_second: 16,
 
-    interpolate_output:
-      false,
+    interpolate_output: false,
 
-    lora_scale_transformer:
-      1,
+    lora_scale_transformer: 1,
 
-    lora_scale_transformer_2:
-      1
+    lora_scale_transformer_2: 1
   };
 
   console.log(
@@ -580,16 +517,11 @@ async function generateTextVideo(
     JSON.stringify(input)
   );
 
-  const output =
-    await replicate.run(
-      T2V_MODEL,
-      {
-        input
-      }
-    );
-
-  console.log(
-    "MAMAKI T2V OUTPUT RECEIVED"
+  const output = await replicate.run(
+    T2V_MODEL,
+    {
+      input
+    }
   );
 
   return replicateOutputToBuffer(
@@ -598,11 +530,8 @@ async function generateTextVideo(
 }
 
 /*
-=========================================================
-WAN IMAGE → VIDEO
-KEEPING WORKING INPUT
-=========================================================
-*/
+ * IMAGE → VIDEO
+ */
 
 async function generateImageVideo(
   prompt,
@@ -621,64 +550,42 @@ async function generateImageVideo(
   }
 
   const input = {
-    image:
-      image.buffer,
+    image: image.buffer,
 
-    prompt:
-      String(prompt).trim(),
+    prompt: String(prompt).trim(),
 
-    go_fast:
-      true,
+    go_fast: true,
 
-    num_frames:
-      81,
+    num_frames: 81,
 
-    resolution:
-      "480p",
+    resolution: "480p",
 
-    sample_shift:
-      12,
+    sample_shift: 12,
 
-    frames_per_second:
-      16,
+    frames_per_second: 16,
 
-    interpolate_output:
-      false,
+    interpolate_output: false,
 
-    lora_scale_transformer:
-      1,
+    lora_scale_transformer: 1,
 
-    lora_scale_transformer_2:
-      1
+    lora_scale_transformer_2: 1
   };
 
   console.log(
     "MAMAKI I2V INPUT:",
     {
-      prompt:
-        input.prompt,
-
-      filename:
-        image.originalname,
-
-      type:
-        image.mimetype,
-
-      size:
-        image.size
+      prompt: input.prompt,
+      filename: image.originalname,
+      type: image.mimetype,
+      size: image.size
     }
   );
 
-  const output =
-    await replicate.run(
-      I2V_MODEL,
-      {
-        input
-      }
-    );
-
-  console.log(
-    "MAMAKI I2V OUTPUT RECEIVED"
+  const output = await replicate.run(
+    I2V_MODEL,
+    {
+      input
+    }
   );
 
   return replicateOutputToBuffer(
@@ -687,37 +594,29 @@ async function generateImageVideo(
 }
 
 /*
-=========================================================
-PROMPT / SCENES
-=========================================================
-*/
+ * SCENES
+ */
 
 function splitScenes(
   prompt,
-  duration
+  seconds
 ) {
-  const text =
-    String(prompt || "")
-      .trim();
+  const clean =
+    String(prompt || "").trim();
 
-  if (!text) {
-    return [];
-  }
+  const count = Math.max(
+    1,
+    Math.ceil(seconds / 5)
+  );
 
-  const count =
-    Math.ceil(
-      duration / 5
-    );
-
-  const sentences =
-    text
-      .split(
-        /(?<=[.!?])\s+/
-      )
-      .map(
-        x => x.trim()
-      )
-      .filter(Boolean);
+  const sentences = clean
+    .split(
+      /(?<=[.!?])\s+/
+    )
+    .map(
+      (x) => x.trim()
+    )
+    .filter(Boolean);
 
   const scenes = [];
 
@@ -731,10 +630,10 @@ function splitScenes(
         ? sentences[
             i % sentences.length
           ]
-        : text;
+        : clean;
 
     scenes.push(
-      `${base}. Cinematic professional filmmaking, realistic natural movement, smooth camera motion, detailed environment, consistent lighting, high quality.`
+      `${base}. Cinematic continuation, coherent subject, smooth natural movement, consistent lighting, professional camera motion.`
     );
   }
 
@@ -742,10 +641,8 @@ function splitScenes(
 }
 
 /*
-=========================================================
-COMBINE VIDEOS
-=========================================================
-*/
+ * COMBINE
+ */
 
 async function combineVideos(
   files,
@@ -757,22 +654,29 @@ async function combineVideos(
     );
   }
 
-  const list =
-    path.join(
-      TMP,
-      `concat-${randomUUID()}.txt`
+  if (files.length === 1) {
+    await fs.copyFile(
+      files[0],
+      output
     );
 
-  const content =
-    files
-      .map(
-        file =>
-          `file '${file.replace(
-            /'/g,
-            "'\\''"
-          )}'`
-      )
-      .join("\n");
+    return output;
+  }
+
+  const list = path.join(
+    TMP,
+    `concat-${randomUUID()}.txt`
+  );
+
+  const content = files
+    .map(
+      (file) =>
+        `file '${file.replace(
+          /'/g,
+          "'\\''"
+        )}'`
+    )
+    .join("\n");
 
   await fs.writeFile(
     list,
@@ -823,15 +727,12 @@ async function combineVideos(
 }
 
 /*
-=========================================================
-PHOTO → VIDEO
-WITH MUSIC SUPPORT
-=========================================================
-*/
+ * PHOTO → VIDEO WITH MUSIC
+ */
 
 async function createPhotoVideo(
   images,
-  secondsPerImage,
+  seconds,
   output,
   ratio,
   music
@@ -842,11 +743,10 @@ async function createPhotoVideo(
     );
   }
 
-  const job =
-    path.join(
-      TMP,
-      `photos-${randomUUID()}`
-    );
+  const job = path.join(
+    TMP,
+    `photos-${randomUUID()}`
+  );
 
   await fs.mkdir(
     job,
@@ -858,32 +758,37 @@ async function createPhotoVideo(
   const clips = [];
 
   try {
-    let size =
-      "1280:720";
+    let size = "1280:720";
 
     if (
       normalizeRatio(ratio) ===
       "9:16"
     ) {
-      size =
-        "720:1280";
+      size = "720:1280";
     }
 
     if (
       normalizeRatio(ratio) ===
       "1:1"
     ) {
-      size =
-        "1080:1080";
+      size = "1080:1080";
     }
+
+    const perImage = clamp(
+      safeNumber(
+        seconds,
+        3
+      ),
+      1,
+      60
+    );
 
     for (
       let i = 0;
       i < images.length;
       i++
     ) {
-      const image =
-        images[i];
+      const image = images[i];
 
       if (!isImage(image)) {
         throw new Error(
@@ -918,16 +823,7 @@ async function createPhotoVideo(
         imageFile,
 
         "-t",
-        String(
-          clamp(
-            safeNumber(
-              secondsPerImage,
-              3
-            ),
-            1,
-            60
-          )
-        ),
+        String(perImage),
 
         "-vf",
         `scale=${size}:force_original_aspect_ratio=decrease,pad=${size}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`,
@@ -954,16 +850,20 @@ async function createPhotoVideo(
       );
     }
 
-    const combined =
+    const raw =
       path.join(
         job,
-        "combined.mp4"
+        "photos.mp4"
       );
 
     await combineVideos(
       clips,
-      combined
+      raw
     );
+
+    /*
+     * Optional music.
+     */
 
     if (
       music &&
@@ -975,10 +875,10 @@ async function createPhotoVideo(
           "music"
         );
 
-      const musicVideo =
+      const mixed =
         path.join(
           job,
-          "music-video.mp4"
+          "photos-music.mp4"
         );
 
       await fs.writeFile(
@@ -990,7 +890,7 @@ async function createPhotoVideo(
         "-y",
 
         "-i",
-        combined,
+        raw,
 
         "-stream_loop",
         "-1",
@@ -999,16 +899,22 @@ async function createPhotoVideo(
         musicFile,
 
         "-filter_complex",
-        "[1:a]volume=0.35[music]",
+        "[1:a]volume=0.55[music]",
 
         "-map",
-        "0:v",
+        "0:v:0",
 
         "-map",
         "[music]",
 
         "-c:v",
-        "copy",
+        "libx264",
+
+        "-preset",
+        "veryfast",
+
+        "-crf",
+        "23",
 
         "-c:a",
         "aac",
@@ -1018,21 +924,13 @@ async function createPhotoVideo(
         "-movflags",
         "+faststart",
 
-        musicVideo
+        mixed
       ]);
 
-      await fs.copyFile(
-        musicVideo,
-        output
-      );
-    } else {
-      await fs.copyFile(
-        combined,
-        output
-      );
+      return mixed;
     }
 
-    return output;
+    return raw;
   } finally {
     await fs.rm(
       job,
@@ -1045,10 +943,8 @@ async function createPhotoVideo(
 }
 
 /*
-=========================================================
-TRIM
-=========================================================
-*/
+ * TRIM
+ */
 
 async function trimVideo(
   input,
@@ -1059,17 +955,11 @@ async function trimVideo(
   const startTime =
     Math.max(
       0,
-      safeNumber(
-        start,
-        0
-      )
+      safeNumber(start, 0)
     );
 
   const endTime =
-    safeNumber(
-      end,
-      NaN
-    );
+    safeNumber(end, NaN);
 
   const args = [
     "-y",
@@ -1088,8 +978,7 @@ async function trimVideo(
     args.push(
       "-t",
       String(
-        endTime -
-        startTime
+        endTime - startTime
       )
     );
   }
@@ -1113,18 +1002,14 @@ async function trimVideo(
     output
   );
 
-  await runFFmpeg(
-    args
-  );
+  await runFFmpeg(args);
 
   return output;
 }
 
 /*
-=========================================================
-MUTE
-=========================================================
-*/
+ * MUTE
+ */
 
 async function muteVideo(
   input,
@@ -1148,37 +1033,23 @@ async function muteVideo(
 }
 
 /*
-=========================================================
-ADD MUSIC TO EXISTING VIDEO
-=========================================================
-*/
+ * ADD MUSIC TO EXISTING VIDEO
+ */
 
-async function mixMusic(
+async function addMusicToVideo(
   video,
   music,
   output,
-  musicVolume = 0.3,
-  originalVolume = 1
+  volume = 0.5
 ) {
-  const mv =
-    clamp(
-      safeNumber(
-        musicVolume,
-        0.3
-      ),
-      0,
-      2
-    );
-
-  const ov =
-    clamp(
-      safeNumber(
-        originalVolume,
-        1
-      ),
-      0,
-      2
-    );
+  const v = clamp(
+    safeNumber(
+      volume,
+      0.5
+    ),
+    0,
+    2
+  );
 
   await runFFmpeg([
     "-y",
@@ -1193,13 +1064,13 @@ async function mixMusic(
     music,
 
     "-filter_complex",
-    `[0:a]volume=${ov}[a0];[1:a]volume=${mv}[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[a]`,
+    `[1:a]volume=${v}[music]`,
 
     "-map",
-    "0:v",
+    "0:v:0",
 
     "-map",
-    "[a]",
+    "[music]",
 
     "-c:v",
     "libx264",
@@ -1225,64 +1096,89 @@ async function mixMusic(
 }
 
 /*
-=========================================================
-SAVE PROJECT
-=========================================================
-*/
+ * NARRATION
+ */
 
-app.post(
-  "/api/projects/save",
-  async (req, res) => {
-    try {
-      const project =
-        req.body || {};
+async function createNarration(
+  text,
+  output,
+  voice
+) {
+  const clean =
+    String(text || "").trim();
 
-      const id =
-        project.id ||
-        randomUUID();
-
-      const file =
-        path.join(
-          PROJECTS,
-          `${id}.json`
-        );
-
-      await fs.writeFile(
-        file,
-        JSON.stringify(
-          {
-            ...project,
-
-            id,
-
-            updatedAt:
-              new Date().toISOString()
-          },
-          null,
-          2
-        ),
-        "utf8"
-      );
-
-      res.json({
-        ok: true,
-        projectId: id
-      });
-    } catch (error) {
-      res.status(500).json({
-        ok: false,
-        error:
-          error.message
-      });
-    }
+  if (!clean) {
+    throw new Error(
+      "Narration text is empty."
+    );
   }
-);
+
+  const selectedVoice =
+    voice ||
+    "en-US-EmmaMultilingualNeural";
+
+  const tts =
+    new EdgeTTS(
+      clean,
+      selectedVoice
+    );
+
+  const result =
+    await tts.synthesize();
+
+  const buffer =
+    Buffer.from(
+      await result.audio.arrayBuffer()
+    );
+
+  await fs.writeFile(
+    output,
+    buffer
+  );
+
+  return output;
+}
 
 /*
-=========================================================
-LIST PROJECTS
-=========================================================
-*/
+ * SAVE PROJECT
+ */
+
+async function saveProject(
+  project
+) {
+  const id =
+    project.id ||
+    randomUUID();
+
+  const file =
+    path.join(
+      PROJECTS,
+      `${id}.json`
+    );
+
+  const data = {
+    ...project,
+    id,
+    updatedAt:
+      new Date().toISOString()
+  };
+
+  await fs.writeFile(
+    file,
+    JSON.stringify(
+      data,
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  return data;
+}
+
+/*
+ * LIST PROJECTS
+ */
 
 app.get(
   "/api/projects",
@@ -1299,13 +1195,15 @@ app.get(
         const filename of files
       ) {
         if (
-          !filename.endsWith(".json")
+          !filename.endsWith(
+            ".json"
+          )
         ) {
           continue;
         }
 
         try {
-          const content =
+          const text =
             await fs.readFile(
               path.join(
                 PROJECTS,
@@ -1315,7 +1213,7 @@ app.get(
             );
 
           projects.push(
-            JSON.parse(content)
+            JSON.parse(text)
           );
         } catch {}
       }
@@ -1346,30 +1244,325 @@ app.get(
 );
 
 /*
-=========================================================
-MAIN AI GENERATOR
-=========================================================
-*/
+ * SAVE PROJECT API
+ */
+
+app.post(
+  "/api/projects/save",
+  async (req, res) => {
+    try {
+      const project =
+        await saveProject(
+          req.body || {}
+        );
+
+      res.json({
+        ok: true,
+        project
+      });
+    } catch (error) {
+      res.status(500).json({
+        ok: false,
+        error:
+          error.message
+      });
+    }
+  }
+);
+
+/*
+ * ASYNC AI GENERATION
+ */
+
+async function processGenerationJob(
+  jobId,
+  options
+) {
+  const job =
+    jobs.get(jobId);
+
+  if (!job) {
+    return;
+  }
+
+  let jobDir = null;
+
+  try {
+    job.status =
+      "processing";
+
+    job.message =
+      "Preparing your AI video...";
+
+    const {
+      prompt,
+      duration,
+      ratio,
+      image,
+      style
+    } = options;
+
+    const enhanced =
+      enhancePrompt(
+        prompt,
+        style
+      );
+
+    const sceneCount =
+      Math.ceil(
+        duration / 5
+      );
+
+    const scenes =
+      splitScenes(
+        enhanced,
+        duration
+      );
+
+    job.total =
+      sceneCount;
+
+    job.current = 0;
+
+    job.message =
+      `Generating scene 1 of ${sceneCount}...`;
+
+    jobDir =
+      path.join(
+        TMP,
+        jobId
+      );
+
+    await fs.mkdir(
+      jobDir,
+      {
+        recursive: true
+      }
+    );
+
+    const clips = [];
+
+    for (
+      let i = 0;
+      i < sceneCount;
+      i++
+    ) {
+      job.current =
+        i + 1;
+
+      job.message =
+        `Generating scene ${i + 1} of ${sceneCount}...`;
+
+      console.log(
+        `MAMAKI: scene ${i + 1}/${sceneCount}`
+      );
+
+      const scenePrompt =
+        scenes[i] ||
+        `${enhanced}. Cinematic continuation.`;
+
+      let videoBuffer;
+
+      if (
+        image &&
+        i === 0
+      ) {
+        videoBuffer =
+          await generateImageVideo(
+            scenePrompt,
+            image
+          );
+      } else {
+        videoBuffer =
+          await generateTextVideo(
+            scenePrompt,
+            ratio
+          );
+      }
+
+      if (
+        !videoBuffer ||
+        !videoBuffer.length
+      ) {
+        throw new Error(
+          "MAMAKI did not receive a video file."
+        );
+      }
+
+      const clip =
+        path.join(
+          jobDir,
+          `scene-${i}.mp4`
+        );
+
+      await fs.writeFile(
+        clip,
+        videoBuffer
+      );
+
+      clips.push(
+        clip
+      );
+    }
+
+    job.message =
+      "Combining scenes...";
+
+    const combined =
+      path.join(
+        jobDir,
+        "combined.mp4"
+      );
+
+    await combineVideos(
+      clips,
+      combined
+    );
+
+    job.message =
+      "Applying MAMAKI watermark...";
+
+    const finalName =
+      `mamaki-${Date.now()}-${randomUUID()}.mp4`;
+
+    const final =
+      path.join(
+        OUTPUT,
+        finalName
+      );
+
+    /*
+     * This MUST succeed.
+     * We no longer silently remove
+     * the watermark if FFmpeg fails.
+     */
+
+    await addMamakiWatermark(
+      combined,
+      final
+    );
+
+    const stats =
+      await fs.stat(
+        final
+      );
+
+    if (!stats.size) {
+      throw new Error(
+        "Final MAMAKI video is empty."
+      );
+    }
+
+    const project =
+      await saveProject({
+        name:
+          prompt.slice(
+            0,
+            60
+          ) ||
+          "Untitled Project",
+
+        type:
+          image
+            ? "Image to Video"
+            : "Text to Video",
+
+        prompt,
+
+        enhancedPrompt:
+          enhanced,
+
+        duration,
+
+        ratio,
+
+        style,
+
+        videoUrl:
+          `/api/video/${encodeURIComponent(
+            finalName
+          )}`,
+
+        file:
+          finalName,
+
+        watermark:
+          "MAMAKI",
+
+        createdAt:
+          new Date().toISOString()
+      });
+
+    job.status =
+      "completed";
+
+    job.progress = 100;
+
+    job.current =
+      sceneCount;
+
+    job.videoUrl =
+      project.videoUrl;
+
+    job.projectId =
+      project.id;
+
+    job.message =
+      "MAMAKI video generated successfully.";
+
+    console.log(
+      "MAMAKI COMPLETE:",
+      final
+    );
+  } catch (error) {
+    console.error(
+      "MAMAKI GENERATION ERROR:",
+      error?.stack ||
+        error?.message ||
+        error
+    );
+
+    job.status =
+      "failed";
+
+    job.message =
+      error?.message ||
+      "Video generation failed.";
+  } finally {
+    if (jobDir) {
+      await fs.rm(
+        jobDir,
+        {
+          recursive: true,
+          force: true
+        }
+      ).catch(() => {});
+    }
+  }
+}
+
+/*
+ * GENERATE ENDPOINT
+ */
 
 app.post(
   "/api/generate",
 
   upload.fields([
     {
-      name:
-        "referenceImage",
+      name: "referenceImage",
       maxCount: 1
     }
   ]),
 
   async (req, res) => {
-    let jobDir = null;
-
     try {
       if (!replicate) {
-        throw new Error(
-          "REPLICATE_API_TOKEN is missing."
-        );
+        return res.status(500).json({
+          ok: false,
+          error:
+            "REPLICATE_API_TOKEN is missing."
+        });
       }
 
       const prompt =
@@ -1378,9 +1571,11 @@ app.post(
         ).trim();
 
       if (!prompt) {
-        throw new Error(
-          "Enter a video prompt."
-        );
+        return res.status(400).json({
+          ok: false,
+          error:
+            "Enter a video prompt."
+        });
       }
 
       const duration =
@@ -1391,7 +1586,13 @@ app.post(
       const ratio =
         normalizeRatio(
           req.body.ratio ||
-          req.body.aspectRatio
+            req.body.aspectRatio
+        );
+
+      const style =
+        String(
+          req.body.style ||
+            "Cinematic"
         );
 
       const image =
@@ -1400,349 +1601,188 @@ app.post(
           ?.[0] ||
         null;
 
-      jobDir =
-        path.join(
-          TMP,
-          randomUUID()
-        );
-
-      await fs.mkdir(
-        jobDir,
-        {
-          recursive: true
-        }
-      );
-
-      const sceneCount =
-        Math.ceil(
-          duration / 5
-        );
-
-      const scenes =
-        splitScenes(
-          prompt,
-          duration
-        );
-
-      const clips = [];
-
-      for (
-        let i = 0;
-        i < sceneCount;
-        i++
-      ) {
-        console.log(
-          `MAMAKI: generating scene ${i + 1}/${sceneCount}`
-        );
-
-        const scenePrompt =
-          scenes[i] ||
-          `${prompt}. Cinematic continuation.`;
-
-        let videoBuffer;
-
-        /*
-         * IMPORTANT:
-         * Image is only used for the
-         * first scene.
-         *
-         * This keeps the existing
-         * working I2V behavior.
-         */
-
-        if (
-          image &&
-          i === 0
-        ) {
-          videoBuffer =
-            await generateImageVideo(
-              scenePrompt,
-              image
-            );
-        } else {
-          videoBuffer =
-            await generateTextVideo(
-              scenePrompt,
-              ratio
-            );
-        }
-
-        if (
-          !videoBuffer ||
-          !videoBuffer.length
-        ) {
-          throw new Error(
-            "MAMAKI did not receive a video file."
-          );
-        }
-
-        const clip =
-          path.join(
-            jobDir,
-            `scene-${i}.mp4`
-          );
-
-        await fs.writeFile(
-          clip,
-          videoBuffer
-        );
-
-        clips.push(
-          clip
-        );
-
-        console.log(
-          `MAMAKI: scene ${i + 1} saved (${videoBuffer.length} bytes)`
-        );
-      }
-
-      const combined =
-        path.join(
-          jobDir,
-          "combined.mp4"
-        );
-
       if (
-        clips.length === 1
+        image &&
+        !isImage(image)
       ) {
-        await fs.copyFile(
-          clips[0],
-          combined
-        );
-      } else {
-        await combineVideos(
-          clips,
-          combined
-        );
+        return res.status(400).json({
+          ok: false,
+          error:
+            "Reference image must be JPG, PNG or WebP."
+        });
       }
 
-      const finalName =
-        `mamaki-ai-${Date.now()}-${randomUUID()}.mp4`;
-
-      const final =
-        path.join(
-          OUTPUT,
-          finalName
-        );
-
-      /*
-       * WATERMARK IS NOW REQUIRED.
-       *
-       * We no longer silently copy the
-       * unwatermarked file if watermarking
-       * fails.
-       */
-
-      await addWatermark(
-        combined,
-        final
-      );
-
-      const stats =
-        await fs.stat(
-          final
-        );
-
-      if (!stats.size) {
-        throw new Error(
-          "MAMAKI created an empty video file."
-        );
-      }
-
-      const projectId =
+      const jobId =
         randomUUID();
 
-      await fs.writeFile(
-        path.join(
-          PROJECTS,
-          `${projectId}.json`
-        ),
-        JSON.stringify(
-          {
-            id:
-              projectId,
+      jobs.set(
+        jobId,
+        {
+          id: jobId,
 
-            title:
-              prompt.slice(
-                0,
-                60
-              ),
+          status:
+            "queued",
 
-            type:
-              image
-                ? "Image → Video"
-                : "Text → Video",
+          progress:
+            0,
 
-            prompt,
+          current:
+            0,
 
-            duration,
+          total:
+            Math.ceil(
+              duration / 5
+            ),
 
-            ratio,
+          message:
+            "Generation queued...",
 
-            videoUrl:
-              `/api/video/${encodeURIComponent(
-                finalName
-              )}`,
-
-            file:
-              finalName,
-
-            createdAt:
-              new Date().toISOString(),
-
-            updatedAt:
-              new Date().toISOString(),
-
-            watermark:
-              true,
-
-            model:
-              image
-                ? I2V_MODEL
-                : T2V_MODEL
-          },
-          null,
-          2
-        ),
-        "utf8"
+          createdAt:
+            Date.now()
+        }
       );
 
-      console.log(
-        "MAMAKI FINAL VIDEO:",
-        final
-      );
+      /*
+       * Keep uploaded image in memory
+       * while the background job runs.
+       */
 
-      return res.json({
-        ok:
-          true,
+      const imageCopy =
+        image
+          ? {
+              buffer:
+                Buffer.from(
+                  image.buffer
+                ),
 
-        success:
-          true,
+              originalname:
+                image.originalname,
 
-        videoUrl:
-          `/api/video/${encodeURIComponent(
-            finalName
-          )}`,
+              mimetype:
+                image.mimetype,
 
-        file:
-          finalName,
+              size:
+                image.size
+            }
+          : null;
 
-        projectId,
-
-        requestedDuration:
+      void processGenerationJob(
+        jobId,
+        {
+          prompt,
           duration,
+          ratio,
+          style,
+          image:
+            imageCopy
+        }
+      );
 
-        generatedScenes:
-          sceneCount,
+      return res.status(202).json({
+        ok: true,
 
-        model:
-          image
-            ? I2V_MODEL
-            : T2V_MODEL,
+        jobId,
 
-        watermark:
-          "MAMAKI",
-
-        watermarkActive:
-          true,
+        status:
+          "queued",
 
         message:
-          "MAMAKI AI video generated successfully."
+          "MAMAKI generation started."
       });
-
     } catch (error) {
       console.error(
-        "======================================"
-      );
-
-      console.error(
-        "MAMAKI GENERATION ERROR"
-      );
-
-      console.error(
-        error?.stack ||
-        error?.message ||
+        "GENERATE REQUEST ERROR:",
         error
       );
 
-      console.error(
-        "======================================"
-      );
-
-      let message =
-        error?.message ||
-        "Video generation failed.";
-
-      const lower =
-        message.toLowerCase();
-
-      if (
-        lower.includes(
-          "insufficient"
-        ) ||
-        lower.includes(
-          "credit"
-        ) ||
-        lower.includes(
-          "402"
-        )
-      ) {
-        message =
-          "Replicate has insufficient credit or the Replicate account is not active.";
-      }
-
       return res.status(500).json({
-        ok:
-          false,
-
-        success:
-          false,
-
+        ok: false,
         error:
-          message
+          error.message
       });
-
-    } finally {
-      if (jobDir) {
-        await fs.rm(
-          jobDir,
-          {
-            recursive:
-              true,
-
-            force:
-              true
-          }
-        ).catch(
-          () => {}
-        );
-      }
     }
   }
 );
 
 /*
-=========================================================
-FREE STUDIO
-PHOTO → VIDEO + MUSIC
-=========================================================
-*/
+ * JOB STATUS
+ */
+
+app.get(
+  "/api/generate/:jobId",
+  (req, res) => {
+    const job =
+      jobs.get(
+        req.params.jobId
+      );
+
+    if (!job) {
+      return res.status(404).json({
+        ok: false,
+        error:
+          "Generation job not found. The server may have restarted."
+      });
+    }
+
+    const progress =
+      job.total
+        ? Math.round(
+            (job.current /
+              job.total) *
+              100
+          )
+        : job.status ===
+          "completed"
+        ? 100
+        : 0;
+
+    return res.json({
+      ok: true,
+
+      jobId:
+        job.id,
+
+      status:
+        job.status,
+
+      progress,
+
+      current:
+        job.current,
+
+      total:
+        job.total,
+
+      message:
+        job.message,
+
+      videoUrl:
+        job.videoUrl ||
+        null,
+
+      projectId:
+        job.projectId ||
+        null
+    });
+  }
+);
+
+/*
+ * PHOTO → VIDEO
+ */
 
 app.post(
   "/api/studio/photo-video",
 
   upload.fields([
     {
-      name:
-        "images",
-      maxCount:
-        50
+      name: "images",
+      maxCount: 50
     },
+
     {
-      name:
-        "music",
-      maxCount:
-        1
+      name: "music",
+      maxCount: 1
     }
   ]),
 
@@ -1759,21 +1799,17 @@ app.post(
     await fs.mkdir(
       dir,
       {
-        recursive:
-          true
+        recursive: true
       }
     );
 
     try {
       const images =
-        req.files
-          ?.images ||
+        req.files?.images ||
         [];
 
       const music =
-        req.files
-          ?.music
-          ?.[0] ||
+        req.files?.music?.[0] ||
         null;
 
       if (!images.length) {
@@ -1787,7 +1823,7 @@ app.post(
         !isAudio(music)
       ) {
         throw new Error(
-          "Music must be an audio file."
+          "Music must be MP3, WAV, AAC, OGG or WebM audio."
         );
       }
 
@@ -1806,99 +1842,68 @@ app.post(
           finalName
         );
 
-      await createPhotoVideo(
-        images,
-        req.body.duration,
-        raw,
-        req.body.ratio,
-        music
-      );
+      const source =
+        await createPhotoVideo(
+          images,
+          req.body.duration,
+          raw,
+          req.body.ratio,
+          music
+        );
 
-      await addWatermark(
-        raw,
+      await addMamakiWatermark(
+        source,
         final
       );
 
-      const projectId =
-        randomUUID();
+      const project =
+        await saveProject({
+          name:
+            "Photo Video",
 
-      await fs.writeFile(
-        path.join(
-          PROJECTS,
-          `${projectId}.json`
-        ),
-        JSON.stringify(
-          {
-            id:
-              projectId,
+          type:
+            "Free Studio - Photo to Video",
 
-            title:
-              "Photo Video",
-
-            type:
-              "Free Studio — Photo → Video",
-
-            duration:
+          duration:
+            safeNumber(
               req.body.duration,
+              3
+            ),
 
-            ratio:
-              normalizeRatio(
-                req.body.ratio
-              ),
+          ratio:
+            normalizeRatio(
+              req.body.ratio
+            ),
 
-            music:
-              Boolean(music),
+          music:
+            Boolean(music),
 
-            videoUrl:
-              `/api/video/${encodeURIComponent(
-                finalName
-              )}`,
+          videoUrl:
+            `/api/video/${encodeURIComponent(
+              finalName
+            )}`,
 
-            file:
-              finalName,
+          file:
+            finalName,
 
-            watermark:
-              true,
-
-            createdAt:
-              new Date().toISOString(),
-
-            updatedAt:
-              new Date().toISOString()
-          },
-          null,
-          2
-        ),
-        "utf8"
-      );
+          watermark:
+            "MAMAKI"
+        });
 
       res.json({
-        ok:
-          true,
+        ok: true,
 
-        success:
-          true,
+        success: true,
 
         videoUrl:
-          `/api/video/${encodeURIComponent(
-            finalName
-          )}`,
+          project.videoUrl,
 
-        projectId,
+        projectId:
+          project.id,
 
         watermark:
-          "MAMAKI",
-
-        watermarkActive:
-          true,
-
-        musicAdded:
-          Boolean(music),
-
-        aiCredits:
-          0
+          "MAMAKI"
       });
-
     } catch (error) {
       console.error(
         "PHOTO VIDEO ERROR:",
@@ -1906,51 +1911,33 @@ app.post(
       );
 
       res.status(500).json({
-        ok:
-          false,
-
+        ok: false,
         error:
           error.message
       });
-
     } finally {
       await fs.rm(
         dir,
         {
-          recursive:
-            true,
-
-          force:
-            true
+          recursive: true,
+          force: true
         }
-      ).catch(
-        () => {}
-      );
+      ).catch(() => {});
     }
   }
 );
 
 /*
-=========================================================
-TRIM + MUSIC + MUTE
-=========================================================
-*/
+ * TRIM
+ */
 
 app.post(
   "/api/studio/trim",
 
   upload.fields([
     {
-      name:
-        "video",
-      maxCount:
-        1
-    },
-    {
-      name:
-        "music",
-      maxCount:
-        1
+      name: "video",
+      maxCount: 1
     }
   ]),
 
@@ -1967,8 +1954,7 @@ app.post(
     await fs.mkdir(
       dir,
       {
-        recursive:
-          true
+        recursive: true
       }
     );
 
@@ -1978,15 +1964,7 @@ app.post(
           ?.video
           ?.[0];
 
-      const music =
-        req.files
-          ?.music
-          ?.[0] ||
-        null;
-
-      if (
-        !isVideo(video)
-      ) {
+      if (!isVideo(video)) {
         throw new Error(
           "Upload a valid video."
         );
@@ -2025,74 +2003,15 @@ app.post(
         req.body.end
       );
 
-      let current =
-        trimmed;
-
-      if (
-        String(
-          req.body.muteOriginal
-        ) ===
-        "true"
-      ) {
-        const muted =
-          path.join(
-            dir,
-            "muted.mp4"
-          );
-
-        await muteVideo(
-          current,
-          muted
-        );
-
-        current =
-          muted;
-      }
-
-      if (
-        music &&
-        isAudio(music)
-      ) {
-        const musicFile =
-          path.join(
-            dir,
-            "music"
-          );
-
-        const mixed =
-          path.join(
-            dir,
-            "mixed.mp4"
-          );
-
-        await fs.writeFile(
-          musicFile,
-          music.buffer
-        );
-
-        await mixMusic(
-          current,
-          musicFile,
-          mixed,
-          req.body.musicVolume,
-          req.body.originalVolume
-        );
-
-        current =
-          mixed;
-      }
-
-      await addWatermark(
-        current,
+      await addMamakiWatermark(
+        trimmed,
         final
       );
 
       res.json({
-        ok:
-          true,
+        ok: true,
 
-        success:
-          true,
+        success: true,
 
         videoUrl:
           `/api/video/${encodeURIComponent(
@@ -2100,21 +2019,8 @@ app.post(
           )}`,
 
         watermark:
-          "MAMAKI",
-
-        watermarkActive:
-          true,
-
-        musicAdded:
-          Boolean(
-            music &&
-            isAudio(music)
-          ),
-
-        aiCredits:
-          0
+          "MAMAKI"
       });
-
     } catch (error) {
       console.error(
         "TRIM ERROR:",
@@ -2122,35 +2028,25 @@ app.post(
       );
 
       res.status(500).json({
-        ok:
-          false,
-
+        ok: false,
         error:
           error.message
       });
-
     } finally {
       await fs.rm(
         dir,
         {
-          recursive:
-            true,
-
-          force:
-            true
+          recursive: true,
+          force: true
         }
-      ).catch(
-        () => {}
-      );
+      ).catch(() => {});
     }
   }
 );
 
 /*
-=========================================================
-COMBINE VIDEOS
-=========================================================
-*/
+ * COMBINE
+ */
 
 app.post(
   "/api/studio/combine",
@@ -2173,15 +2069,13 @@ app.post(
     await fs.mkdir(
       dir,
       {
-        recursive:
-          true
+        recursive: true
       }
     );
 
     try {
       const videos =
-        req.files ||
-        [];
+        req.files || [];
 
       if (!videos.length) {
         throw new Error(
@@ -2189,19 +2083,14 @@ app.post(
         );
       }
 
-      const inputs =
-        [];
+      const inputs = [];
 
       for (
         let i = 0;
         i < videos.length;
         i++
       ) {
-        if (
-          !isVideo(
-            videos[i]
-          )
-        ) {
+        if (!isVideo(videos[i])) {
           throw new Error(
             "All files must be videos."
           );
@@ -2243,17 +2132,15 @@ app.post(
         combined
       );
 
-      await addWatermark(
+      await addMamakiWatermark(
         combined,
         final
       );
 
       res.json({
-        ok:
-          true,
+        ok: true,
 
-        success:
-          true,
+        success: true,
 
         videoUrl:
           `/api/video/${encodeURIComponent(
@@ -2261,15 +2148,8 @@ app.post(
           )}`,
 
         watermark:
-          "MAMAKI",
-
-        watermarkActive:
-          true,
-
-        aiCredits:
-          0
+          "MAMAKI"
       });
-
     } catch (error) {
       console.error(
         "COMBINE ERROR:",
@@ -2277,35 +2157,25 @@ app.post(
       );
 
       res.status(500).json({
-        ok:
-          false,
-
+        ok: false,
         error:
           error.message
       });
-
     } finally {
       await fs.rm(
         dir,
         {
-          recursive:
-            true,
-
-          force:
-            true
+          recursive: true,
+          force: true
         }
-      ).catch(
-        () => {}
-      );
+      ).catch(() => {});
     }
   }
 );
 
 /*
-=========================================================
-MUTE VIDEO
-=========================================================
-*/
+ * MUTE
+ */
 
 app.post(
   "/api/studio/mute",
@@ -2327,8 +2197,7 @@ app.post(
     await fs.mkdir(
       dir,
       {
-        recursive:
-          true
+        recursive: true
       }
     );
 
@@ -2374,17 +2243,13 @@ app.post(
         muted
       );
 
-      await addWatermark(
+      await addMamakiWatermark(
         muted,
         final
       );
 
       res.json({
-        ok:
-          true,
-
-        success:
-          true,
+        ok: true,
 
         videoUrl:
           `/api/video/${encodeURIComponent(
@@ -2392,51 +2257,359 @@ app.post(
           )}`,
 
         watermark:
-          "MAMAKI",
-
-        watermarkActive:
-          true,
-
-        aiCredits:
-          0
+          "MAMAKI"
       });
-
     } catch (error) {
-      console.error(
-        "MUTE ERROR:",
-        error
-      );
-
       res.status(500).json({
-        ok:
-          false,
-
+        ok: false,
         error:
           error.message
       });
-
     } finally {
       await fs.rm(
         dir,
         {
-          recursive:
-            true,
-
-          force:
-            true
+          recursive: true,
+          force: true
         }
-      ).catch(
-        () => {}
-      );
+      ).catch(() => {});
     }
   }
 );
 
 /*
-=========================================================
-VIDEO DELIVERY
-=========================================================
-*/
+ * ADD MUSIC
+ */
+
+app.post(
+  "/api/studio/music",
+
+  upload.fields([
+    {
+      name: "video",
+      maxCount: 1
+    },
+
+    {
+      name: "music",
+      maxCount: 1
+    }
+  ]),
+
+  async (req, res) => {
+    const job =
+      randomUUID();
+
+    const dir =
+      path.join(
+        TMP,
+        job
+      );
+
+    await fs.mkdir(
+      dir,
+      {
+        recursive: true
+      }
+    );
+
+    try {
+      const video =
+        req.files
+          ?.video
+          ?.[0];
+
+      const music =
+        req.files
+          ?.music
+          ?.[0];
+
+      if (!isVideo(video)) {
+        throw new Error(
+          "Upload a valid video."
+        );
+      }
+
+      if (!isAudio(music)) {
+        throw new Error(
+          "Upload a valid music file."
+        );
+      }
+
+      const videoFile =
+        path.join(
+          dir,
+          "video.mp4"
+        );
+
+      const musicFile =
+        path.join(
+          dir,
+          "music"
+        );
+
+      const mixed =
+        path.join(
+          dir,
+          "mixed.mp4"
+        );
+
+      const finalName =
+        `mamaki-music-${Date.now()}-${randomUUID()}.mp4`;
+
+      const final =
+        path.join(
+          OUTPUT,
+          finalName
+        );
+
+      await fs.writeFile(
+        videoFile,
+        video.buffer
+      );
+
+      await fs.writeFile(
+        musicFile,
+        music.buffer
+      );
+
+      await addMusicToVideo(
+        videoFile,
+        musicFile,
+        mixed,
+        req.body.volume
+      );
+
+      await addMamakiWatermark(
+        mixed,
+        final
+      );
+
+      res.json({
+        ok: true,
+
+        videoUrl:
+          `/api/video/${encodeURIComponent(
+            finalName
+          )}`,
+
+        watermark:
+          "MAMAKI"
+      });
+    } catch (error) {
+      res.status(500).json({
+        ok: false,
+        error:
+          error.message
+      });
+    } finally {
+      await fs.rm(
+        dir,
+        {
+          recursive: true,
+          force: true
+        }
+      ).catch(() => {});
+    }
+  }
+);
+
+/*
+ * NARRATION
+ */
+
+app.post(
+  "/api/studio/narration",
+
+  upload.single(
+    "video"
+  ),
+
+  async (req, res) => {
+    const job =
+      randomUUID();
+
+    const dir =
+      path.join(
+        TMP,
+        job
+      );
+
+    await fs.mkdir(
+      dir,
+      {
+        recursive: true
+      }
+    );
+
+    try {
+      const video =
+        req.file;
+
+      if (!isVideo(video)) {
+        throw new Error(
+          "Upload a valid video."
+        );
+      }
+
+      const videoFile =
+        path.join(
+          dir,
+          "video.mp4"
+        );
+
+      const voiceFile =
+        path.join(
+          dir,
+          "voice.mp3"
+        );
+
+      const finalFile =
+        path.join(
+          dir,
+          "narrated.mp4"
+        );
+
+      const finalName =
+        `mamaki-narration-${Date.now()}-${randomUUID()}.mp4`;
+
+      const final =
+        path.join(
+          OUTPUT,
+          finalName
+        );
+
+      await fs.writeFile(
+        videoFile,
+        video.buffer
+      );
+
+      await createNarration(
+        req.body.text,
+        voiceFile,
+        req.body.voice
+      );
+
+      await runFFmpeg([
+        "-y",
+
+        "-i",
+        videoFile,
+
+        "-i",
+        voiceFile,
+
+        "-filter_complex",
+        "[1:a]volume=1[narration]",
+
+        "-map",
+        "0:v:0",
+
+        "-map",
+        "[narration]",
+
+        "-c:v",
+        "libx264",
+
+        "-preset",
+        "veryfast",
+
+        "-crf",
+        "23",
+
+        "-c:a",
+        "aac",
+
+        "-shortest",
+
+        "-movflags",
+        "+faststart",
+
+        finalFile
+      ]);
+
+      await addMamakiWatermark(
+        finalFile,
+        final
+      );
+
+      res.json({
+        ok: true,
+
+        videoUrl:
+          `/api/video/${encodeURIComponent(
+            finalName
+          )}`,
+
+        watermark:
+          "MAMAKI"
+      });
+    } catch (error) {
+      console.error(
+        "NARRATION ERROR:",
+        error
+      );
+
+      res.status(500).json({
+        ok: false,
+        error:
+          error.message
+      });
+    } finally {
+      await fs.rm(
+        dir,
+        {
+          recursive: true,
+          force: true
+        }
+      ).catch(() => {});
+    }
+  }
+);
+
+/*
+ * AI PROMPT ENHANCER API
+ */
+
+app.post(
+  "/api/ai/enhance",
+  (req, res) => {
+    try {
+      const prompt =
+        String(
+          req.body.prompt || ""
+        ).trim();
+
+      const style =
+        String(
+          req.body.style ||
+            "Cinematic"
+        );
+
+      const enhanced =
+        enhancePrompt(
+          prompt,
+          style
+        );
+
+      res.json({
+        ok: true,
+        prompt:
+          enhanced
+      });
+    } catch (error) {
+      res.status(500).json({
+        ok: false,
+        error:
+          error.message
+      });
+    }
+  }
+);
+
+/*
+ * VIDEO DELIVERY
+ */
 
 app.get(
   "/api/video/:file",
@@ -2464,9 +2637,7 @@ app.get(
 
       if (!stats.size) {
         return res.status(404).json({
-          ok:
-            false,
-
+          ok: false,
           error:
             "Video file is empty."
         });
@@ -2490,12 +2661,9 @@ app.get(
       return res.sendFile(
         file
       );
-
     } catch {
       return res.status(404).json({
-        ok:
-          false,
-
+        ok: false,
         error:
           "Video not found."
       });
@@ -2504,17 +2672,14 @@ app.get(
 );
 
 /*
-=========================================================
-STATUS
-=========================================================
-*/
+ * STATUS
+ */
 
 app.get(
   "/api/status",
   (req, res) => {
     res.json({
-      ok:
-        true,
+      ok: true,
 
       app:
         "MAMAKI AI VIDEO",
@@ -2541,28 +2706,13 @@ app.get(
       imageToVideo:
         I2V_MODEL,
 
-      aiModel:
-        "Wan 2.2 Fast",
-
-      durationMinimum:
-        5,
-
-      durationMaximum:
-        7200,
-
-      longForm:
-        true,
-
-      projects:
-        true,
-
       freeStudio:
         true,
 
-      photoVideo:
+      photoToVideo:
         true,
 
-      photoVideoMusic:
+      photoMusic:
         true,
 
       trimmer:
@@ -2574,20 +2724,33 @@ app.get(
       mute:
         true,
 
+      music:
+        true,
+
+      narration:
+        true,
+
+      projects:
+        true,
+
+      promptEnhancer:
+        true,
+
       watermark:
         "MAMAKI",
 
-      watermarkAlwaysApplied:
-        true
+      watermarkRequired:
+        true,
+
+      maximumDurationSeconds:
+        7200
     });
   }
 );
 
 /*
-=========================================================
-HEALTH
-=========================================================
-*/
+ * HEALTH
+ */
 
 app.get(
   "/health",
@@ -2616,13 +2779,31 @@ app.get(
 );
 
 /*
-=========================================================
-ERROR HANDLER
-=========================================================
-*/
+ * 404 API
+ */
 
 app.use(
-  (error, req, res, next) => {
+  "/api",
+  (req, res) => {
+    res.status(404).json({
+      ok: false,
+      error:
+        "MAMAKI API route not found."
+    });
+  }
+);
+
+/*
+ * ERROR HANDLER
+ */
+
+app.use(
+  (
+    error,
+    req,
+    res,
+    next
+  ) => {
     console.error(
       "MAMAKI SERVER ERROR:",
       error
@@ -2633,18 +2814,14 @@ app.use(
       "LIMIT_FILE_SIZE"
     ) {
       return res.status(413).json({
-        ok:
-          false,
-
+        ok: false,
         error:
           "Uploaded file is too large."
       });
     }
 
     return res.status(500).json({
-      ok:
-        false,
-
+      ok: false,
       error:
         error?.message ||
         "Server error."
@@ -2653,10 +2830,8 @@ app.use(
 );
 
 /*
-=========================================================
-START
-=========================================================
-*/
+ * START
+ */
 
 const server =
   app.listen(
@@ -2664,7 +2839,7 @@ const server =
     "0.0.0.0",
     () => {
       console.log(
-        "======================================"
+        "=========================================="
       );
 
       console.log(
@@ -2676,9 +2851,17 @@ const server =
       );
 
       console.log(
+        `ROOT: ${ROOT}`
+      );
+
+      console.log(
+        `INDEX: ${INDEX}`
+      );
+
+      console.log(
         `REPLICATE: ${
           REPLICATE_API_TOKEN
-            ? "FOUND"
+            ? "CONNECTED"
             : "MISSING"
         }`
       );
@@ -2686,7 +2869,7 @@ const server =
       console.log(
         `FFMPEG: ${
           ffmpegPath
-            ? "FOUND"
+            ? "AVAILABLE"
             : "MISSING"
         }`
       );
@@ -2700,48 +2883,43 @@ const server =
       );
 
       console.log(
-        "PROJECTS: ENABLED"
-      );
-
-      console.log(
         "FREE STUDIO: ENABLED"
       );
 
       console.log(
-        "PHOTO VIDEO: ENABLED"
+        "PHOTO + MUSIC: ENABLED"
       );
 
       console.log(
-        "PHOTO VIDEO MUSIC: ENABLED"
+        "PROJECTS: ENABLED"
       );
 
       console.log(
-        "TRIMMER: ENABLED"
+        "PROMPT ENHANCER: ENABLED"
       );
 
       console.log(
-        "COMBINE: ENABLED"
+        "NARRATION: ENABLED"
       );
 
       console.log(
-        "MUTE: ENABLED"
+        "WATERMARK: MANDATORY"
       );
 
       console.log(
-        "WATERMARK: MAMAKI"
+        "MAX DURATION: 7200 SECONDS"
       );
 
       console.log(
-        "======================================"
+        "=========================================="
       );
     }
   );
 
 /*
-=========================================================
-KEEPALIVE / TIMEOUT SETTINGS
-=========================================================
-*/
+ * Give Render/Node more time for
+ * long-running background processing.
+ */
 
 server.keepAliveTimeout =
   120000;
