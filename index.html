@@ -10,30 +10,47 @@
   box-sizing:border-box;
 }
 
+html{
+  scroll-behavior:smooth;
+}
+
 body{
   margin:0;
   font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-  background:#070914;
-  color:#fff;
+  background:
+    radial-gradient(circle at 15% 5%,rgba(124,58,237,.18),transparent 30%),
+    radial-gradient(circle at 85% 10%,rgba(37,99,235,.14),transparent 30%),
+    #070914;
+  color:#f5f7ff;
+}
+
+button,
+input,
+textarea,
+select{
+  font:inherit;
+}
+
+button{
+  cursor:pointer;
 }
 
 header{
   position:sticky;
   top:0;
-  z-index:20;
-  background:rgba(7,9,20,.9);
+  z-index:50;
   backdrop-filter:blur(18px);
-  border-bottom:1px solid rgba(255,255,255,.08);
-  padding:18px 6%;
+  background:rgba(7,9,20,.82);
+  border-bottom:1px solid #20253a;
+  padding:15px 5%;
   display:flex;
-  justify-content:space-between;
   align-items:center;
+  justify-content:space-between;
 }
 
 .logo{
-  font-size:24px;
+  font-size:20px;
   font-weight:900;
-  letter-spacing:-1px;
 }
 
 .logo span{
@@ -42,126 +59,200 @@ header{
 
 nav{
   display:flex;
-  gap:18px;
+  gap:8px;
 }
 
 nav button{
-  background:none;
-  border:0;
-  color:#aaa;
-  cursor:pointer;
-  font-size:14px;
+  background:transparent;
+  color:#aeb5c7;
+  border:1px solid transparent;
+  padding:9px 13px;
+  border-radius:10px;
 }
 
 nav button:hover{
   color:#fff;
+  background:#111528;
+  border-color:#292f45;
 }
 
 .container{
-  width:min(1180px,92%);
+  width:min(1120px,92%);
   margin:auto;
 }
 
 .hero{
-  padding:65px 0 30px;
   text-align:center;
+  padding:80px 0 40px;
 }
 
 .badge{
-  display:inline-block;
-  padding:8px 14px;
-  border:1px solid rgba(167,139,250,.35);
-  background:rgba(167,139,250,.08);
-  border-radius:30px;
+  display:inline-flex;
+  padding:8px 13px;
+  border:1px solid rgba(139,92,246,.35);
+  border-radius:999px;
+  background:rgba(124,58,237,.1);
   color:#c4b5fd;
-  font-size:13px;
+  font-size:12px;
+  font-weight:700;
 }
 
-h1{
-  font-size:clamp(40px,7vw,76px);
+.hero h1{
+  font-size:clamp(38px,7vw,72px);
   line-height:1;
-  margin:20px 0;
-  letter-spacing:-4px;
+  margin:22px 0 18px;
+  letter-spacing:-3px;
 }
 
 .gradient{
-  background:linear-gradient(90deg,#fff,#c4b5fd,#60a5fa);
+  background:linear-gradient(90deg,#a78bfa,#60a5fa);
   -webkit-background-clip:text;
   color:transparent;
 }
 
 .hero p{
-  max-width:720px;
+  max-width:680px;
   margin:auto;
-  color:#a8adbf;
-  font-size:18px;
-  line-height:1.6;
+  color:#969db0;
+  line-height:1.7;
 }
 
 .workspace{
-  background:rgba(255,255,255,.045);
-  border:1px solid rgba(255,255,255,.09);
+  padding:30px;
   border-radius:28px;
-  padding:28px;
-  box-shadow:0 30px 100px rgba(0,0,0,.3);
+  background:rgba(13,17,32,.88);
+  border:1px solid #292f45;
+  box-shadow:0 30px 90px rgba(0,0,0,.3);
 }
 
 .mode{
   display:grid;
   grid-template-columns:1fr 1fr;
-  gap:12px;
+  gap:10px;
   margin-bottom:22px;
 }
 
 .mode button{
-  padding:16px;
-  border-radius:16px;
-  border:1px solid #303448;
-  background:#101323;
-  color:#bbb;
-  cursor:pointer;
-  font-weight:700;
+  padding:15px;
+  border-radius:13px;
+  border:1px solid #292f45;
+  background:#0a0e1b;
+  color:#aeb5c7;
+  font-weight:800;
 }
 
 .mode button.active{
   background:linear-gradient(135deg,#7c3aed,#2563eb);
-  color:#fff;
   border-color:transparent;
+  color:white;
+}
+
+.autopilot{
+  margin:0 0 25px;
+  padding:20px;
+  border-radius:20px;
+  border:1px solid rgba(139,92,246,.38);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(124,58,237,.16),
+      rgba(37,99,235,.08)
+    );
+  display:flex;
+  gap:16px;
+}
+
+.autopilot-icon{
+  width:52px;
+  height:52px;
+  min-width:52px;
+  border-radius:16px;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  font-size:25px;
+  background:linear-gradient(135deg,#7c3aed,#2563eb);
+}
+
+.autopilot h3{
+  margin:0;
+  font-size:18px;
+}
+
+.autopilot p{
+  color:#9da5b8;
+  font-size:13px;
+  line-height:1.55;
+  margin:8px 0;
+}
+
+.autopilot-badge{
+  display:inline-block;
+  margin-left:7px;
+  padding:4px 8px;
+  border-radius:999px;
+  font-size:9px;
+  letter-spacing:1px;
+  background:rgba(124,58,237,.2);
+  color:#c4b5fd;
+}
+
+.features{
+  display:flex;
+  flex-wrap:wrap;
+  gap:7px;
+}
+
+.features span{
+  padding:6px 9px;
+  border-radius:999px;
+  background:#0c1020;
+  border:1px solid #292f45;
+  color:#b9c0d0;
+  font-size:11px;
 }
 
 label{
   display:block;
-  margin:16px 0 8px;
-  font-weight:700;
-  color:#ddd;
+  margin:18px 0 8px;
+  font-size:13px;
+  font-weight:800;
+  color:#d7dbea;
 }
 
 textarea,
-select,
-input[type=file]{
+input[type="file"],
+input[type="number"],
+select{
   width:100%;
-  border-radius:14px;
-  border:1px solid #303448;
-  background:#0d1020;
-  color:#fff;
-  padding:15px;
+  background:#090d1a;
+  color:#f5f7ff;
+  border:1px solid #292f45;
+  border-radius:12px;
+  padding:12px;
   outline:none;
 }
 
 textarea{
   min-height:145px;
   resize:vertical;
+  line-height:1.55;
 }
 
 textarea:focus,
+input:focus,
 select:focus{
-  border-color:#8b5cf6;
+  border-color:#7c3aed;
 }
 
-.controls{
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:14px;
+.enhance{
+  margin-top:10px;
+  padding:10px 14px;
+  border:1px solid #39304f;
+  background:#161126;
+  color:#c4b5fd;
+  border-radius:10px;
+  font-weight:800;
 }
 
 .styles{
@@ -171,41 +262,42 @@ select:focus{
 }
 
 .style{
-  border:1px solid #303448;
-  background:#0e1222;
-  color:#bbb;
-  padding:10px 13px;
+  border:1px solid #292f45;
+  background:#0a0e1b;
+  color:#aeb5c7;
   border-radius:999px;
-  cursor:pointer;
+  padding:9px 12px;
 }
 
 .style.active{
-  background:#7c3aed;
-  color:#fff;
+  background:#25174c;
+  color:#ddd6fe;
   border-color:#7c3aed;
 }
 
-.enhance{
-  margin-top:10px;
-  border:0;
-  background:#161a2d;
-  color:#c4b5fd;
-  padding:10px 15px;
-  border-radius:12px;
-  cursor:pointer;
+.controls{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:14px;
+}
+
+.info{
+  color:#858da1;
+  font-size:12px;
+  line-height:1.6;
 }
 
 .generate{
   width:100%;
-  margin-top:24px;
-  padding:18px;
+  margin-top:25px;
+  padding:17px;
   border:0;
-  border-radius:16px;
-  background:linear-gradient(135deg,#8b5cf6,#2563eb);
+  border-radius:15px;
+  background:linear-gradient(135deg,#7c3aed,#2563eb);
   color:white;
-  font-size:17px;
   font-weight:900;
-  cursor:pointer;
+  font-size:15px;
+  box-shadow:0 15px 35px rgba(124,58,237,.25);
 }
 
 .generate:disabled{
@@ -214,27 +306,35 @@ select:focus{
 }
 
 .status{
-  margin-top:20px;
   display:none;
-  padding:18px;
-  background:#0c1020;
-  border:1px solid #262b40;
-  border-radius:16px;
+  margin-top:20px;
+  padding:20px;
+  border-radius:18px;
+  background:#090d1a;
+  border:1px solid #292f45;
+}
+
+.status strong{
+  font-size:16px;
+}
+
+.status p{
+  color:#9da5b8;
+  font-size:13px;
 }
 
 .progress{
   height:10px;
-  background:#1a1e2e;
-  border-radius:20px;
+  background:#1a1f30;
+  border-radius:999px;
   overflow:hidden;
-  margin-top:12px;
 }
 
 .bar{
   height:100%;
   width:0;
   background:linear-gradient(90deg,#8b5cf6,#38bdf8);
-  transition:.3s;
+  transition:.35s;
 }
 
 .result{
@@ -242,8 +342,8 @@ select:focus{
   margin-top:25px;
   padding:22px;
   border-radius:22px;
-  background:#0b0f1d;
-  border:1px solid #2b3045;
+  background:#090d1a;
+  border:1px solid #30364c;
 }
 
 .result video{
@@ -255,49 +355,48 @@ select:focus{
 
 .download{
   display:inline-block;
-  margin-top:16px;
+  margin-top:15px;
   padding:13px 20px;
   background:#fff;
   color:#070914;
   border-radius:12px;
   text-decoration:none;
-  font-weight:800;
+  font-weight:900;
 }
 
-.projects{
+.section{
   margin:70px 0;
 }
 
-.project-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
-  gap:15px;
+.section-title{
+  margin-bottom:20px;
 }
 
-.project{
-  background:#0d1120;
-  border:1px solid #252a3d;
-  border-radius:18px;
-  padding:16px;
+.section-title h2{
+  margin:0 0 7px;
 }
 
-.studio{
-  margin:70px 0;
+.section-title p{
+  margin:0;
+  color:#858da1;
 }
 
+.project-grid,
 .studio-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
   gap:15px;
 }
 
+.project,
 .tool{
-  padding:22px;
-  border-radius:18px;
   background:#0d1120;
   border:1px solid #252a3d;
+  border-radius:18px;
+  padding:18px;
 }
 
+.project h3,
 .tool h3{
   margin-top:0;
 }
@@ -309,37 +408,47 @@ select:focus{
   border:0;
   border-radius:10px;
   background:#7c3aed;
-  color:#fff;
-  font-weight:700;
-  cursor:pointer;
+  color:white;
+  font-weight:800;
 }
 
 footer{
-  padding:50px 0;
+  padding:60px 0;
   text-align:center;
-  color:#777;
+  color:#687084;
 }
 
 @media(max-width:700px){
-  .controls{
-    grid-template-columns:1fr;
-  }
 
   header{
-    padding:15px 4%;
-  }
-
-  nav{
-    gap:8px;
+    padding:13px 4%;
   }
 
   nav button{
-    font-size:12px;
+    font-size:11px;
+    padding:8px;
+  }
+
+  .hero{
+    padding:55px 0 30px;
+  }
+
+  .hero h1{
+    letter-spacing:-2px;
   }
 
   .workspace{
     padding:18px;
   }
+
+  .controls{
+    grid-template-columns:1fr;
+  }
+
+  .autopilot{
+    flex-direction:column;
+  }
+
 }
 </style>
 </head>
@@ -359,61 +468,153 @@ footer{
 <main class="container">
 
 <section class="hero">
-  <div class="badge">✨ Intelligent AI Video Creative Studio</div>
+
+  <div class="badge">
+    ✨ Intelligent AI Video Creative Studio
+  </div>
 
   <h1>
-    Create with <span class="gradient">MAMAKI AI</span>
+    Create with
+    <span class="gradient">MAMAKI AI</span>
   </h1>
 
   <p>
     Turn your imagination, images and ideas into
     professional AI-generated videos.
   </p>
+
 </section>
 
 <section id="create" class="workspace">
 
   <div class="mode">
-    <button id="t2vBtn" class="active" onclick="setMode('text')">
+
+    <button
+      id="t2vBtn"
+      class="active"
+      onclick="setMode('text')"
+    >
       🎬 Text → Video
     </button>
 
-    <button id="i2vBtn" onclick="setMode('image')">
+    <button
+      id="i2vBtn"
+      onclick="setMode('image')"
+    >
       🖼️ Image → Video
     </button>
+
   </div>
 
-  <label>Describe your video</label>
+  <div class="autopilot">
+
+    <div class="autopilot-icon">
+      ✨
+    </div>
+
+    <div>
+
+      <h3>
+        MAMAKI Autopilot
+        <span class="autopilot-badge">
+          AI DIRECTOR
+        </span>
+      </h3>
+
+      <p>
+        Autopilot automatically breaks long productions
+        into short AI scenes, generates them with the
+        working Wan pipeline, assembles the scenes,
+        adds background music and applies the
+        MAMAKI ✨ watermark.
+      </p>
+
+      <div class="features">
+        <span>🎬 Scene Planning</span>
+        <span>🤖 Wan AI</span>
+        <span>🔗 Auto Assembly</span>
+        <span>🎵 Background Music</span>
+        <span>✨ Watermark</span>
+      </div>
+
+    </div>
+
+  </div>
+
+  <label>
+    Describe your video
+  </label>
 
   <textarea
     id="prompt"
     placeholder="Example: A cinematic drone shot flying over a futuristic African city at sunset..."
   ></textarea>
 
-  <button class="enhance" onclick="enhancePrompt()">
+  <button
+    class="enhance"
+    onclick="enhancePrompt()"
+  >
     ✨ Enhance Prompt
   </button>
 
-  <label>Style</label>
+  <label>
+    Style
+  </label>
 
   <div class="styles">
-    <button class="style active" data-style="cinematic">🎬 Cinematic</button>
-    <button class="style" data-style="realistic">📷 Realistic</button>
-    <button class="style" data-style="documentary">🎥 Documentary</button>
-    <button class="style" data-style="commercial">💎 Commercial</button>
-    <button class="style" data-style="3d">🧊 3D</button>
-    <button class="style" data-style="anime">🌸 Anime</button>
-    <button class="style" data-style="fantasy">🧙 Fantasy</button>
-    <button class="style" data-style="scifi">🚀 Sci-Fi</button>
-    <button class="style" data-style="horror">👻 Horror</button>
-    <button class="style" data-style="cartoon">🎨 Cartoon</button>
+
+    <button class="style active" data-style="cinematic">
+      🎬 Cinematic
+    </button>
+
+    <button class="style" data-style="realistic">
+      📷 Realistic
+    </button>
+
+    <button class="style" data-style="documentary">
+      🎥 Documentary
+    </button>
+
+    <button class="style" data-style="commercial">
+      💎 Commercial
+    </button>
+
+    <button class="style" data-style="3d">
+      🧊 3D
+    </button>
+
+    <button class="style" data-style="anime">
+      🌸 Anime
+    </button>
+
+    <button class="style" data-style="fantasy">
+      🧙 Fantasy
+    </button>
+
+    <button class="style" data-style="scifi">
+      🚀 Sci-Fi
+    </button>
+
+    <button class="style" data-style="horror">
+      👻 Horror
+    </button>
+
+    <button class="style" data-style="cartoon">
+      🎨 Cartoon
+    </button>
+
   </div>
 
   <div class="controls">
 
     <div>
-      <label>Duration</label>
+
+      <label>
+        Duration
+      </label>
+
       <select id="duration">
+
         <option value="5s">5 seconds</option>
         <option value="10s">10 seconds</option>
         <option value="15s">15 seconds</option>
@@ -426,40 +627,73 @@ footer{
         <option value="30m">30 minutes</option>
         <option value="1h">1 hour</option>
         <option value="2h">2 hours</option>
+
       </select>
+
     </div>
 
     <div>
-      <label>Format</label>
+
+      <label>
+        Format
+      </label>
+
       <select id="ratio">
-        <option value="16:9">16:9 — YouTube</option>
-        <option value="9:16">9:16 — Shorts / Reels</option>
-        <option value="1:1">1:1 — Social</option>
+
+        <option value="16:9">
+          16:9 — YouTube
+        </option>
+
+        <option value="9:16">
+          9:16 — Shorts / Reels
+        </option>
+
+        <option value="1:1">
+          1:1 — Social
+        </option>
+
       </select>
+
     </div>
 
     <div>
-      <label>AI Quality</label>
+
+      <label>
+        AI Quality
+      </label>
+
       <select id="quality">
-        <option>Standard HD</option>
-        <option>Cinematic</option>
+
+        <option>
+          Standard HD
+        </option>
+
+        <option>
+          Cinematic
+        </option>
+
       </select>
+
     </div>
 
   </div>
 
-  <label>Optional Reference Image</label>
+  <label>
+    Optional Reference Image
+  </label>
 
   <input
-    type="file"
     id="referenceImage"
+    type="file"
     accept="image/jpeg,image/png,image/webp"
   >
 
-  <p style="color:#888;font-size:13px">
+  <p class="info">
     Leave empty for Text → Video.
     Add an image for Image → Video.
-    Image → Video automatically receives soft background music.
+    Image → Video uses the working Wan I2V pipeline
+    and automatically receives MAMAKI background music
+    and watermark processing.
   </p>
 
   <button
@@ -471,22 +705,33 @@ footer{
   </button>
 
   <div id="status" class="status">
-    <strong id="statusStage">Preparing...</strong>
+
+    <strong id="statusStage">
+      Preparing...
+    </strong>
 
     <p id="statusMessage">
       MAMAKI is preparing your production.
     </p>
 
     <div class="progress">
-      <div id="progressBar" class="bar"></div>
+      <div
+        id="progressBar"
+        class="bar"
+      ></div>
     </div>
 
-    <p id="progressText">0%</p>
+    <p id="progressText">
+      0%
+    </p>
+
   </div>
 
   <div id="result" class="result">
 
-    <h2>🎬 Your MAMAKI Video</h2>
+    <h2>
+      🎬 Your MAMAKI Video
+    </h2>
 
     <p id="resultMessage">
       Your video is ready.
@@ -497,8 +742,6 @@ footer{
       controls
       playsinline
     ></video>
-
-    <br>
 
     <a
       id="downloadLink"
@@ -513,15 +756,25 @@ footer{
 
 </section>
 
-<section id="projects" class="projects">
 
-  <h2>📁 My Projects</h2>
+<section id="projects" class="section">
 
-  <p style="color:#888">
-    Your recent MAMAKI productions.
-  </p>
+  <div class="section-title">
 
-  <div id="projectGrid" class="project-grid">
+    <h2>
+      📁 My Projects
+    </h2>
+
+    <p>
+      Your recent MAMAKI productions.
+    </p>
+
+  </div>
+
+  <div
+    id="projectGrid"
+    class="project-grid"
+  >
     <div class="project">
       Loading projects...
     </div>
@@ -529,20 +782,30 @@ footer{
 
 </section>
 
-<section id="studio" class="studio">
 
-  <h2>🎞️ Free Studio</h2>
+<section id="studio" class="section">
 
-  <p style="color:#888">
-    Free tools for editing your videos.
-  </p>
+  <div class="section-title">
+
+    <h2>
+      🎞️ Free Studio
+    </h2>
+
+    <p>
+      Free tools for editing your videos.
+    </p>
+
+  </div>
 
   <div class="studio-grid">
 
     <div class="tool">
-      <h3>📸 Photo → Video</h3>
 
-      <p>
+      <h3>
+        📸 Photo → Video
+      </h3>
+
+      <p class="info">
         Turn photos into a video and optionally
         add your own music.
       </p>
@@ -565,19 +828,37 @@ footer{
         id="photoDuration"
         style="margin-top:10px"
       >
-        <option value="5">5 seconds/photo</option>
-        <option value="10">10 seconds/photo</option>
-        <option value="15">15 seconds/photo</option>
-        <option value="30">30 seconds/photo</option>
+
+        <option value="5">
+          5 seconds/photo
+        </option>
+
+        <option value="10">
+          10 seconds/photo
+        </option>
+
+        <option value="15">
+          15 seconds/photo
+        </option>
+
+        <option value="30">
+          30 seconds/photo
+        </option>
+
       </select>
 
       <button onclick="photoVideo()">
         Create Photo Video
       </button>
+
     </div>
 
+
     <div class="tool">
-      <h3>✂️ Video Trimmer</h3>
+
+      <h3>
+        ✂️ Video Trimmer
+      </h3>
 
       <input
         id="trimVideo"
@@ -602,10 +883,15 @@ footer{
       <button onclick="trimVideo()">
         Trim Video
       </button>
+
     </div>
 
+
     <div class="tool">
-      <h3>🔗 Combine Videos</h3>
+
+      <h3>
+        🔗 Combine Videos
+      </h3>
 
       <input
         id="combineVideos"
@@ -617,15 +903,22 @@ footer{
       <button onclick="combineVideos()">
         Combine Clips
       </button>
+
     </div>
 
-    <div class="tool">
-      <h3>🎵 Add Music</h3>
 
-      <p>
-        Add your own background music through
-        the Photo → Video or Trim tools.
+    <div class="tool">
+
+      <h3>
+        🎵 Add Music
+      </h3>
+
+      <p class="info">
+        Upload your own background music through
+        Photo → Video. MAMAKI automatically mixes
+        it into the generated video.
       </p>
+
     </div>
 
   </div>
@@ -634,23 +927,33 @@ footer{
 
 </main>
 
+
 <footer>
   ✨ MAMAKI AI Video Creative Studio
   <br>
   Create. Imagine. Produce.
 </footer>
 
+
 <script>
+
 let mode = "text";
 let selectedStyle = "cinematic";
 
+
 function scrollToSection(id){
-  document.getElementById(id)?.scrollIntoView({
-    behavior:"smooth"
-  });
+
+  document
+    .getElementById(id)
+    ?.scrollIntoView({
+      behavior:"smooth"
+    });
+
 }
 
+
 function setMode(newMode){
+
   mode = newMode;
 
   document
@@ -666,25 +969,34 @@ function setMode(newMode){
       "active",
       mode === "image"
     );
+
 }
+
 
 document
   .querySelectorAll(".style")
   .forEach(button => {
-    button.addEventListener("click", () => {
 
-      document
-        .querySelectorAll(".style")
-        .forEach(x =>
-          x.classList.remove("active")
-        );
+    button.addEventListener(
+      "click",
+      () => {
 
-      button.classList.add("active");
+        document
+          .querySelectorAll(".style")
+          .forEach(x =>
+            x.classList.remove("active")
+          );
 
-      selectedStyle =
-        button.dataset.style;
-    });
+        button.classList.add("active");
+
+        selectedStyle =
+          button.dataset.style;
+
+      }
+    );
+
   });
+
 
 function enhancePrompt(){
 
@@ -700,12 +1012,15 @@ function enhancePrompt(){
   }
 
   box.value =
-    `${text}. ${selectedStyle} visual style, `
-    + `professional cinematic composition, realistic lighting, `
-    + `smooth camera movement, detailed environment, `
-    + `natural motion, high production quality, `
-    + `professional filmmaking.`;
+    `${text}. ` +
+    `${selectedStyle} visual style, ` +
+    `professional cinematic composition, ` +
+    `realistic lighting, smooth camera movement, ` +
+    `detailed environment, natural motion, ` +
+    `high production quality, professional filmmaking.`;
+
 }
+
 
 async function startProduction(){
 
@@ -721,9 +1036,15 @@ async function startProduction(){
       .trim();
 
   if(!prompt){
-    alert("Please enter a video prompt.");
+
+    alert(
+      "Please enter a video prompt."
+    );
+
     return;
+
   }
+
 
   const form =
     new FormData();
@@ -747,6 +1068,7 @@ async function startProduction(){
       .value
   );
 
+
   const image =
     document
       .getElementById(
@@ -754,20 +1076,25 @@ async function startProduction(){
       )
       .files[0];
 
+
   if(image){
+
     form.append(
       "referenceImage",
       image
     );
+
   }
+
 
   button.disabled = true;
 
   showStatus(
-    "Starting...",
-    "MAMAKI is starting your production.",
+    "MAMAKI AUTOPILOT",
+    "AI Director is preparing your production.",
     1
   );
+
 
   try{
 
@@ -780,19 +1107,25 @@ async function startProduction(){
         }
       );
 
+
     const data =
       await response.json();
 
+
     if(!response.ok || !data.jobId){
+
       throw new Error(
         data.error ||
         "Unable to start production."
       );
+
     }
+
 
     pollJob(
       data.jobId
     );
+
 
   }catch(error){
 
@@ -803,8 +1136,11 @@ async function startProduction(){
     );
 
     button.disabled = false;
+
   }
+
 }
+
 
 async function pollJob(jobId){
 
@@ -815,15 +1151,20 @@ async function pollJob(jobId){
         `/api/jobs/${jobId}`
       );
 
+
     const job =
       await response.json();
 
+
     if(!response.ok){
+
       throw new Error(
         job.error ||
         "Unable to check job."
       );
+
     }
+
 
     showStatus(
       job.stage ||
@@ -832,6 +1173,7 @@ async function pollJob(jobId){
       "MAMAKI is working...",
       job.progress || 0
     );
+
 
     if(job.status === "completed"){
 
@@ -848,7 +1190,9 @@ async function pollJob(jobId){
       loadProjects();
 
       return;
+
     }
+
 
     if(job.status === "failed"){
 
@@ -866,12 +1210,15 @@ async function pollJob(jobId){
         .disabled = false;
 
       return;
+
     }
+
 
     setTimeout(
       () => pollJob(jobId),
       2500
     );
+
 
   }catch(error){
 
@@ -886,8 +1233,11 @@ async function pollJob(jobId){
         "generateButton"
       )
       .disabled = false;
+
   }
+
 }
+
 
 function showStatus(
   stage,
@@ -899,24 +1249,40 @@ function showStatus(
     .getElementById("status")
     .style.display = "block";
 
+
   document
     .getElementById("statusStage")
     .textContent = stage;
+
 
   document
     .getElementById("statusMessage")
     .textContent = message;
 
+
+  const safeProgress =
+    Math.max(
+      0,
+      Math.min(
+        100,
+        Number(progress) || 0
+      )
+    );
+
+
   document
     .getElementById("progressBar")
     .style.width =
-      `${Math.max(0,Math.min(100,progress))}%`;
+      `${safeProgress}%`;
+
 
   document
     .getElementById("progressText")
     .textContent =
-      `${Math.round(progress)}%`;
+      `${Math.round(safeProgress)}%`;
+
 }
+
 
 function showResult(videoUrl){
 
@@ -935,32 +1301,42 @@ function showResult(videoUrl){
       "downloadLink"
     );
 
+
   const fullUrl =
     new URL(
       videoUrl,
       window.location.origin
     ).href;
 
+
   video.src =
     fullUrl;
+
+  video.load();
+
 
   download.href =
     fullUrl;
 
+
   result.style.display =
     "block";
+
 
   document
     .getElementById(
       "resultMessage"
     )
     .textContent =
-      "✅ Video generated successfully. MAMAKI watermark and background audio have been processed.";
+      "✅ Video ready — MAMAKI watermark and background audio have been processed.";
+
 
   result.scrollIntoView({
     behavior:"smooth"
   });
+
 }
+
 
 async function loadProjects(){
 
@@ -971,13 +1347,16 @@ async function loadProjects(){
         "/api/projects"
       );
 
+
     const data =
       await response.json();
+
 
     const grid =
       document.getElementById(
         "projectGrid"
       );
+
 
     if(!data.projects?.length){
 
@@ -987,41 +1366,50 @@ async function loadProjects(){
         </div>`;
 
       return;
+
     }
+
 
     grid.innerHTML =
       data.projects
-      .slice(0,12)
-      .map(project => `
-        <div class="project">
+        .slice(0,12)
+        .map(project => `
 
-          <h3>
-            ${escapeHtml(
-              project.title ||
-              "MAMAKI Project"
-            )}
-          </h3>
+          <div class="project">
 
-          <p style="color:#888">
-            ${project.mode || ""}
-          </p>
+            <h3>
+              ${escapeHtml(
+                project.title ||
+                "MAMAKI Project"
+              )}
+            </h3>
 
-          <p>
-            ${project.durationLabel || ""}
-          </p>
+            <p class="info">
+              ${escapeHtml(
+                project.mode || ""
+              )}
+            </p>
 
-          <a
-            href="${project.videoUrl}"
-            target="_blank"
-            class="download"
-            style="font-size:12px"
-          >
-            ▶ Open Video
-          </a>
+            <p>
+              ${escapeHtml(
+                project.durationLabel || ""
+              )}
+            </p>
 
-        </div>
-      `)
-      .join("");
+            <a
+              href="${project.videoUrl}"
+              target="_blank"
+              class="download"
+              style="font-size:12px"
+            >
+              ▶ Open Video
+            </a>
+
+          </div>
+
+        `)
+        .join("");
+
 
   }catch(error){
 
@@ -1029,8 +1417,11 @@ async function loadProjects(){
       "Projects:",
       error
     );
+
   }
+
 }
+
 
 function escapeHtml(text){
 
@@ -1040,7 +1431,9 @@ function escapeHtml(text){
     .replaceAll(">","&gt;")
     .replaceAll('"',"&quot;")
     .replaceAll("'","&#039;");
+
 }
+
 
 async function photoVideo(){
 
@@ -1051,20 +1444,31 @@ async function photoVideo(){
       )
       .files;
 
+
   if(!photos.length){
-    alert("Select at least one photo.");
+
+    alert(
+      "Select at least one photo."
+    );
+
     return;
+
   }
+
 
   const form =
     new FormData();
 
+
   for(const photo of photos){
+
     form.append(
       "images",
       photo
     );
+
   }
+
 
   const music =
     document
@@ -1073,12 +1477,16 @@ async function photoVideo(){
       )
       .files[0];
 
+
   if(music){
+
     form.append(
       "music",
       music
     );
+
   }
+
 
   form.append(
     "duration",
@@ -1089,10 +1497,12 @@ async function photoVideo(){
       .value
   );
 
+
   form.append(
     "ratio",
     "16:9"
   );
+
 
   try{
 
@@ -1105,19 +1515,25 @@ async function photoVideo(){
         }
       );
 
+
     const data =
       await response.json();
 
+
     if(!response.ok){
+
       throw new Error(
         data.error ||
         "Photo video failed."
       );
+
     }
+
 
     showResult(
       data.videoUrl
     );
+
 
   }catch(error){
 
@@ -1125,8 +1541,11 @@ async function photoVideo(){
       "Photo → Video failed: " +
       error.message
     );
+
   }
+
 }
+
 
 async function trimVideo(){
 
@@ -1137,18 +1556,27 @@ async function trimVideo(){
       )
       .files[0];
 
+
   if(!video){
-    alert("Select a video.");
+
+    alert(
+      "Select a video."
+    );
+
     return;
+
   }
+
 
   const form =
     new FormData();
+
 
   form.append(
     "video",
     video
   );
+
 
   form.append(
     "start",
@@ -1159,6 +1587,7 @@ async function trimVideo(){
       .value || 0
   );
 
+
   form.append(
     "end",
     document
@@ -1167,6 +1596,7 @@ async function trimVideo(){
       )
       .value || ""
   );
+
 
   try{
 
@@ -1179,19 +1609,25 @@ async function trimVideo(){
         }
       );
 
+
     const data =
       await response.json();
 
+
     if(!response.ok){
+
       throw new Error(
         data.error ||
         "Trim failed."
       );
+
     }
+
 
     showResult(
       data.videoUrl
     );
+
 
   }catch(error){
 
@@ -1199,8 +1635,11 @@ async function trimVideo(){
       "Trim failed: " +
       error.message
     );
+
   }
+
 }
+
 
 async function combineVideos(){
 
@@ -1211,20 +1650,31 @@ async function combineVideos(){
       )
       .files;
 
+
   if(!videos.length){
-    alert("Select videos to combine.");
+
+    alert(
+      "Select videos to combine."
+    );
+
     return;
+
   }
+
 
   const form =
     new FormData();
 
+
   for(const video of videos){
+
     form.append(
       "videos",
       video
     );
+
   }
+
 
   try{
 
@@ -1237,19 +1687,25 @@ async function combineVideos(){
         }
       );
 
+
     const data =
       await response.json();
 
+
     if(!response.ok){
+
       throw new Error(
         data.error ||
         "Combine failed."
       );
+
     }
+
 
     showResult(
       data.videoUrl
     );
+
 
   }catch(error){
 
@@ -1257,10 +1713,14 @@ async function combineVideos(){
       "Combine failed: " +
       error.message
     );
+
   }
+
 }
 
+
 loadProjects();
+
 </script>
 
 </body>
