@@ -1,8 +1,3 @@
-// ================================================================
-// MAMAKI AI VIDEO STUDIO
-// SERVER v13.0.0 — 90% PRODUCT BACKEND
-// ================================================================
-
 import express from "express";
 import multer from "multer";
 import Replicate from "replicate";
@@ -10,31 +5,26 @@ import { EdgeTTS } from "edge-tts-universal";
 import ffmpegPath from "ffmpeg-static";
 import fs from "node:fs/promises";
 import path from "node:path";
-import crypto from "node:crypto";
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
 const app = express();
 
 const PORT = Number(process.env.PORT || 10000);
 const HOST = "0.0.0.0";
 
-const ROOT = process.cwd();
+const VERSION = "13.0.0";
 
+const ROOT = process.cwd();
 const TMP = path.join(ROOT, "tmp");
-const OUTPUT = path.join(ROOT, "outputs");
+const OUTPUTS = path.join(ROOT, "outputs");
 const PROJECTS = path.join(ROOT, "projects");
 const DATA = path.join(ROOT, "data");
 
 const USERS_FILE = path.join(DATA, "users.json");
 const SESSIONS_FILE = path.join(DATA, "sessions.json");
-const USAGE_FILE = path.join(DATA, "usage.json");
 const ERRORS_FILE = path.join(DATA, "errors.json");
-
-const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB || 200);
-const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
-
-const SESSION_DAYS = Number(process.env.SESSION_DAYS || 30);
+const USAGE_FILE = path.join(DATA, "usage.json");
 
 const T2V_MODEL =
   process.env.T2V_MODEL || "wan-video/wan-2.2-t2v-fast";
@@ -42,8 +32,8 @@ const T2V_MODEL =
 const I2V_MODEL =
   process.env.I2V_MODEL || "wan-video/wan-2.2-i2v-fast";
 
-const REPLICATE_API_TOKEN =
-  process.env.REPLICATE_API_TOKEN || "";
+const MAX_DURATION = 7200;
+const MIN_DURATION = 5;
 
 const ADMIN_EMAIL =
   String(process.env.ADMIN_EMAIL || "").trim().toLowerCase();
@@ -52,60 +42,63 @@ const ADMIN_PASSWORD =
   String(process.env.ADMIN_PASSWORD || "");
 
 const SESSION_SECRET =
-  process.env.SESSION_SECRET ||
-  crypto.randomBytes(48).toString("hex");
+  String(process.env.SESSION_SECRET || "");
 
-const appStartTime = Date.now();
+const REPLICATE_API_TOKEN =
+  String(process.env.REPLICATE_API_TOKEN || "").trim();
+
+const replicate = REPLICATE_API_TOKEN
+  ? new Replicate({
+      auth: REPLICATE_API_TOKEN,
+    })
+  : null;
 
 const jobs = new Map();
 
 const upload = multer({
-  dest: TMP,
+  storage: multer.memoryStorage(),
   limits: {
-    fileSize: MAX_UPLOAD_BYTES
-  }
+    fileSize: 100 * 1024 * 1024,
+  },
 });
 
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 
 app.use((req, res, next) => {
-  res.setHeader("X-Powered-By", "MAMAKI-AI");
-  res.setHeader("X-MAMAKI-Version", "13.0.0");
+  res.setHeader("X-MAMAKI-Version", VERSION);
+  res.setHeader("X-Content-Type-Options", "nosniff");
   next();
 });
 
-// ================================================================
-// INITIALIZATION
-// ================================================================
-
-async function ensureDirectories() {
+async function ensureStorage() {
   await fs.mkdir(TMP, { recursive: true });
-  await fs.mkdir(OUTPUT, { recursive: true });
+  await fs.mkdir(OUTPUTS, { recursive: true });
   await fs.mkdir(PROJECTS, { recursive: true });
   await fs.mkdir(DATA, { recursive: true });
 
-  await ensureJsonFile(USERS_FILE, []);
-  await ensureJsonFile(SESSIONS_FILE, []);
-  await ensureJsonFile(USAGE_FILE, []);
-  await ensureJsonFile(ERRORS_FILE, []);
-}
-
-async function ensureJsonFile(file, fallback) {
-  try {
-    await fs.access(file);
-  } catch {
-    await fs.writeFile(
-      file,
-      JSON.stringify(fallback, null, 2),
-      "utf8"
-    );
+  for (const file of [
+    USERS_FILE,
+    SESSIONS_FILE,
+    ERRORS_FILE,
+    USAGE_FILE,
+  ]) {
+    try {
+      await fs.access(file);
+    } catch {
+      await fs.writeFile(file, "{}", "utf8");
+    }
   }
 }
 
-async function readJson(file, fallback) {
+async function readJson(file, fallback = {}) {
   try {
     const raw = await fs.readFile(file, "utf8");
+
+    if (!raw.trim()) {
+      return fallback;
+    }
+
     return JSON.parse(raw);
   } catch {
     return fallback;
@@ -124,73 +117,66 @@ async function writeJson(file, data) {
   await fs.rename(temp, file);
 }
 
-await ensureDirectories();
-
-// ================================================================
-// GENERAL HELPERS
-// ================================================================
-
-function nowIso() {
-  return new Date().toISOString();
-}
-
-function safeName(value) {
+function cleanText(value, max = 10000) {
   return String(value || "")
-    .replace(/[^a-zA-Z0-9._-]/g, "_")
-    .slice(0, 120);
-}
-
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
+    .replace(/\0/g, "")
+    .trim()
+    .slice(0, max);
 }
 
 function normalizeDuration(value) {
   const n = Number(value);
 
-  if (!Number.isFinite(n)) return 5;
+  if (!Number.isFinite(n)) {
+    return 5;
+  }
 
-  return clamp(Math.round(n), 5, 7200);
+  return Math.max(
+    MIN_DURATION,
+    Math.min(MAX_DURATION, Math.round(n))
+  );
 }
 
 function normalizeRatio(value) {
-  const allowed = ["16:9", "9:16", "1:1"];
+  const v = String(value || "16:9");
 
-  return allowed.includes(value)
-    ? value
-    : "16:9";
+  if (["16:9", "9:16", "1:1"].includes(v)) {
+    return v;
+  }
+
+  return "16:9";
 }
 
-function normalizeStyle(value) {
-  const allowed = [
-    "cinematic",
-    "realistic",
-    "documentary",
-    "commercial",
-    "3d",
-    "anime",
-    "fantasy",
-    "sci-fi",
-    "horror",
-    "cartoon"
-  ];
+function ratioSize(ratio) {
+  if (ratio === "9:16") {
+    return "1080:1920";
+  }
 
-  const v = String(value || "")
-    .toLowerCase()
-    .trim();
+  if (ratio === "1:1") {
+    return "1080:1080";
+  }
 
-  return allowed.includes(v) ? v : "cinematic";
+  return "1920:1080";
 }
 
 function wanFrames(seconds) {
   return Number(seconds) <= 5 ? 81 : 121;
 }
 
-function randomToken(bytes = 48) {
-  return crypto.randomBytes(bytes).toString("hex");
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
-  const hash = crypto.scryptSync(
+function safeFileName(name, fallback = "file") {
+  const base = path.basename(String(name || fallback));
+
+  return base
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .slice(0, 150);
+}
+
+function hashPassword(password, salt = randomBytes(16).toString("hex")) {
+  const hash = scryptSync(
     String(password),
     salt,
     64
@@ -198,242 +184,165 @@ function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
 
   return {
     salt,
-    hash
+    hash,
   };
 }
 
-function verifyPassword(password, storedHash, salt) {
+function verifyPassword(password, salt, expectedHash) {
   try {
-    const calculated = crypto.scryptSync(
+    const actual = scryptSync(
       String(password),
       salt,
       64
-    ).toString("hex");
-
-    return crypto.timingSafeEqual(
-      Buffer.from(calculated, "hex"),
-      Buffer.from(storedHash, "hex")
     );
+
+    const expected = Buffer.from(
+      expectedHash,
+      "hex"
+    );
+
+    if (actual.length !== expected.length) {
+      return false;
+    }
+
+    return timingSafeEqual(actual, expected);
   } catch {
     return false;
   }
 }
 
-function signSession(sessionId) {
-  const signature = crypto
-    .createHmac("sha256", SESSION_SECRET)
-    .update(sessionId)
-    .digest("hex");
+function createToken() {
+  const random = randomBytes(32).toString("hex");
 
-  return `${sessionId}.${signature}`;
+  const secretPart = SESSION_SECRET
+    ? scryptSync(
+        SESSION_SECRET,
+        random.slice(0, 16),
+        32
+      ).toString("hex")
+    : "";
+
+  return `${random}.${secretPart}`;
 }
 
-function verifySessionToken(token) {
-  if (!token || !token.includes(".")) {
-    return null;
-  }
-
-  const [sessionId, signature] = token.split(".");
-
-  const expected = crypto
-    .createHmac("sha256", SESSION_SECRET)
-    .update(sessionId)
-    .digest("hex");
-
-  if (signature.length !== expected.length) {
-    return null;
-  }
-
-  try {
-    if (
-      !crypto.timingSafeEqual(
-        Buffer.from(signature),
-        Buffer.from(expected)
-      )
-    ) {
-      return null;
-    }
-  } catch {
-    return null;
-  }
-
-  return sessionId;
-}
-
-function extractToken(req) {
-  const auth = req.headers.authorization || "";
-
-  if (auth.toLowerCase().startsWith("bearer ")) {
-    return auth.slice(7).trim();
-  }
-
-  if (req.headers["x-session-token"]) {
-    return String(req.headers["x-session-token"]);
-  }
-
-  if (req.body && req.body.token) {
-    return String(req.body.token);
-  }
-
-  return null;
-}
-
-function publicUser(user) {
-  if (!user) return null;
-
-  return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.role || "user",
-    disabled: Boolean(user.disabled),
-    createdAt: user.createdAt,
-    updatedAt: user.updatedAt,
-    lastLoginAt: user.lastLoginAt
-  };
-}
-
-function errorResponse(res, status, code, message, extra = {}) {
-  return res.status(status).json({
-    ok: false,
-    code,
-    message,
-    ...extra
-  });
-}
-
-async function logError(error, context = {}) {
-  try {
-    const errors = await readJson(ERRORS_FILE, []);
-
-    errors.push({
-      id: randomUUID(),
-      time: nowIso(),
-      message:
-        error?.message ||
-        String(error),
-      context
-    });
-
-    while (errors.length > 500) {
-      errors.shift();
-    }
-
-    await writeJson(ERRORS_FILE, errors);
-  } catch {
-    // Logging must never crash the server.
-  }
-}
-
-function isReplicateCreditError(error) {
-  const text = String(
-    error?.message ||
-    error?.detail ||
-    error ||
-    ""
-  ).toLowerCase();
-
-  return (
-    text.includes("insufficient credit") ||
-    text.includes("insufficient credits") ||
-    text.includes("billing") ||
-    text.includes("payment required") ||
-    text.includes("credit balance") ||
-    text.includes("spend limit")
+async function createSession(userId, role = "user") {
+  const sessions = await readJson(
+    SESSIONS_FILE,
+    {}
   );
-}
 
-function isReplicateAuthError(error) {
-  const text = String(
-    error?.message ||
-    error?.detail ||
-    error ||
-    ""
-  ).toLowerCase();
+  const token = createToken();
 
-  return (
-    text.includes("unauthorized") ||
-    text.includes("authentication") ||
-    text.includes("invalid token") ||
-    text.includes("api token") ||
-    text.includes("401")
-  );
-}
-
-// ================================================================
-// AUTHENTICATION
-// ================================================================
-
-async function createSession(userId) {
-  const sessions = await readJson(SESSIONS_FILE, []);
-
-  const sessionId = randomToken(32);
-
-  const session = {
-    id: sessionId,
+  sessions[token] = {
     userId,
-    createdAt: nowIso(),
-    expiresAt:
-      new Date(
-        Date.now() +
-        SESSION_DAYS * 24 * 60 * 60 * 1000
-      ).toISOString()
+    role,
+    createdAt: Date.now(),
+    lastSeen: Date.now(),
   };
 
-  sessions.push(session);
-
-  await writeJson(SESSIONS_FILE, sessions);
-
-  return signSession(sessionId);
-}
-
-async function getUserFromRequest(req) {
-  const token = extractToken(req);
-
-  if (!token) return null;
-
-  const sessionId = verifySessionToken(token);
-
-  if (!sessionId) return null;
-
-  const sessions = await readJson(SESSIONS_FILE, []);
-
-  const session = sessions.find(
-    s => s.id === sessionId
+  await writeJson(
+    SESSIONS_FILE,
+    sessions
   );
 
-  if (!session) return null;
+  return token;
+}
+
+function getBearerToken(req) {
+  const header = String(
+    req.headers.authorization || ""
+  );
+
+  if (!header.toLowerCase().startsWith("bearer ")) {
+    return "";
+  }
+
+  return header.slice(7).trim();
+}
+
+async function getSession(req) {
+  const token = getBearerToken(req);
+
+  if (!token) {
+    return null;
+  }
+
+  const sessions = await readJson(
+    SESSIONS_FILE,
+    {}
+  );
+
+  const session = sessions[token];
+
+  if (!session) {
+    return null;
+  }
+
+  const MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 
   if (
-    new Date(session.expiresAt).getTime() <
-    Date.now()
+    Date.now() - Number(session.createdAt || 0) >
+    MAX_AGE
   ) {
+    delete sessions[token];
+
+    await writeJson(
+      SESSIONS_FILE,
+      sessions
+    );
+
     return null;
   }
 
-  const users = await readJson(USERS_FILE, []);
+  session.lastSeen = Date.now();
 
-  const user = users.find(
-    u => u.id === session.userId
+  sessions[token] = session;
+
+  await writeJson(
+    SESSIONS_FILE,
+    sessions
   );
+
+  return {
+    token,
+    ...session,
+  };
+}
+
+async function getCurrentUser(req) {
+  const session = await getSession(req);
+
+  if (!session) {
+    return null;
+  }
+
+  const users = await readJson(
+    USERS_FILE,
+    {}
+  );
+
+  const user = users[session.userId];
 
   if (!user || user.disabled) {
     return null;
   }
 
-  return user;
+  return {
+    ...user,
+    sessionRole: session.role,
+  };
 }
 
-async function requireAuth(req, res, next) {
-  const user = await getUserFromRequest(req);
+async function requireUser(req, res, next) {
+  const user = await getCurrentUser(req);
 
   if (!user) {
-    return errorResponse(
-      res,
-      401,
-      "AUTHENTICATION_REQUIRED",
-      "Please log in to continue."
-    );
+    return res.status(401).json({
+      ok: false,
+      error: "AUTH_REQUIRED",
+      message:
+        "Please log in to your MAMAKI account.",
+    });
   }
 
   req.user = user;
@@ -442,15 +351,17 @@ async function requireAuth(req, res, next) {
 }
 
 async function requireAdmin(req, res, next) {
-  const user = await getUserFromRequest(req);
+  const user = await getCurrentUser(req);
 
-  if (!user || user.role !== "admin") {
-    return errorResponse(
-      res,
-      403,
-      "ADMIN_ACCESS_REQUIRED",
-      "Administrator access required."
-    );
+  if (
+    !user ||
+    user.role !== "admin"
+  ) {
+    return res.status(403).json({
+      ok: false,
+      error: "ADMIN_REQUIRED",
+      message: "Administrator access required.",
+    });
   }
 
   req.user = user;
@@ -458,497 +369,94 @@ async function requireAdmin(req, res, next) {
   next();
 }
 
-// ================================================================
-// USER AUTH ROUTES
-// ================================================================
-
-app.post("/api/auth/signup", async (req, res) => {
+async function recordError(error, context = {}) {
   try {
-    const name = String(req.body.name || "").trim();
-    const email = String(req.body.email || "")
-      .trim()
-      .toLowerCase();
-    const password = String(req.body.password || "");
-
-    if (name.length < 2) {
-      return errorResponse(
-        res,
-        400,
-        "INVALID_NAME",
-        "Name must contain at least 2 characters."
-      );
-    }
-
-    if (
-      !email.includes("@") ||
-      email.length < 5
-    ) {
-      return errorResponse(
-        res,
-        400,
-        "INVALID_EMAIL",
-        "Enter a valid email address."
-      );
-    }
-
-    if (password.length < 8) {
-      return errorResponse(
-        res,
-        400,
-        "WEAK_PASSWORD",
-        "Password must contain at least 8 characters."
-      );
-    }
-
-    const users = await readJson(
-      USERS_FILE,
-      []
+    const errors = await readJson(
+      ERRORS_FILE,
+      {}
     );
 
-    const exists = users.some(
-      u => u.email === email
-    );
+    const id = randomUUID();
 
-    if (exists) {
-      return errorResponse(
-        res,
-        409,
-        "EMAIL_ALREADY_EXISTS",
-        "An account with this email already exists."
-      );
-    }
-
-    const passwordData =
-      hashPassword(password);
-
-    const user = {
-      id: randomUUID(),
-      name,
-      email,
-      passwordHash: passwordData.hash,
-      passwordSalt: passwordData.salt,
-      role: "user",
-      disabled: false,
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-      lastLoginAt: null
+    errors[id] = {
+      id,
+      createdAt: new Date().toISOString(),
+      message: String(
+        error?.message || error || "Unknown error"
+      ).slice(0, 2000),
+      code: String(
+        error?.code || ""
+      ).slice(0, 100),
+      context,
     };
 
-    users.push(user);
+    const ids = Object.keys(errors);
 
-    await writeJson(
-      USERS_FILE,
-      users
-    );
-
-    const token =
-      await createSession(user.id);
-
-    res.json({
-      ok: true,
-      message: "Account created successfully.",
-      token,
-      user: publicUser(user)
-    });
-  } catch (error) {
-    await logError(error, {
-      route: "/api/auth/signup"
-    });
-
-    errorResponse(
-      res,
-      500,
-      "SIGNUP_FAILED",
-      "Unable to create account."
-    );
-  }
-});
-
-app.post("/api/auth/login", async (req, res) => {
-  try {
-    const email = String(req.body.email || "")
-      .trim()
-      .toLowerCase();
-
-    const password = String(
-      req.body.password || ""
-    );
-
-    const users = await readJson(
-      USERS_FILE,
-      []
-    );
-
-    const user = users.find(
-      u => u.email === email
-    );
-
-    if (
-      !user ||
-      !verifyPassword(
-        password,
-        user.passwordHash,
-        user.passwordSalt
-      )
-    ) {
-      return errorResponse(
-        res,
-        401,
-        "INVALID_CREDENTIALS",
-        "Email or password is incorrect."
-      );
-    }
-
-    if (user.disabled) {
-      return errorResponse(
-        res,
-        403,
-        "ACCOUNT_DISABLED",
-        "This account has been disabled."
-      );
-    }
-
-    user.lastLoginAt = nowIso();
-    user.updatedAt = nowIso();
-
-    await writeJson(
-      USERS_FILE,
-      users
-    );
-
-    const token =
-      await createSession(user.id);
-
-    res.json({
-      ok: true,
-      message: "Login successful.",
-      token,
-      user: publicUser(user)
-    });
-  } catch (error) {
-    await logError(error, {
-      route: "/api/auth/login"
-    });
-
-    errorResponse(
-      res,
-      500,
-      "LOGIN_FAILED",
-      "Unable to log in."
-    );
-  }
-});
-
-app.post("/api/auth/logout", async (req, res) => {
-  try {
-    const token = extractToken(req);
-
-    if (token) {
-      const sessionId =
-        verifySessionToken(token);
-
-      if (sessionId) {
-        const sessions =
-          await readJson(
-            SESSIONS_FILE,
-            []
-          );
-
-        const remaining =
-          sessions.filter(
-            s => s.id !== sessionId
-          );
-
-        await writeJson(
-          SESSIONS_FILE,
-          remaining
-        );
-      }
-    }
-
-    res.json({
-      ok: true,
-      message: "Logged out."
-    });
-  } catch {
-    res.json({
-      ok: true,
-      message: "Logged out."
-    });
-  }
-});
-
-app.get("/api/auth/me", async (req, res) => {
-  const user =
-    await getUserFromRequest(req);
-
-  res.json({
-    ok: true,
-    authenticated: Boolean(user),
-    user: publicUser(user)
-  });
-});
-
-// ================================================================
-// ACCOUNT
-// ================================================================
-
-app.get(
-  "/api/account",
-  requireAuth,
-  async (req, res) => {
-    const usage =
-      await getUserUsage(req.user.id);
-
-    const projects =
-      await getUserProjects(
-        req.user.id
-      );
-
-    res.json({
-      ok: true,
-      user: publicUser(req.user),
-      usage,
-      projectsCount: projects.length,
-      features: {
-        aiVideo: true,
-        imageToVideo: true,
-        freeStudio: true,
-        narration: true,
-        subtitles: true,
-        promptEnhancement: true,
-        socialPresets: true
-      }
-    });
-  }
-);
-
-app.put(
-  "/api/account/profile",
-  requireAuth,
-  async (req, res) => {
-    try {
-      const users =
-        await readJson(
-          USERS_FILE,
-          []
+    if (ids.length > 500) {
+      const sorted = ids
+        .map(id => ({
+          id,
+          time: errors[id].createdAt || "",
+        }))
+        .sort((a, b) =>
+          String(a.time).localeCompare(
+            String(b.time)
+          )
         );
 
-      const user =
-        users.find(
-          u => u.id === req.user.id
-        );
+      while (sorted.length > 500) {
+        const old = sorted.shift();
 
-      if (!user) {
-        return errorResponse(
-          res,
-          404,
-          "USER_NOT_FOUND",
-          "Account not found."
-        );
-      }
-
-      if (req.body.name !== undefined) {
-        const name =
-          String(req.body.name).trim();
-
-        if (name.length < 2) {
-          return errorResponse(
-            res,
-            400,
-            "INVALID_NAME",
-            "Name is too short."
-          );
+        if (old) {
+          delete errors[old.id];
         }
-
-        user.name = name;
       }
-
-      user.updatedAt = nowIso();
-
-      await writeJson(
-        USERS_FILE,
-        users
-      );
-
-      res.json({
-        ok: true,
-        user: publicUser(user)
-      });
-    } catch (error) {
-      await logError(error, {
-        route: "/api/account/profile"
-      });
-
-      errorResponse(
-        res,
-        500,
-        "PROFILE_UPDATE_FAILED",
-        "Unable to update profile."
-      );
     }
-  }
-);
 
-app.post(
-  "/api/account/change-password",
-  requireAuth,
-  async (req, res) => {
-    try {
-      const currentPassword =
-        String(
-          req.body.currentPassword || ""
-        );
-
-      const newPassword =
-        String(
-          req.body.newPassword || ""
-        );
-
-      if (newPassword.length < 8) {
-        return errorResponse(
-          res,
-          400,
-          "WEAK_PASSWORD",
-          "New password must contain at least 8 characters."
-        );
-      }
-
-      const users =
-        await readJson(
-          USERS_FILE,
-          []
-        );
-
-      const user =
-        users.find(
-          u => u.id === req.user.id
-        );
-
-      if (
-        !user ||
-        !verifyPassword(
-          currentPassword,
-          user.passwordHash,
-          user.passwordSalt
-        )
-      ) {
-        return errorResponse(
-          res,
-          401,
-          "CURRENT_PASSWORD_INVALID",
-          "Current password is incorrect."
-        );
-      }
-
-      const passwordData =
-        hashPassword(newPassword);
-
-      user.passwordHash =
-        passwordData.hash;
-
-      user.passwordSalt =
-        passwordData.salt;
-
-      user.updatedAt = nowIso();
-
-      await writeJson(
-        USERS_FILE,
-        users
-      );
-
-      res.json({
-        ok: true,
-        message: "Password changed successfully."
-      });
-    } catch (error) {
-      await logError(error, {
-        route:
-          "/api/account/change-password"
-      });
-
-      errorResponse(
-        res,
-        500,
-        "PASSWORD_CHANGE_FAILED",
-        "Unable to change password."
-      );
-    }
-  }
-);
-
-// ================================================================
-// USAGE
-// ================================================================
-
-async function getUserUsage(userId) {
-  const usage =
-    await readJson(
-      USAGE_FILE,
-      []
+    await writeJson(
+      ERRORS_FILE,
+      errors
     );
-
-  const records =
-    usage.filter(
-      r => r.userId === userId
-    );
-
-  const aiSeconds =
-    records
-      .filter(r => r.type === "ai")
-      .reduce(
-        (sum, r) =>
-          sum + Number(r.seconds || 0),
-        0
-      );
-
-  const aiJobs =
-    records.filter(
-      r => r.type === "ai"
-    ).length;
-
-  const studioJobs =
-    records.filter(
-      r => r.type === "studio"
-    ).length;
-
-  return {
-    aiJobs,
-    aiSeconds,
-    aiMinutes:
-      Math.round(
-        (aiSeconds / 60) * 100
-      ) / 100,
-    studioJobs,
-    totalJobs:
-      records.length
-  };
+  } catch {
+    // Logging must never crash the application.
+  }
 }
 
-async function recordUsage({
-  userId,
-  type,
-  seconds = 0,
-  action = ""
-}) {
-  const usage =
-    await readJson(
-      USAGE_FILE,
-      []
-    );
-
-  usage.push({
-    id: randomUUID(),
-    userId,
-    type,
-    seconds: Number(seconds || 0),
-    action,
-    createdAt: nowIso()
-  });
-
-  while (usage.length > 10000) {
-    usage.shift();
+async function recordUsage(userId, type, seconds = 0) {
+  if (!userId) {
+    return;
   }
+
+  const usage = await readJson(
+    USAGE_FILE,
+    {}
+  );
+
+  if (!usage[userId]) {
+    usage[userId] = {
+      userId,
+      aiGenerations: 0,
+      aiSeconds: 0,
+      studioJobs: 0,
+      narrationJobs: 0,
+      updatedAt: Date.now(),
+    };
+  }
+
+  if (type === "ai") {
+    usage[userId].aiGenerations += 1;
+    usage[userId].aiSeconds += Number(seconds || 0);
+  }
+
+  if (type === "studio") {
+    usage[userId].studioJobs += 1;
+  }
+
+  if (type === "narration") {
+    usage[userId].narrationJobs += 1;
+  }
+
+  usage[userId].updatedAt = Date.now();
 
   await writeJson(
     USAGE_FILE,
@@ -956,555 +464,209 @@ async function recordUsage({
   );
 }
 
-app.get(
-  "/api/account/usage",
-  requireAuth,
-  async (req, res) => {
-    res.json({
-      ok: true,
-      usage:
-        await getUserUsage(
-          req.user.id
-        )
-    });
+function classifyReplicateError(error) {
+  const text = String(
+    error?.message ||
+    error ||
+    ""
+  ).toLowerCase();
+
+  if (
+    text.includes("402") ||
+    text.includes("payment required") ||
+    text.includes("insufficient credit") ||
+    text.includes("insufficient funds") ||
+    text.includes("billing") ||
+    text.includes("credit")
+  ) {
+    return {
+      code: "REPLICATE_CREDIT_REQUIRED",
+      message:
+        "Replicate requires available credit or billing before this AI generation can start.",
+    };
   }
-);
 
-// ================================================================
-// PROJECTS
-// ================================================================
+  if (
+    text.includes("401") ||
+    text.includes("unauthorized") ||
+    text.includes("authentication") ||
+    text.includes("invalid api token") ||
+    text.includes("api token")
+  ) {
+    return {
+      code: "REPLICATE_AUTH_REQUIRED",
+      message:
+        "Replicate authentication is missing or invalid. Check REPLICATE_API_TOKEN in Render.",
+    };
+  }
 
-function projectFile(userId, projectId) {
-  return path.join(
-    PROJECTS,
-    `${safeName(userId)}_${safeName(projectId)}.json`
-  );
+  if (
+    text.includes("403") ||
+    text.includes("forbidden")
+  ) {
+    return {
+      code: "REPLICATE_FORBIDDEN",
+      message:
+        "Replicate rejected this request. Check account permissions, model access and billing.",
+    };
+  }
+
+  if (
+    text.includes("429") ||
+    text.includes("rate limit") ||
+    text.includes("too many")
+  ) {
+    return {
+      code: "REPLICATE_RATE_LIMIT",
+      message:
+        "Replicate rate limit reached. Please wait and try again.",
+    };
+  }
+
+  return {
+    code: "REPLICATE_GENERATION_FAILED",
+    message:
+      "Replicate could not start or complete the AI generation.",
+  };
 }
 
-async function getUserProjects(userId) {
-  const files =
-    await fs.readdir(PROJECTS)
-      .catch(() => []);
+async function downloadToFile(url, destination) {
+  const response = await fetch(url);
 
-  const result = [];
-
-  for (const file of files) {
-    if (
-      !file.startsWith(
-        `${safeName(userId)}_`
-      ) ||
-      !file.endsWith(".json")
-    ) {
-      continue;
-    }
-
-    try {
-      const data =
-        await readJson(
-          path.join(PROJECTS, file),
-          null
-        );
-
-      if (data) result.push(data);
-    } catch {
-      // Ignore broken project files.
-    }
-  }
-
-  return result.sort(
-    (a, b) =>
-      new Date(
-        b.updatedAt ||
-        b.createdAt ||
-        0
-      ) -
-      new Date(
-        a.updatedAt ||
-        a.createdAt ||
-        0
-      )
-  );
-}
-
-app.get(
-  "/api/projects",
-  requireAuth,
-  async (req, res) => {
-    const projects =
-      await getUserProjects(
-        req.user.id
-      );
-
-    res.json({
-      ok: true,
-      projects
-    });
-  }
-);
-
-app.get(
-  "/api/projects/:id",
-  requireAuth,
-  async (req, res) => {
-    const file =
-      projectFile(
-        req.user.id,
-        req.params.id
-      );
-
-    try {
-      const project =
-        await readJson(
-          file,
-          null
-        );
-
-      if (!project) {
-        return errorResponse(
-          res,
-          404,
-          "PROJECT_NOT_FOUND",
-          "Project not found."
-        );
-      }
-
-      res.json({
-        ok: true,
-        project
-      });
-    } catch {
-      errorResponse(
-        res,
-        404,
-        "PROJECT_NOT_FOUND",
-        "Project not found."
-      );
-    }
-  }
-);
-
-app.post(
-  "/api/projects/save",
-  requireAuth,
-  async (req, res) => {
-    try {
-      const incoming =
-        req.body || {};
-
-      const id =
-        String(
-          incoming.id ||
-          randomUUID()
-        );
-
-      const project = {
-        id,
-        userId: req.user.id,
-        name:
-          String(
-            incoming.name ||
-            incoming.title ||
-            "Untitled Project"
-          ).slice(0, 150),
-        type:
-          incoming.type ||
-          "video",
-        prompt:
-          incoming.prompt ||
-          "",
-        videoUrl:
-          incoming.videoUrl ||
-          incoming.url ||
-          null,
-        thumbnail:
-          incoming.thumbnail ||
-          null,
-        duration:
-          Number(
-            incoming.duration || 0
-          ),
-        ratio:
-          normalizeRatio(
-            incoming.ratio
-          ),
-        style:
-          normalizeStyle(
-            incoming.style
-          ),
-        metadata:
-          incoming.metadata ||
-          {},
-        createdAt:
-          incoming.createdAt ||
-          nowIso(),
-        updatedAt:
-          nowIso()
-      };
-
-      await writeJson(
-        projectFile(
-          req.user.id,
-          id
-        ),
-        project
-      );
-
-      res.json({
-        ok: true,
-        project
-      });
-    } catch (error) {
-      await logError(error, {
-        route: "/api/projects/save",
-        userId: req.user.id
-      });
-
-      errorResponse(
-        res,
-        500,
-        "PROJECT_SAVE_FAILED",
-        "Unable to save project."
-      );
-    }
-  }
-);
-
-app.delete(
-  "/api/projects/:id",
-  requireAuth,
-  async (req, res) => {
-    try {
-      await fs.unlink(
-        projectFile(
-          req.user.id,
-          req.params.id
-        )
-      );
-
-      res.json({
-        ok: true,
-        message: "Project deleted."
-      });
-    } catch {
-      errorResponse(
-        res,
-        404,
-        "PROJECT_NOT_FOUND",
-        "Project not found."
-      );
-    }
-  }
-);
-
-// ================================================================
-// PROMPT ENHANCEMENT
-// ================================================================
-
-function enhancePrompt(prompt, style, ratio) {
-  const clean =
-    String(prompt || "")
-      .trim();
-
-  if (!clean) {
-    return "";
-  }
-
-  const styleText = {
-    cinematic:
-      "cinematic composition, dramatic lighting, film-quality visual language, realistic depth and atmosphere",
-    realistic:
-      "photorealistic details, natural lighting, realistic textures, authentic movement",
-    documentary:
-      "documentary cinematography, natural camera movement, authentic environment, observational realism",
-    commercial:
-      "premium commercial production, polished composition, controlled lighting, attractive product-quality visuals",
-    "3d":
-      "high-quality 3D animation, detailed materials, professional rendering, smooth motion",
-    anime:
-      "high-quality anime visual style, expressive composition, detailed backgrounds, fluid animation",
-    fantasy:
-      "epic fantasy atmosphere, detailed environment, magical lighting, cinematic scale",
-    "sci-fi":
-      "futuristic science-fiction environment, advanced technology, atmospheric lighting, cinematic scale",
-    horror:
-      "dark atmospheric horror cinematography, suspenseful composition, unsettling environment, controlled shadows",
-    cartoon:
-      "stylized cartoon animation, expressive characters, clean shapes, colorful visual storytelling"
-  }[style] || "cinematic visual quality";
-
-  const formatText =
-    ratio === "9:16"
-      ? "vertical social-video composition"
-      : ratio === "1:1"
-      ? "square social-media composition"
-      : "widescreen cinematic composition";
-
-  return [
-    clean,
-    "",
-    `Visual direction: ${styleText}.`,
-    `Format: ${formatText}.`,
-    "High production value, coherent subject appearance, consistent environment, natural motion, strong composition, detailed foreground and background.",
-    "Camera movement should be smooth and intentional.",
-    "Maintain visual continuity throughout the shot.",
-    "Avoid distorted anatomy, duplicate objects, unwanted text, logos, watermarks, flickering and unstable details."
-  ].join(" ");
-}
-
-app.post(
-  "/api/ai/enhance-prompt",
-  async (req, res) => {
-    try {
-      const prompt =
-        String(
-          req.body.prompt || ""
-        );
-
-      const style =
-        normalizeStyle(
-          req.body.style
-        );
-
-      const ratio =
-        normalizeRatio(
-          req.body.ratio
-        );
-
-      if (!prompt.trim()) {
-        return errorResponse(
-          res,
-          400,
-          "PROMPT_REQUIRED",
-          "Enter a prompt first."
-        );
-      }
-
-      res.json({
-        ok: true,
-        original: prompt,
-        enhanced:
-          enhancePrompt(
-            prompt,
-            style,
-            ratio
-          )
-      });
-    } catch (error) {
-      await logError(error, {
-        route:
-          "/api/ai/enhance-prompt"
-      });
-
-      errorResponse(
-        res,
-        500,
-        "PROMPT_ENHANCEMENT_FAILED",
-        "Unable to enhance prompt."
-      );
-    }
-  }
-);
-
-// ================================================================
-// REPLICATE HELPERS
-// ================================================================
-
-let replicate = null;
-
-if (REPLICATE_API_TOKEN) {
-  replicate = new Replicate({
-    auth: REPLICATE_API_TOKEN
-  });
-}
-
-async function outputToBuffer(output) {
-  if (!output) {
+  if (!response.ok) {
     throw new Error(
-      "Replicate returned an empty output."
+      `Download failed with HTTP ${response.status}`
     );
   }
 
-  if (Buffer.isBuffer(output)) {
-    return output;
+  const buffer = Buffer.from(
+    await response.arrayBuffer()
+  );
+
+  await fs.writeFile(
+    destination,
+    buffer
+  );
+
+  return destination;
+}
+
+async function downloadReplicateOutput(output, destination) {
+  if (!output) {
+    throw new Error(
+      "Replicate returned no output."
+    );
+  }
+
+  if (
+    typeof output === "string" &&
+    /^https?:\/\//i.test(output)
+  ) {
+    return downloadToFile(
+      output,
+      destination
+    );
+  }
+
+  if (
+    output &&
+    typeof output.url === "function"
+  ) {
+    const url = await output.url();
+
+    return downloadToFile(
+      String(url),
+      destination
+    );
+  }
+
+  if (
+    output &&
+    typeof output.url === "string"
+  ) {
+    return downloadToFile(
+      output.url,
+      destination
+    );
+  }
+
+  if (
+    Buffer.isBuffer(output)
+  ) {
+    await fs.writeFile(
+      destination,
+      output
+    );
+
+    return destination;
   }
 
   if (
     output instanceof Uint8Array
   ) {
-    return Buffer.from(output);
-  }
-
-  if (
-    typeof output === "string"
-  ) {
-    const response =
-      await fetch(output);
-
-    if (!response.ok) {
-      throw new Error(
-        `Unable to download Replicate output (${response.status}).`
-      );
-    }
-
-    return Buffer.from(
-      await response.arrayBuffer()
+    await fs.writeFile(
+      destination,
+      Buffer.from(output)
     );
+
+    return destination;
   }
 
   if (
     Array.isArray(output) &&
-    output.length
+    output.length > 0
   ) {
-    return outputToBuffer(
-      output[0]
+    return downloadReplicateOutput(
+      output[0],
+      destination
     );
   }
 
   if (
-    typeof output.url ===
-    "function"
+    output &&
+    typeof output === "object"
   ) {
-    return outputToBuffer(
-      await output.url()
-    );
-  }
-
-  if (output.url) {
-    return outputToBuffer(
-      output.url
-    );
-  }
-
-  if (
-    output.output
-  ) {
-    return outputToBuffer(
-      output.output
-    );
+    for (const key of [
+      "video",
+      "output",
+      "url",
+      "file",
+    ]) {
+      if (output[key]) {
+        return downloadReplicateOutput(
+          output[key],
+          destination
+        );
+      }
+    }
   }
 
   throw new Error(
-    "Replicate returned an unsupported output format."
+    "Replicate finished without returning a usable video file."
   );
 }
 
-async function wanTextToVideo({
-  prompt,
-  duration,
-  ratio
-}) {
-  if (!replicate) {
-    const error =
-      new Error(
-        "REPLICATE_API_TOKEN is not configured."
-      );
-
-    error.code =
-      "REPLICATE_AUTH_REQUIRED";
-
-    throw error;
-  }
-
-  const seconds =
-    Math.min(
-      5,
-      Number(duration || 5)
-    );
-
-  const frames =
-    wanFrames(seconds);
-
-  const output =
-    await replicate.run(
-      T2V_MODEL,
-      {
-        input: {
-          prompt,
-          num_frames: frames,
-          aspect_ratio:
-            normalizeRatio(ratio)
-        }
-      }
-    );
-
-  return outputToBuffer(
-    output
-  );
-}
-
-async function wanImageToVideo({
-  prompt,
-  imagePath,
-  duration,
-  ratio
-}) {
-  if (!replicate) {
-    const error =
-      new Error(
-        "REPLICATE_API_TOKEN is not configured."
-      );
-
-    error.code =
-      "REPLICATE_AUTH_REQUIRED";
-
-    throw error;
-  }
-
-  const imageBuffer =
-    await fs.readFile(
-      imagePath
-    );
-
-  const seconds =
-    Math.min(
-      5,
-      Number(duration || 5)
-    );
-
-  const frames =
-    wanFrames(seconds);
-
-  const output =
-    await replicate.run(
-      I2V_MODEL,
-      {
-        input: {
-          prompt,
-          image: imageBuffer,
-          num_frames: frames,
-          aspect_ratio:
-            normalizeRatio(ratio)
-        }
-      }
-    );
-
-  return outputToBuffer(
-    output
-  );
-}
-
-// ================================================================
-// FFMPEG
-// ================================================================
-
-function runFFmpeg(args) {
+async function runFFmpeg(args) {
   return new Promise(
     (resolve, reject) => {
-      const child =
-        spawn(
-          ffmpegPath,
-          [
-            "-y",
-            ...args
-          ]
-        );
+      const child = spawn(
+        ffmpegPath,
+        args,
+        {
+          stdio: [
+            "ignore",
+            "pipe",
+            "pipe",
+          ],
+        }
+      );
 
       let stderr = "";
 
       child.stderr.on(
         "data",
-        data => {
-          stderr += data.toString();
+        chunk => {
+          stderr += chunk.toString();
         }
       );
 
@@ -1519,11 +681,14 @@ function runFFmpeg(args) {
           if (code === 0) {
             resolve();
           } else {
-            reject(
+            const error =
               new Error(
-                `FFmpeg failed (${code}): ${stderr.slice(-4000)}`
-              )
-            );
+                `FFmpeg failed with code ${code}: ${stderr.slice(-4000)}`
+              );
+
+            error.code = "FFMPEG_FAILED";
+
+            reject(error);
           }
         }
       );
@@ -1531,115 +696,14 @@ function runFFmpeg(args) {
   );
 }
 
-async function writeBuffer(
-  buffer,
-  extension = ".mp4"
-) {
-  const filename =
-    `${randomUUID()}${extension}`;
-
-  const file =
-    path.join(
-      TMP,
-      filename
-    );
-
-  await fs.writeFile(
-    file,
-    buffer
-  );
-
-  return file;
-}
-
-async function createSoftMusic(
-  duration,
-  output
-) {
-  const seconds =
-    Math.max(
-      1,
-      Number(duration || 5)
-    );
-
-  await runFFmpeg([
-    "-f",
-    "lavfi",
-    "-i",
-    `sine=frequency=220:sample_rate=44100:duration=${seconds}`,
-    "-af",
-    "volume=0.025",
-    "-c:a",
-    "aac",
-    "-b:a",
-    "96k",
-    output
-  ]);
-}
-
-async function addSoftMusic(
-  video,
-  duration
-) {
-  const music =
-    path.join(
-      TMP,
-      `${randomUUID()}_music.m4a`
-    );
-
-  const output =
-    path.join(
-      TMP,
-      `${randomUUID()}_audio.mp4`
-    );
-
-  try {
-    await createSoftMusic(
-      duration,
-      music
-    );
-
-    await runFFmpeg([
-      "-i",
-      video,
-      "-i",
-      music,
-      "-filter_complex",
-      "[1:a]volume=0.08[a]",
-      "-map",
-      "0:v:0",
-      "-map",
-      "0:a?",
-      "-map",
-      "[a]",
-      "-c:v",
-      "copy",
-      "-c:a",
-      "aac",
-      "-shortest",
-      output
-    ]);
-
-    return output;
-  } catch {
-    return video;
-  } finally {
-    await fs.unlink(
-      music
-    ).catch(() => {});
-  }
-}
-
-async function addWatermark(
-  video,
-  output
-) {
+async function addWatermark(input, output) {
   const filter =
-    "drawtext=text='MAMAKI ✨':x=w-tw-30:y=h-th-25:fontsize=26:fontcolor=white@0.78:shadowcolor=black@0.7:shadowx=2:shadowy=2";
+    "drawtext=text='MAMAKI ✨':fontcolor=white@0.78:fontsize=28:borderw=2:bordercolor=black@0.45:x=w-tw-28:y=h-th-24";
 
   await runFFmpeg([
+    "-y",
     "-i",
-    video,
+    input,
     "-vf",
     filter,
     "-c:v",
@@ -1650,9 +714,11 @@ async function addWatermark(
     "20",
     "-c:a",
     "aac",
+    "-b:a",
+    "160k",
     "-movflags",
     "+faststart",
-    output
+    output,
   ]);
 
   return output;
@@ -1660,10 +726,11 @@ async function addWatermark(
 
 async function forceDuration(
   input,
-  seconds,
-  output
+  output,
+  seconds
 ) {
   await runFFmpeg([
+    "-y",
     "-i",
     input,
     "-t",
@@ -1676,9 +743,11 @@ async function forceDuration(
     "20",
     "-c:a",
     "aac",
+    "-b:a",
+    "160k",
     "-movflags",
     "+faststart",
-    output
+    output,
   ]);
 
   return output;
@@ -1686,17 +755,13 @@ async function forceDuration(
 
 async function resizeVideo(
   input,
-  ratio,
-  output
+  output,
+  ratio
 ) {
-  const size =
-    ratio === "9:16"
-      ? "1080:1920"
-      : ratio === "1:1"
-      ? "1080:1080"
-      : "1920:1080";
+  const size = ratioSize(ratio);
 
   await runFFmpeg([
+    "-y",
     "-i",
     input,
     "-vf",
@@ -1709,9 +774,70 @@ async function resizeVideo(
     "20",
     "-c:a",
     "aac",
+    "-b:a",
+    "160k",
     "-movflags",
     "+faststart",
-    output
+    output,
+  ]);
+
+  return output;
+}
+
+async function createSoftMusic(
+  output,
+  seconds = 5
+) {
+  const duration =
+    Math.max(1, Number(seconds));
+
+  await runFFmpeg([
+    "-y",
+    "-f",
+    "lavfi",
+    "-i",
+    `sine=frequency=220:sample_rate=44100:duration=${duration}`,
+    "-af",
+    "volume=0.035,afade=t=in:st=0:d=1,afade=t=out:st=" +
+      Math.max(0, duration - 1) +
+      ":d=1",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "128k",
+    output,
+  ]);
+
+  return output;
+}
+
+async function attachAudio(
+  video,
+  audio,
+  output
+) {
+  await runFFmpeg([
+    "-y",
+    "-i",
+    video,
+    "-i",
+    audio,
+    "-filter_complex",
+    "[1:a]volume=0.18[a1];[0:a][a1]amix=inputs=2:duration=first:dropout_transition=2[a]",
+    "-map",
+    "0:v:0",
+    "-map",
+    "[a]",
+    "-c:v",
+    "copy",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "160k",
+    "-shortest",
+    "-movflags",
+    "+faststart",
+    output,
   ]);
 
   return output;
@@ -1721,22 +847,16 @@ async function combineVideoFiles(
   files,
   output
 ) {
-  const listFile =
-    path.join(
-      TMP,
-      `${randomUUID()}_concat.txt`
-    );
+  const listFile = path.join(
+    TMP,
+    `${randomUUID()}.txt`
+  );
 
-  const content =
-    files
-      .map(
-        file =>
-          `file '${file.replace(
-            /'/g,
-            "'\\''"
-          )}'`
-      )
-      .join("\n");
+  const content = files
+    .map(file =>
+      `file '${file.replace(/'/g, "'\\''")}'`
+    )
+    .join("\n");
 
   await fs.writeFile(
     listFile,
@@ -1746,6 +866,7 @@ async function combineVideoFiles(
 
   try {
     await runFFmpeg([
+      "-y",
       "-f",
       "concat",
       "-safe",
@@ -1754,10 +875,13 @@ async function combineVideoFiles(
       listFile,
       "-c",
       "copy",
-      output
+      "-movflags",
+      "+faststart",
+      output,
     ]);
   } catch {
     await runFFmpeg([
+      "-y",
       "-f",
       "concat",
       "-safe",
@@ -1772,439 +896,992 @@ async function combineVideoFiles(
       "20",
       "-c:a",
       "aac",
-      output
+      "-b:a",
+      "160k",
+      "-movflags",
+      "+faststart",
+      output,
     ]);
   } finally {
-    await fs.unlink(
-      listFile
-    ).catch(() => {});
+    await fs.unlink(listFile).catch(() => {});
   }
 
   return output;
 }
 
-// ================================================================
-// JOB SYSTEM
-// ================================================================
-
-function createJob(userId) {
-  const id =
-    randomUUID();
-
-  const job = {
-    id,
-    userId,
-    status: "queued",
-    progress: 0,
-    message: "Queued",
-    result: null,
-    error: null,
-    createdAt: nowIso(),
-    updatedAt: nowIso()
-  };
-
-  jobs.set(id, job);
-
-  return job;
-}
-
-function updateJob(
-  job,
-  data
+function splitIntoScenes(
+  script,
+  targetSeconds
 ) {
-  Object.assign(
-    job,
-    data,
-    {
-      updatedAt: nowIso()
-    }
-  );
-}
+  const text = cleanText(script, 30000);
 
-function cleanupJobs() {
-  const cutoff =
-    Date.now() -
-    60 * 60 * 1000;
+  if (!text) {
+    return [];
+  }
+
+  const chunks = text
+    .split(
+      /(?<=[.!?])\s+|\n+/
+    )
+    .map(x => x.trim())
+    .filter(Boolean);
+
+  const maxScenes = Math.ceil(
+    targetSeconds / 5
+  );
+
+  if (chunks.length <= maxScenes) {
+    return chunks;
+  }
+
+  const scenes = [];
+
+  const perScene = Math.ceil(
+    chunks.length / maxScenes
+  );
 
   for (
-    const [id, job]
-    of jobs
+    let i = 0;
+    i < chunks.length;
+    i += perScene
   ) {
-    const time =
-      new Date(
-        job.updatedAt ||
-        job.createdAt
-      ).getTime();
+    scenes.push(
+      chunks
+        .slice(i, i + perScene)
+        .join(" ")
+    );
+  }
 
+  return scenes;
+}
+
+function enhancePrompt(
+  prompt,
+  style = "Cinematic"
+) {
+  const clean = cleanText(
+    prompt,
+    5000
+  );
+
+  if (!clean) {
+    return "";
+  }
+
+  return [
+    clean,
+    "",
+    `Visual style: ${style}.`,
+    "Create a coherent professional video sequence.",
+    "Use strong composition, natural motion, consistent subjects, realistic lighting, cinematic depth and detailed environments.",
+    "Maintain continuity between shots.",
+    "Avoid text overlays, logos and unwanted distortions.",
+    "Use smooth camera movement appropriate to the scene.",
+  ].join(" ");
+}
+
+async function wanTextToVideo(
+  prompt,
+  seconds,
+  ratio,
+  quality
+) {
+  if (!replicate) {
+    const error =
+      new Error(
+        "REPLICATE_API_TOKEN is not configured."
+      );
+
+    error.code =
+      "REPLICATE_AUTH_REQUIRED";
+
+    throw error;
+  }
+
+  const frames =
+    wanFrames(seconds);
+
+  const enhanced =
+    `${prompt}\n\nOutput requirements: ${ratio} aspect ratio, professional ${quality || "standard"} quality.`;
+
+  const input = {
+    prompt: enhanced,
+    num_frames: frames,
+    aspect_ratio: ratio,
+  };
+
+  try {
+    const result =
+      await replicate.run(
+        T2V_MODEL,
+        { input }
+      );
+
+    return result;
+  } catch (error) {
+    const classified =
+      classifyReplicateError(error);
+
+    error.code =
+      classified.code;
+
+    error.mamakiMessage =
+      classified.message;
+
+    throw error;
+  }
+}
+
+async function wanImageToVideo(
+  prompt,
+  imageBuffer,
+  seconds,
+  ratio,
+  quality
+) {
+  if (!replicate) {
+    const error =
+      new Error(
+        "REPLICATE_API_TOKEN is not configured."
+      );
+
+    error.code =
+      "REPLICATE_AUTH_REQUIRED";
+
+    throw error;
+  }
+
+  const frames =
+    wanFrames(seconds);
+
+  const base64 =
+    imageBuffer.toString("base64");
+
+  const dataUri =
+    `data:image/jpeg;base64,${base64}`;
+
+  const input = {
+    prompt:
+      `${prompt}\n\nCreate coherent motion from the supplied reference image. Aspect ratio ${ratio}. Quality ${quality || "standard"}.`,
+    image: dataUri,
+    num_frames: frames,
+    aspect_ratio: ratio,
+  };
+
+  try {
+    const result =
+      await replicate.run(
+        I2V_MODEL,
+        { input }
+      );
+
+    return result;
+  } catch (error) {
+    const classified =
+      classifyReplicateError(error);
+
+    error.code =
+      classified.code;
+
+    error.mamakiMessage =
+      classified.message;
+
+    throw error;
+  }
+}
+
+async function generateVideoProduction({
+  job,
+  userId,
+  prompt,
+  imageBuffer,
+  duration,
+  ratio,
+  style,
+  quality,
+}) {
+  const scenes =
+    splitIntoScenes(
+      prompt,
+      duration
+    );
+
+  if (!scenes.length) {
+    throw new Error(
+      "Please describe the video you want to create."
+    );
+  }
+
+  const sceneDuration =
+    duration <= 5
+      ? 5
+      : 5;
+
+  const files = [];
+
+  job.totalScenes =
+    scenes.length;
+
+  for (
+    let i = 0;
+    i < scenes.length;
+    i++
+  ) {
+    if (job.cancelled) {
+      throw new Error(
+        "Production cancelled."
+      );
+    }
+
+    job.currentScene =
+      i + 1;
+
+    job.progress = Math.round(
+      (i /
+        scenes.length) *
+        75
+    );
+
+    const scenePrompt =
+      enhancePrompt(
+        scenes[i],
+        style
+      );
+
+    const rawFile = path.join(
+      TMP,
+      `${job.id}-scene-${i}.mp4`
+    );
+
+    let output;
+
+    if (imageBuffer && i === 0) {
+      output =
+        await wanImageToVideo(
+          scenePrompt,
+          imageBuffer,
+          sceneDuration,
+          ratio,
+          quality
+        );
+    } else {
+      output =
+        await wanTextToVideo(
+          scenePrompt,
+          sceneDuration,
+          ratio,
+          quality
+        );
+    }
+
+    await downloadReplicateOutput(
+      output,
+      rawFile
+    );
+
+    files.push(rawFile);
+
+    job.progress = Math.round(
+      ((i + 1) /
+        scenes.length) *
+        75
+    );
+  }
+
+  const combined =
+    path.join(
+      OUTPUTS,
+      `${job.id}-combined.mp4`
+    );
+
+  await combineVideoFiles(
+    files,
+    combined
+  );
+
+  job.progress = 82;
+
+  const durationFile =
+    path.join(
+      OUTPUTS,
+      `${job.id}-duration.mp4`
+    );
+
+  await forceDuration(
+    combined,
+    durationFile,
+    duration
+  );
+
+  job.progress = 88;
+
+  const music =
+    path.join(
+      TMP,
+      `${job.id}-music.m4a`
+    );
+
+  await createSoftMusic(
+    music,
+    duration
+  );
+
+  const audioFile =
+    path.join(
+      OUTPUTS,
+      `${job.id}-audio.mp4`
+    );
+
+  await attachAudio(
+    durationFile,
+    music,
+    audioFile
+  );
+
+  job.progress = 93;
+
+  const final =
+    path.join(
+      OUTPUTS,
+      `${job.id}.mp4`
+    );
+
+  await addWatermark(
+    audioFile,
+    final
+  );
+
+  job.progress = 100;
+
+  await recordUsage(
+    userId,
+    "ai",
+    duration
+  );
+
+  return final;
+}
+
+async function cleanupJobFiles(jobId) {
+  const names = [
+    `${jobId}-combined.mp4`,
+    `${jobId}-duration.mp4`,
+    `${jobId}-audio.mp4`,
+    `${jobId}-music.m4a`,
+    `${jobId}.mp4`,
+  ];
+
+  for (const name of names) {
+    await fs
+      .unlink(
+        path.join(
+          OUTPUTS,
+          name
+        )
+      )
+      .catch(() => {});
+  }
+
+  const tmpEntries =
+    await fs
+      .readdir(TMP)
+      .catch(() => []);
+
+  for (const name of tmpEntries) {
     if (
-      ["completed", "failed", "cancelled"]
-        .includes(job.status) &&
-      time < cutoff
+      name.startsWith(`${jobId}-`)
     ) {
-      jobs.delete(id);
+      await fs
+        .unlink(
+          path.join(
+            TMP,
+            name
+          )
+        )
+        .catch(() => {});
     }
   }
 }
 
-setInterval(
-  cleanupJobs,
-  10 * 60 * 1000
-);
-
-async function runGenerationJob(
-  job,
-  options
+async function saveProjectForUser(
+  userId,
+  project
 ) {
-  const workingFiles = [];
+  const id =
+    project.id ||
+    randomUUID();
 
+  const file =
+    path.join(
+      PROJECTS,
+      `${id}.json`
+    );
+
+  const record = {
+    ...project,
+    id,
+    userId,
+    updatedAt:
+      new Date().toISOString(),
+    createdAt:
+      project.createdAt ||
+      new Date().toISOString(),
+  };
+
+  await fs.writeFile(
+    file,
+    JSON.stringify(
+      record,
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  return record;
+}
+
+async function getAllProjects() {
+  const files =
+    await fs
+      .readdir(PROJECTS)
+      .catch(() => []);
+
+  const result = [];
+
+  for (const name of files) {
+    if (!name.endsWith(".json")) {
+      continue;
+    }
+
+    try {
+      const data =
+        JSON.parse(
+          await fs.readFile(
+            path.join(
+              PROJECTS,
+              name
+            ),
+            "utf8"
+          )
+        );
+
+      result.push(data);
+    } catch {}
+  }
+
+  return result;
+}
+
+/* =========================================================
+   BASIC SYSTEM
+========================================================= */
+
+app.get("/health", async (req, res) => {
+  res.json({
+    ok: true,
+    service: "MAMAKI AI Video Creative Studio",
+    version: VERSION,
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get("/api/status", async (req, res) => {
+  res.json({
+    ok: true,
+    version: VERSION,
+    ai: {
+      configured: Boolean(
+        REPLICATE_API_TOKEN
+      ),
+      t2vModel: T2V_MODEL,
+      i2vModel: I2V_MODEL,
+    },
+    features: {
+      textToVideo: true,
+      imageToVideo: true,
+      autopilot: true,
+      photoToVideo: true,
+      videoTrim: true,
+      combineVideos: true,
+      narration: true,
+      subtitles: true,
+      promptEnhancement: true,
+      socialPresets: true,
+      accounts: true,
+      projects: true,
+      admin: Boolean(
+        ADMIN_EMAIL &&
+        ADMIN_PASSWORD
+      ),
+      watermark: "MAMAKI ✨",
+    },
+  });
+});
+
+/* =========================================================
+   AUTHENTICATION
+========================================================= */
+
+app.post("/api/auth/register", async (req, res) => {
   try {
-    updateJob(
-      job,
-      {
-        status: "running",
-        progress: 2,
+    const name =
+      cleanText(
+        req.body.name,
+        100
+      );
+
+    const email =
+      cleanText(
+        req.body.email,
+        200
+      ).toLowerCase();
+
+    const password =
+      String(
+        req.body.password || ""
+      );
+
+    if (
+      !name ||
+      !email ||
+      !password
+    ) {
+      return res.status(400).json({
+        ok: false,
+        error: "INVALID_INPUT",
         message:
-          "Preparing production..."
+          "Name, email and password are required.",
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        ok: false,
+        error: "WEAK_PASSWORD",
+        message:
+          "Password must contain at least 6 characters.",
+      });
+    }
+
+    const users =
+      await readJson(
+        USERS_FILE,
+        {}
+      );
+
+    const existing =
+      Object.values(users)
+        .find(
+          user =>
+            String(user.email)
+              .toLowerCase() ===
+            email
+        );
+
+    if (existing) {
+      return res.status(409).json({
+        ok: false,
+        error: "EMAIL_EXISTS",
+        message:
+          "An account with this email already exists.",
+      });
+    }
+
+    const id =
+      randomUUID();
+
+    const credentials =
+      hashPassword(
+        password
+      );
+
+    users[id] = {
+      id,
+      name,
+      email,
+      salt:
+        credentials.salt,
+      passwordHash:
+        credentials.hash,
+      role: "user",
+      disabled: false,
+      createdAt:
+        new Date().toISOString(),
+      lastLoginAt: null,
+    };
+
+    await writeJson(
+      USERS_FILE,
+      users
+    );
+
+    const token =
+      await createSession(
+        id,
+        "user"
+      );
+
+    res.status(201).json({
+      ok: true,
+      message:
+        "MAMAKI account created successfully.",
+      token,
+      user: {
+        id,
+        name,
+        email,
+        role: "user",
+      },
+    });
+  } catch (error) {
+    await recordError(
+      error,
+      {
+        route:
+          "/api/auth/register",
       }
     );
 
-    const duration =
-      normalizeDuration(
-        options.duration
+    res.status(500).json({
+      ok: false,
+      error: "REGISTER_FAILED",
+      message:
+        "Unable to create the account.",
+    });
+  }
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const email =
+      cleanText(
+        req.body.email,
+        200
+      ).toLowerCase();
+
+    const password =
+      String(
+        req.body.password || ""
       );
 
-    const ratio =
-      normalizeRatio(
-        options.ratio
+    const users =
+      await readJson(
+        USERS_FILE,
+        {}
+      );
+
+    const user =
+      Object.values(users)
+        .find(
+          item =>
+            String(item.email)
+              .toLowerCase() ===
+            email
+        );
+
+    if (
+      !user ||
+      !verifyPassword(
+        password,
+        user.salt,
+        user.passwordHash
+      )
+    ) {
+      return res.status(401).json({
+        ok: false,
+        error: "INVALID_LOGIN",
+        message:
+          "Incorrect email or password.",
+      });
+    }
+
+    if (user.disabled) {
+      return res.status(403).json({
+        ok: false,
+        error: "ACCOUNT_DISABLED",
+        message:
+          "This MAMAKI account has been disabled.",
+      });
+    }
+
+    user.lastLoginAt =
+      new Date().toISOString();
+
+    users[user.id] =
+      user;
+
+    await writeJson(
+      USERS_FILE,
+      users
+    );
+
+    const token =
+      await createSession(
+        user.id,
+        user.role || "user"
+      );
+
+    res.json({
+      ok: true,
+      message:
+        "Login successful.",
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role:
+          user.role || "user",
+      },
+    });
+  } catch (error) {
+    await recordError(
+      error,
+      {
+        route:
+          "/api/auth/login",
+      }
+    );
+
+    res.status(500).json({
+      ok: false,
+      error: "LOGIN_FAILED",
+      message:
+        "Unable to complete login.",
+    });
+  }
+});
+
+app.post("/api/auth/logout", async (req, res) => {
+  const token =
+    getBearerToken(req);
+
+  if (token) {
+    const sessions =
+      await readJson(
+        SESSIONS_FILE,
+        {}
+      );
+
+    delete sessions[token];
+
+    await writeJson(
+      SESSIONS_FILE,
+      sessions
+    );
+  }
+
+  res.json({
+    ok: true,
+    message:
+      "Logged out successfully.",
+  });
+});
+
+app.get("/api/auth/me", async (req, res) => {
+  const user =
+    await getCurrentUser(req);
+
+  if (!user) {
+    return res.status(401).json({
+      ok: false,
+      authenticated: false,
+    });
+  }
+
+  res.json({
+    ok: true,
+    authenticated: true,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      createdAt:
+        user.createdAt,
+    },
+  });
+});
+
+/* =========================================================
+   PERSONAL ACCOUNT
+========================================================= */
+
+app.get(
+  "/api/account",
+  requireUser,
+  async (req, res) => {
+    const usage =
+      await readJson(
+        USAGE_FILE,
+        {}
+      );
+
+    const mine =
+      usage[req.user.id] || {
+        aiGenerations: 0,
+        aiSeconds: 0,
+        studioJobs: 0,
+        narrationJobs: 0,
+      };
+
+    res.json({
+      ok: true,
+      account: {
+        id: req.user.id,
+        name: req.user.name,
+        email: req.user.email,
+        role: req.user.role,
+        createdAt:
+          req.user.createdAt,
+      },
+      usage: mine,
+      limits: {
+        maximumProductionSeconds:
+          MAX_DURATION,
+        freeStudio: true,
+      },
+    });
+  }
+);
+
+app.put(
+  "/api/account/profile",
+  requireUser,
+  async (req, res) => {
+    const users =
+      await readJson(
+        USERS_FILE,
+        {}
+      );
+
+    const user =
+      users[req.user.id];
+
+    if (!user) {
+      return res.status(404).json({
+        ok: false,
+        error: "USER_NOT_FOUND",
+      });
+    }
+
+    const name =
+      cleanText(
+        req.body.name,
+        100
+      );
+
+    if (name) {
+      user.name = name;
+    }
+
+    users[user.id] =
+      user;
+
+    await writeJson(
+      USERS_FILE,
+      users
+    );
+
+    res.json({
+      ok: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  }
+);
+
+/* =========================================================
+   AI PROMPT ENHANCEMENT
+========================================================= */
+
+app.post(
+  "/api/ai/enhance",
+  async (req, res) => {
+    const prompt =
+      cleanText(
+        req.body.prompt,
+        5000
       );
 
     const style =
-      normalizeStyle(
-        options.style
+      cleanText(
+        req.body.style ||
+          "Cinematic",
+        100
       );
 
-    const basePrompt =
+    if (!prompt) {
+      return res.status(400).json({
+        ok: false,
+        error: "PROMPT_REQUIRED",
+      });
+    }
+
+    const enhanced =
       enhancePrompt(
-        options.prompt,
-        style,
-        ratio
+        prompt,
+        style
       );
 
-    if (!basePrompt) {
-      throw new Error(
-        "Prompt is required."
-      );
-    }
-
-    const sceneLength = 5;
-
-    const sceneCount =
-      Math.ceil(
-        duration /
-        sceneLength
-      );
-
-    const scenes = [];
-
-    for (
-      let i = 0;
-      i < sceneCount;
-      i++
-    ) {
-      const remaining =
-        duration -
-        i * sceneLength;
-
-      const currentSeconds =
-        Math.min(
-          sceneLength,
-          remaining
-        );
-
-      updateJob(
-        job,
-        {
-          progress:
-            Math.round(
-              (i /
-                sceneCount) *
-                70
-            ),
-          message:
-            `Generating scene ${i + 1} of ${sceneCount}...`
-        }
-      );
-
-      const scenePrompt =
-        `${basePrompt} Scene ${i + 1} of ${sceneCount}. Maintain continuity with the same visual subject and world.`;
-
-      let buffer;
-
-      if (
-        options.imagePath
-      ) {
-        buffer =
-          await wanImageToVideo({
-            prompt:
-              scenePrompt,
-            imagePath:
-              options.imagePath,
-            duration:
-              currentSeconds,
-            ratio
-          });
-      } else {
-        buffer =
-          await wanTextToVideo({
-            prompt:
-              scenePrompt,
-            duration:
-              currentSeconds,
-            ratio
-          });
-      }
-
-      const sceneFile =
-        await writeBuffer(
-          buffer,
-          ".mp4"
-        );
-
-      workingFiles.push(
-        sceneFile
-      );
-
-      scenes.push(
-        sceneFile
-      );
-    }
-
-    updateJob(
-      job,
-      {
-        progress: 72,
-        message:
-          "Assembling scenes..."
-      }
-    );
-
-    const combined =
-      path.join(
-        TMP,
-        `${job.id}_combined.mp4`
-      );
-
-    await combineVideoFiles(
-      scenes,
-      combined
-    );
-
-    workingFiles.push(
-      combined
-    );
-
-    updateJob(
-      job,
-      {
-        progress: 80,
-        message:
-          "Preparing audio..."
-      }
-    );
-
-    const audioVideo =
-      await addSoftMusic(
-        combined,
-        duration
-      );
-
-    workingFiles.push(
-      audioVideo
-    );
-
-    const timed =
-      path.join(
-        TMP,
-        `${job.id}_timed.mp4`
-      );
-
-    await forceDuration(
-      audioVideo,
-      duration,
-      timed
-    );
-
-    workingFiles.push(
-      timed
-    );
-
-    updateJob(
-      job,
-      {
-        progress: 88,
-        message:
-          "Applying MAMAKI watermark..."
-      }
-    );
-
-    const finalFile =
-      path.join(
-        OUTPUT,
-        `${job.id}.mp4`
-      );
-
-    await addWatermark(
-      timed,
-      finalFile
-    );
-
-    updateJob(
-      job,
-      {
-        status: "completed",
-        progress: 100,
-        message:
-          "Video completed.",
-        result: {
-          url:
-            `/api/video/${path.basename(
-              finalFile
-            )}`,
-          file:
-            path.basename(
-              finalFile
-            ),
-          duration,
-          ratio,
-          style
-        }
-      }
-    );
-
-    await recordUsage({
-      userId: job.userId,
-      type: "ai",
-      seconds: duration,
-      action:
-        options.imagePath
-          ? "image-to-video"
-          : "text-to-video"
+    res.json({
+      ok: true,
+      original: prompt,
+      enhanced,
+      style,
     });
-  } catch (error) {
-    await logError(
-      error,
-      {
-        jobId: job.id,
-        userId: job.userId,
-        type: "generation"
-      }
-    );
-
-    let code =
-      "GENERATION_FAILED";
-
-    let message =
-      "Video generation failed.";
-
-    if (
-      error?.code ===
-      "REPLICATE_AUTH_REQUIRED"
-    ) {
-      code =
-        "REPLICATE_AUTH_REQUIRED";
-
-      message =
-        "AI generation is unavailable because the Replicate API token is not configured.";
-    } else if (
-      isReplicateCreditError(
-        error
-      )
-    ) {
-      code =
-        "REPLICATE_CREDIT_REQUIRED";
-
-      message =
-        "AI generation requires available Replicate credit. Add billing/credit to the connected Replicate account.";
-    } else if (
-      isReplicateAuthError(
-        error
-      )
-    ) {
-      code =
-        "REPLICATE_AUTH_ERROR";
-
-      message =
-        "The Replicate authentication is invalid or unavailable.";
-    } else if (
-      error?.message
-    ) {
-      message =
-        error.message;
-    }
-
-    updateJob(
-      job,
-      {
-        status: "failed",
-        progress:
-          job.progress || 0,
-        message,
-        error: {
-          code,
-          message
-        }
-      }
-    );
-  } finally {
-    if (
-      options.imagePath
-    ) {
-      await fs.unlink(
-        options.imagePath
-      ).catch(() => {});
-    }
-
-    for (
-      const file
-      of workingFiles
-    ) {
-      if (
-        file &&
-        !file.startsWith(
-          OUTPUT
-        )
-      ) {
-        await fs.unlink(
-          file
-        ).catch(() => {});
-      }
-    }
   }
-}
+);
 
-// ================================================================
-// GENERATE VIDEO
-// ================================================================
+/* =========================================================
+   AI VIDEO GENERATION
+========================================================= */
 
 app.post(
   "/api/generate",
-  requireAuth,
   upload.single("image"),
   async (req, res) => {
     try {
-      const prompt =
-        String(
-          req.body.prompt || ""
-        ).trim();
+      const user =
+        await getCurrentUser(req);
 
-      if (!prompt) {
-        return errorResponse(
-          res,
-          400,
-          "PROMPT_REQUIRED",
-          "Please enter a video prompt."
-        );
+      if (!user) {
+        return res.status(401).json({
+          ok: false,
+          error: "AUTH_REQUIRED",
+          message:
+            "Log in to your MAMAKI account before starting AI production.",
+        });
       }
+
+      if (!REPLICATE_API_TOKEN) {
+        return res.status(503).json({
+          ok: false,
+          error:
+            "REPLICATE_AUTH_REQUIRED",
+          message:
+            "AI generation is not configured. Add REPLICATE_API_TOKEN to the Render environment variables.",
+        });
+      }
+
+      const prompt =
+        cleanText(
+          req.body.prompt,
+          30000
+        );
+
+      const style =
+        cleanText(
+          req.body.style ||
+            "Cinematic",
+          100
+        );
 
       const duration =
         normalizeDuration(
@@ -2213,75 +1890,160 @@ app.post(
 
       const ratio =
         normalizeRatio(
-          req.body.ratio
+          req.body.ratio ||
+            req.body.format
         );
 
-      const style =
-        normalizeStyle(
-          req.body.style
+      const quality =
+        cleanText(
+          req.body.quality ||
+            "Standard HD",
+          100
         );
 
-      const job =
-        createJob(
-          req.user.id
-        );
-
-      let imagePath =
-        null;
-
-      if (
-        req.file
-      ) {
-        imagePath =
-          req.file.path;
+      if (!prompt) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "PROMPT_REQUIRED",
+          message:
+            "Describe the video you want to create.",
+        });
       }
 
-      runGenerationJob(
-        job,
-        {
-          prompt,
-          duration,
-          ratio,
-          style,
-          imagePath
-        }
+      const jobId =
+        randomUUID();
+
+      const job = {
+        id: jobId,
+        userId: user.id,
+        status: "queued",
+        progress: 0,
+        message:
+          "Production queued.",
+        createdAt:
+          new Date().toISOString(),
+        duration,
+        ratio,
+        style,
+        quality,
+        cancelled: false,
+      };
+
+      jobs.set(
+        jobId,
+        job
       );
 
       res.status(202).json({
         ok: true,
-        jobId: job.id,
-        status: job.status,
-        progress: job.progress,
+        jobId,
+        status: "queued",
+        progress: 0,
         message:
-          "Video generation started."
+          "Production started.",
       });
+
+      setImmediate(
+        async () => {
+          try {
+            job.status =
+              "processing";
+
+            job.message =
+              "MAMAKI AI Director is planning your production.";
+
+            const final =
+              await generateVideoProduction({
+                job,
+                userId: user.id,
+                prompt,
+                imageBuffer:
+                  req.file?.buffer ||
+                  null,
+                duration,
+                ratio,
+                style,
+                quality,
+              });
+
+            job.status =
+              "completed";
+
+            job.progress = 100;
+
+            job.message =
+              "Production completed successfully.";
+
+            job.video =
+              `/api/video/${path.basename(final)}`;
+
+            job.completedAt =
+              new Date().toISOString();
+          } catch (error) {
+            const classified =
+              error.mamakiMessage
+                ? {
+                    code:
+                      error.code ||
+                      "GENERATION_FAILED",
+                    message:
+                      error.mamakiMessage,
+                  }
+                : classifyReplicateError(
+                    error
+                  );
+
+            job.status =
+              "failed";
+
+            job.progress = 0;
+
+            job.error =
+              classified.code;
+
+            job.message =
+              classified.message;
+
+            await recordError(
+              error,
+              {
+                route:
+                  "/api/generate",
+                jobId,
+                userId:
+                  user.id,
+              }
+            );
+
+            await cleanupJobFiles(
+              jobId
+            );
+          }
+        }
+      );
     } catch (error) {
-      await logError(
+      await recordError(
         error,
         {
-          route: "/api/generate",
-          userId:
-            req.user?.id
+          route:
+            "/api/generate",
         }
       );
 
-      errorResponse(
-        res,
-        500,
-        "GENERATION_START_FAILED",
-        "Unable to start video generation."
-      );
+      res.status(500).json({
+        ok: false,
+        error:
+          "GENERATION_START_FAILED",
+        message:
+          "Unable to start production.",
+      });
     }
   }
 );
 
-// ================================================================
-// JOB STATUS
-// ================================================================
-
 app.get(
   "/api/jobs/:id",
-  requireAuth,
   async (req, res) => {
     const job =
       jobs.get(
@@ -2289,63 +2051,77 @@ app.get(
       );
 
     if (!job) {
-      return errorResponse(
-        res,
-        404,
-        "JOB_NOT_FOUND",
-        "Generation job not found or has expired."
-      );
+      return res.status(404).json({
+        ok: false,
+        error: "JOB_NOT_FOUND",
+        message:
+          "Production job was not found.",
+      });
     }
 
+    const user =
+      await getCurrentUser(req);
+
     if (
-      job.userId !==
-      req.user.id &&
-      req.user.role !== "admin"
+      job.userId &&
+      (!user ||
+        user.id !== job.userId)
     ) {
-      return errorResponse(
-        res,
-        403,
-        "JOB_ACCESS_DENIED",
-        "You cannot access this job."
-      );
+      return res.status(403).json({
+        ok: false,
+        error: "JOB_ACCESS_DENIED",
+      });
     }
 
     res.json({
       ok: true,
-      job
+      job: {
+        id: job.id,
+        status: job.status,
+        progress:
+          job.progress,
+        message:
+          job.message,
+        video:
+          job.video || null,
+        error:
+          job.error || null,
+        currentScene:
+          job.currentScene || null,
+        totalScenes:
+          job.totalScenes || null,
+      },
     });
   }
 );
 
-// ================================================================
-// VIDEO DELIVERY
-// ================================================================
+/* =========================================================
+   VIDEO DELIVERY
+========================================================= */
 
 app.get(
   "/api/video/:file",
   async (req, res) => {
-    const filename =
-      safeName(
-        req.params.file
+    const file =
+      safeFileName(
+        req.params.file,
+        ""
       );
 
-    if (
-      filename !==
-      req.params.file
-    ) {
-      return res.status(400).end();
+    if (!file.endsWith(".mp4")) {
+      return res.status(400).send(
+        "Invalid video."
+      );
     }
 
-    const file =
+    const full =
       path.join(
-        OUTPUT,
-        filename
+        OUTPUTS,
+        file
       );
 
     try {
-      await fs.access(
-        file
-      );
+      await fs.access(full);
 
       res.setHeader(
         "Content-Type",
@@ -2354,340 +2130,224 @@ app.get(
 
       res.setHeader(
         "Cache-Control",
-        "public, max-age=3600"
+        "private, max-age=3600"
       );
 
-      res.sendFile(
-        file
-      );
+      res.sendFile(full);
     } catch {
-      res.status(404).json({
-        ok: false,
-        code: "VIDEO_NOT_FOUND",
-        message:
-          "Video not found."
-      });
+      res.status(404).send(
+        "Video not found."
+      );
     }
   }
 );
 
-// ================================================================
-// VOICE & NARRATION
-// ================================================================
+/* =========================================================
+   PROJECT WORKSPACE
+========================================================= */
 
-app.post(
-  "/api/studio/narration",
-  requireAuth,
+app.get(
+  "/api/projects",
+  requireUser,
   async (req, res) => {
-    try {
-      const text =
-        String(
-          req.body.text || ""
-        ).trim();
+    const all =
+      await getAllProjects();
 
-      const voice =
-        String(
-          req.body.voice ||
-          "en-US-AriaNeural"
-        );
+    const mine =
+      all.filter(
+        project =>
+          project.userId ===
+          req.user.id
+      );
 
-      const rate =
-        String(
-          req.body.rate ||
-          "+0%"
-        );
-
-      const pitch =
-        String(
-          req.body.pitch ||
-          "+0Hz"
-        );
-
-      if (!text) {
-        return errorResponse(
-          res,
-          400,
-          "TEXT_REQUIRED",
-          "Enter narration text."
-        );
-      }
-
-      const filename =
-        `${randomUUID()}_narration.mp3`;
-
-      const output =
-        path.join(
-          OUTPUT,
-          filename
-        );
-
-      const tts =
-        new EdgeTTS();
-
-      await tts.synthesize(
-        text,
-        voice,
-        {
-          rate,
-          pitch
-        }
-      ).then(
-        async result => {
-          if (
-            Buffer.isBuffer(
-              result
+    res.json({
+      ok: true,
+      projects:
+        mine.sort(
+          (a, b) =>
+            String(
+              b.updatedAt || ""
+            ).localeCompare(
+              String(
+                a.updatedAt || ""
+              )
             )
-          ) {
-            await fs.writeFile(
-              output,
-              result
-            );
-          } else if (
-            result?.audio
-          ) {
-            await fs.writeFile(
-              output,
-              result.audio
-            );
-          } else if (
-            result?.toBuffer
-          ) {
-            await fs.writeFile(
-              output,
-              await result.toBuffer()
-            );
-          } else {
-            throw new Error(
-              "Narration provider returned unsupported audio data."
-            );
-          }
-        }
-      );
-
-      await recordUsage({
-        userId:
-          req.user.id,
-        type:
-          "studio",
-        action:
-          "narration"
-      });
-
-      res.json({
-        ok: true,
-        audioUrl:
-          `/api/audio/${filename}`,
-        file:
-          filename
-      });
-    } catch (error) {
-      await logError(
-        error,
-        {
-          route:
-            "/api/studio/narration",
-          userId:
-            req.user.id
-        }
-      );
-
-      errorResponse(
-        res,
-        500,
-        "NARRATION_FAILED",
-        "Unable to create narration. Check the selected voice and try again."
-      );
-    }
+        ),
+    });
   }
 );
 
 app.get(
-  "/api/audio/:file",
+  "/api/projects/:id",
+  requireUser,
   async (req, res) => {
-    const filename =
-      safeName(
-        req.params.file
+    const file =
+      path.join(
+        PROJECTS,
+        `${safeFileName(
+          req.params.id
+        )}.json`
+      );
+
+    try {
+      const project =
+        JSON.parse(
+          await fs.readFile(
+            file,
+            "utf8"
+          )
+        );
+
+      if (
+        project.userId !==
+        req.user.id
+      ) {
+        return res.status(403).json({
+          ok: false,
+          error:
+            "PROJECT_ACCESS_DENIED",
+        });
+      }
+
+      res.json({
+        ok: true,
+        project,
+      });
+    } catch {
+      res.status(404).json({
+        ok: false,
+        error:
+          "PROJECT_NOT_FOUND",
+      });
+    }
+  }
+);
+
+app.post(
+  "/api/projects/save",
+  requireUser,
+  async (req, res) => {
+    try {
+      const project =
+        await saveProjectForUser(
+          req.user.id,
+          {
+            ...req.body,
+            userId:
+              req.user.id,
+          }
+        );
+
+      res.json({
+        ok: true,
+        project,
+      });
+    } catch (error) {
+      await recordError(
+        error,
+        {
+          route:
+            "/api/projects/save",
+          userId:
+            req.user.id,
+        }
+      );
+
+      res.status(500).json({
+        ok: false,
+        error:
+          "PROJECT_SAVE_FAILED",
+        message:
+          "Unable to save project.",
+      });
+    }
+  }
+);
+
+app.delete(
+  "/api/projects/:id",
+  requireUser,
+  async (req, res) => {
+    const id =
+      safeFileName(
+        req.params.id
       );
 
     const file =
       path.join(
-        OUTPUT,
-        filename
+        PROJECTS,
+        `${id}.json`
       );
 
     try {
-      await fs.access(
-        file
-      );
-
-      res.setHeader(
-        "Content-Type",
-        "audio/mpeg"
-      );
-
-      res.sendFile(
-        file
-      );
-    } catch {
-      res.status(404).end();
-    }
-  }
-);
-
-// ================================================================
-// SUBTITLE CREATION
-// ================================================================
-
-function escapeSubtitleText(
-  text
-) {
-  return String(text || "")
-    .replace(/\\/g, "\\\\")
-    .replace(/:/g, "\\:")
-    .replace(/'/g, "\\'");
-}
-
-app.post(
-  "/api/studio/subtitles",
-  requireAuth,
-  upload.single("video"),
-  async (req, res) => {
-    try {
-      if (!req.file) {
-        return errorResponse(
-          res,
-          400,
-          "VIDEO_REQUIRED",
-          "Upload a video first."
-        );
-      }
-
-      const text =
-        String(
-          req.body.text || ""
-        ).trim();
-
-      if (!text) {
-        await fs.unlink(
-          req.file.path
-        ).catch(() => {});
-
-        return errorResponse(
-          res,
-          400,
-          "SUBTITLE_TEXT_REQUIRED",
-          "Enter subtitle text."
-        );
-      }
-
-      const duration =
-        Number(
-          req.body.duration || 10
-        );
-
-      const output =
-        path.join(
-          OUTPUT,
-          `${randomUUID()}_subtitled.mp4`
-        );
-
-      const escaped =
-        escapeSubtitleText(
-          text
-        );
-
-      await runFFmpeg([
-        "-i",
-        req.file.path,
-        "-vf",
-        `drawtext=text='${escaped}':x=(w-tw)/2:y=h-th-80:fontsize=34:fontcolor=white:borderw=3:bordercolor=black`,
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-crf",
-        "20",
-        "-c:a",
-        "aac",
-        "-t",
-        String(
-          Math.max(
-            1,
-            duration
+      const project =
+        JSON.parse(
+          await fs.readFile(
+            file,
+            "utf8"
           )
-        ),
-        "-movflags",
-        "+faststart",
-        output
-      ]);
+        );
+
+      if (
+        project.userId !==
+        req.user.id
+      ) {
+        return res.status(403).json({
+          ok: false,
+          error:
+            "PROJECT_ACCESS_DENIED",
+        });
+      }
 
       await fs.unlink(
-        req.file.path
-      ).catch(() => {});
-
-      await recordUsage({
-        userId:
-          req.user.id,
-        type:
-          "studio",
-        action:
-          "subtitles"
-      });
+        file
+      );
 
       res.json({
         ok: true,
-        videoUrl:
-          `/api/video/${path.basename(
-            output
-          )}`
+        message:
+          "Project deleted.",
       });
-    } catch (error) {
-      await fs.unlink(
-        req.file?.path
-      ).catch(() => {});
-
-      await logError(
-        error,
-        {
-          route:
-            "/api/studio/subtitles",
-          userId:
-            req.user.id
-        }
-      );
-
-      errorResponse(
-        res,
-        500,
-        "SUBTITLE_FAILED",
-        "Unable to add subtitles."
-      );
+    } catch {
+      res.status(404).json({
+        ok: false,
+        error:
+          "PROJECT_NOT_FOUND",
+      });
     }
   }
 );
 
-// ================================================================
-// PHOTO → VIDEO
-// ================================================================
+/* =========================================================
+   PHOTO -> VIDEO
+========================================================= */
 
 app.post(
   "/api/studio/photo-video",
-  requireAuth,
-  upload.single("image"),
+  upload.array("photos", 50),
   async (req, res) => {
     try {
-      if (!req.file) {
-        return errorResponse(
-          res,
-          400,
-          "IMAGE_REQUIRED",
-          "Upload an image."
-        );
+      const user =
+        await getCurrentUser(req);
+
+      const photos =
+        req.files || [];
+
+      if (!photos.length) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "PHOTOS_REQUIRED",
+          message:
+            "Add at least one photo.",
+        });
       }
 
-      const duration =
+      const seconds =
         normalizeDuration(
-          req.body.duration || 5
+          req.body.seconds ||
+            req.body.duration ||
+            5
         );
 
       const ratio =
@@ -2695,107 +2355,146 @@ app.post(
           req.body.ratio
         );
 
-      const output =
-        path.join(
-          OUTPUT,
-          `${randomUUID()}_photo_video.mp4`
+      const id =
+        randomUUID();
+
+      const clips = [];
+
+      for (
+        let i = 0;
+        i < photos.length;
+        i++
+      ) {
+        const image =
+          path.join(
+            TMP,
+            `${id}-${i}.jpg`
+          );
+
+        const clip =
+          path.join(
+            TMP,
+            `${id}-${i}.mp4`
+          );
+
+        await fs.writeFile(
+          image,
+          photos[i].buffer
         );
 
-      const size =
-        ratio === "9:16"
-          ? "1080:1920"
-          : ratio === "1:1"
-          ? "1080:1080"
-          : "1920:1080";
+        await runFFmpeg([
+          "-y",
+          "-loop",
+          "1",
+          "-i",
+          image,
+          "-t",
+          String(seconds),
+          "-vf",
+          `scale=${ratioSize(
+            ratio
+          )}:force_original_aspect_ratio=decrease,pad=${ratioSize(
+            ratio
+          )}:(ow-iw)/2:(oh-ih)/2`,
+          "-r",
+          "30",
+          "-c:v",
+          "libx264",
+          "-pix_fmt",
+          "yuv420p",
+          clip,
+        ]);
 
-      await runFFmpeg([
-        "-loop",
-        "1",
-        "-i",
-        req.file.path,
-        "-t",
-        String(duration),
-        "-vf",
-        `scale=${size}:force_original_aspect_ratio=decrease,pad=${size}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`,
-        "-r",
-        "30",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-crf",
-        "20",
-        "-pix_fmt",
-        "yuv420p",
-        "-movflags",
-        "+faststart",
-        output
-      ]);
+        clips.push(clip);
+      }
 
-      await fs.unlink(
-        req.file.path
-      ).catch(() => {});
+      const combined =
+        path.join(
+          OUTPUTS,
+          `${id}-combined.mp4`
+        );
 
-      await recordUsage({
-        userId:
-          req.user.id,
-        type:
+      await combineVideoFiles(
+        clips,
+        combined
+      );
+
+      let final =
+        combined;
+
+      if (
+        req.file ||
+        req.body.music
+      ) {
+        // Reserved for future uploaded-music workflow.
+      }
+
+      const watermarked =
+        path.join(
+          OUTPUTS,
+          `${id}.mp4`
+        );
+
+      await addWatermark(
+        final,
+        watermarked
+      );
+
+      if (user) {
+        await recordUsage(
+          user.id,
           "studio",
-        seconds:
-          duration,
-        action:
-          "photo-to-video"
-      });
+          photos.length *
+            seconds
+        );
+      }
 
       res.json({
         ok: true,
-        videoUrl:
+        video:
           `/api/video/${path.basename(
-            output
-          )}`
+            watermarked
+          )}`,
+        duration:
+          photos.length *
+          seconds,
+        ratio,
       });
     } catch (error) {
-      await fs.unlink(
-        req.file?.path
-      ).catch(() => {});
-
-      await logError(
+      await recordError(
         error,
         {
           route:
             "/api/studio/photo-video",
-          userId:
-            req.user.id
         }
       );
 
-      errorResponse(
-        res,
-        500,
-        "PHOTO_VIDEO_FAILED",
-        "Unable to create photo video."
-      );
+      res.status(500).json({
+        ok: false,
+        error:
+          "PHOTO_VIDEO_FAILED",
+        message:
+          "Unable to create the photo video.",
+      });
     }
   }
 );
 
-// ================================================================
-// VIDEO TRIMMER
-// ================================================================
+/* =========================================================
+   VIDEO TRIMMER
+========================================================= */
 
 app.post(
   "/api/studio/trim",
-  requireAuth,
   upload.single("video"),
   async (req, res) => {
     try {
       if (!req.file) {
-        return errorResponse(
-          res,
-          400,
-          "VIDEO_REQUIRED",
-          "Upload a video."
-        );
+        return res.status(400).json({
+          ok: false,
+          error:
+            "VIDEO_REQUIRED",
+        });
       }
 
       const start =
@@ -2810,21 +2509,43 @@ app.post(
         Math.max(
           0.1,
           Number(
-            req.body.duration || 5
+            req.body.duration ||
+              5
           )
         );
 
-      const output =
+      const id =
+        randomUUID();
+
+      const input =
         path.join(
-          OUTPUT,
-          `${randomUUID()}_trimmed.mp4`
+          TMP,
+          `${id}-input.mp4`
         );
 
+      const trimmed =
+        path.join(
+          OUTPUTS,
+          `${id}-trimmed.mp4`
+        );
+
+      const final =
+        path.join(
+          OUTPUTS,
+          `${id}.mp4`
+        );
+
+      await fs.writeFile(
+        input,
+        req.file.buffer
+      );
+
       await runFFmpeg([
+        "-y",
         "-ss",
         String(start),
         "-i",
-        req.file.path,
+        input,
         "-t",
         String(duration),
         "-c:v",
@@ -2835,170 +2556,453 @@ app.post(
         "20",
         "-c:a",
         "aac",
+        "-b:a",
+        "160k",
         "-movflags",
         "+faststart",
-        output
+        trimmed,
       ]);
 
-      await fs.unlink(
-        req.file.path
-      ).catch(() => {});
+      await addWatermark(
+        trimmed,
+        final
+      );
 
-      await recordUsage({
-        userId:
-          req.user.id,
-        type:
+      const user =
+        await getCurrentUser(req);
+
+      if (user) {
+        await recordUsage(
+          user.id,
           "studio",
-        seconds:
-          duration,
-        action:
-          "trim"
-      });
+          duration
+        );
+      }
 
       res.json({
         ok: true,
-        videoUrl:
+        video:
           `/api/video/${path.basename(
-            output
-          )}`
+            final
+          )}`,
       });
     } catch (error) {
-      await fs.unlink(
-        req.file?.path
-      ).catch(() => {});
-
-      await logError(
+      await recordError(
         error,
         {
           route:
             "/api/studio/trim",
-          userId:
-            req.user.id
         }
       );
 
-      errorResponse(
-        res,
-        500,
-        "TRIM_FAILED",
-        "Unable to trim video."
-      );
+      res.status(500).json({
+        ok: false,
+        error:
+          "TRIM_FAILED",
+        message:
+          "Unable to trim the video.",
+      });
     }
   }
 );
 
-// ================================================================
-// COMBINE VIDEOS
-// ================================================================
+/* =========================================================
+   COMBINE VIDEOS
+========================================================= */
 
 app.post(
   "/api/studio/combine",
-  requireAuth,
-  upload.array("videos", 20),
+  upload.array("videos", 50),
   async (req, res) => {
-    const files =
-      req.files || [];
-
     try {
+      const videos =
+        req.files || [];
+
       if (
-        files.length < 2
+        videos.length < 2
       ) {
-        return errorResponse(
-          res,
-          400,
-          "VIDEOS_REQUIRED",
-          "Upload at least two videos."
-        );
+        return res.status(400).json({
+          ok: false,
+          error:
+            "TWO_VIDEOS_REQUIRED",
+          message:
+            "Add at least two videos.",
+        });
       }
 
-      const paths =
-        files.map(
-          f => f.path
+      const id =
+        randomUUID();
+
+      const inputs = [];
+
+      for (
+        let i = 0;
+        i < videos.length;
+        i++
+      ) {
+        const file =
+          path.join(
+            TMP,
+            `${id}-${i}.mp4`
+          );
+
+        await fs.writeFile(
+          file,
+          videos[i].buffer
         );
 
-      const output =
+        inputs.push(file);
+      }
+
+      const combined =
         path.join(
-          OUTPUT,
-          `${randomUUID()}_combined.mp4`
+          OUTPUTS,
+          `${id}-combined.mp4`
+        );
+
+      const final =
+        path.join(
+          OUTPUTS,
+          `${id}.mp4`
         );
 
       await combineVideoFiles(
-        paths,
-        output
+        inputs,
+        combined
       );
 
-      for (
-        const file
-        of paths
-      ) {
-        await fs.unlink(
-          file
-        ).catch(() => {});
-      }
+      await addWatermark(
+        combined,
+        final
+      );
 
-      await recordUsage({
-        userId:
-          req.user.id,
-        type:
+      const user =
+        await getCurrentUser(req);
+
+      if (user) {
+        await recordUsage(
+          user.id,
           "studio",
-        action:
-          "combine"
-      });
+          0
+        );
+      }
 
       res.json({
         ok: true,
-        videoUrl:
+        video:
           `/api/video/${path.basename(
-            output
-          )}`
+            final
+          )}`,
       });
     } catch (error) {
-      for (
-        const file
-        of files
-      ) {
-        await fs.unlink(
-          file.path
-        ).catch(() => {});
-      }
-
-      await logError(
+      await recordError(
         error,
         {
           route:
             "/api/studio/combine",
-          userId:
-            req.user.id
         }
       );
 
-      errorResponse(
-        res,
-        500,
-        "COMBINE_FAILED",
-        "Unable to combine videos."
+      res.status(500).json({
+        ok: false,
+        error:
+          "COMBINE_FAILED",
+        message:
+          "Unable to combine the videos.",
+      });
+    }
+  }
+);
+
+/* =========================================================
+   VOICE & NARRATION
+========================================================= */
+
+app.post(
+  "/api/studio/narration",
+  async (req, res) => {
+    try {
+      const text =
+        cleanText(
+          req.body.text,
+          10000
+        );
+
+      const voice =
+        cleanText(
+          req.body.voice ||
+            "en-US-AriaNeural",
+          200
+        );
+
+      if (!text) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "NARRATION_TEXT_REQUIRED",
+        });
+      }
+
+      const id =
+        randomUUID();
+
+      const output =
+        path.join(
+          OUTPUTS,
+          `${id}.mp3`
+        );
+
+      const tts =
+        new EdgeTTS(
+          text,
+          voice
+        );
+
+      await tts.save(
+        output
+      );
+
+      const user =
+        await getCurrentUser(req);
+
+      if (user) {
+        await recordUsage(
+          user.id,
+          "narration",
+          0
+        );
+      }
+
+      res.json({
+        ok: true,
+        audio:
+          `/api/audio/${path.basename(
+            output
+          )}`,
+        voice,
+      });
+    } catch (error) {
+      await recordError(
+        error,
+        {
+          route:
+            "/api/studio/narration",
+        }
+      );
+
+      res.status(500).json({
+        ok: false,
+        error:
+          "NARRATION_FAILED",
+        message:
+          "Unable to create narration with the configured voice service.",
+      });
+    }
+  }
+);
+
+app.get(
+  "/api/audio/:file",
+  async (req, res) => {
+    const file =
+      safeFileName(
+        req.params.file
+      );
+
+    if (!file.endsWith(".mp3")) {
+      return res.status(400).send(
+        "Invalid audio."
+      );
+    }
+
+    const full =
+      path.join(
+        OUTPUTS,
+        file
+      );
+
+    try {
+      await fs.access(full);
+
+      res.setHeader(
+        "Content-Type",
+        "audio/mpeg"
+      );
+
+      res.sendFile(full);
+    } catch {
+      res.status(404).send(
+        "Audio not found."
       );
     }
   }
 );
 
-// ================================================================
-// SOCIAL PRESETS
-// ================================================================
+/* =========================================================
+   SUBTITLES
+========================================================= */
 
 app.post(
-  "/api/studio/social-preset",
-  requireAuth,
+  "/api/studio/subtitles",
   upload.single("video"),
   async (req, res) => {
     try {
       if (!req.file) {
-        return errorResponse(
-          res,
-          400,
-          "VIDEO_REQUIRED",
-          "Upload a video."
+        return res.status(400).json({
+          ok: false,
+          error:
+            "VIDEO_REQUIRED",
+        });
+      }
+
+      const subtitles =
+        cleanText(
+          req.body.subtitles,
+          30000
         );
+
+      if (!subtitles) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "SUBTITLES_REQUIRED",
+          message:
+            "Provide subtitle text in SRT/VTT format.",
+        });
+      }
+
+      const id =
+        randomUUID();
+
+      const input =
+        path.join(
+          TMP,
+          `${id}-input.mp4`
+        );
+
+      const subtitleFile =
+        path.join(
+          TMP,
+          `${id}.srt`
+        );
+
+      const subtitled =
+        path.join(
+          OUTPUTS,
+          `${id}-subtitled.mp4`
+        );
+
+      const final =
+        path.join(
+          OUTPUTS,
+          `${id}.mp4`
+        );
+
+      await fs.writeFile(
+        input,
+        req.file.buffer
+      );
+
+      let srt =
+        subtitles;
+
+      if (
+        subtitles
+          .toLowerCase()
+          .includes("webvtt")
+      ) {
+        srt =
+          subtitles
+            .replace(
+              /^WEBVTT\s*/i,
+              ""
+            )
+            .replace(
+              /\./g,
+              ","
+            );
+      }
+
+      await fs.writeFile(
+        subtitleFile,
+        srt,
+        "utf8"
+      );
+
+      const escaped =
+        subtitleFile
+          .replace(/\\/g, "\\\\")
+          .replace(/:/g, "\\:")
+          .replace(/'/g, "\\'");
+
+      await runFFmpeg([
+        "-y",
+        "-i",
+        input,
+        "-vf",
+        `subtitles='${escaped}'`,
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "20",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "160k",
+        "-movflags",
+        "+faststart",
+        subtitled,
+      ]);
+
+      await addWatermark(
+        subtitled,
+        final
+      );
+
+      res.json({
+        ok: true,
+        video:
+          `/api/video/${path.basename(
+            final
+          )}`,
+      });
+    } catch (error) {
+      await recordError(
+        error,
+        {
+          route:
+            "/api/studio/subtitles",
+        }
+      );
+
+      res.status(500).json({
+        ok: false,
+        error:
+          "SUBTITLE_FAILED",
+        message:
+          "Unable to burn subtitles into the video.",
+      });
+    }
+  }
+);
+
+/* =========================================================
+   SOCIAL PRESETS
+========================================================= */
+
+app.post(
+  "/api/studio/social",
+  upload.single("video"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "VIDEO_REQUIRED",
+        });
       }
 
       const ratio =
@@ -3006,136 +3010,96 @@ app.post(
           req.body.ratio
         );
 
-      const output =
+      const id =
+        randomUUID();
+
+      const input =
         path.join(
-          OUTPUT,
-          `${randomUUID()}_${ratio.replace(
-            ":",
-            "x"
-          )}.mp4`
+          TMP,
+          `${id}-input.mp4`
         );
 
-      await resizeVideo(
-        req.file.path,
-        ratio,
-        output
+      const resized =
+        path.join(
+          OUTPUTS,
+          `${id}-resized.mp4`
+        );
+
+      const final =
+        path.join(
+          OUTPUTS,
+          `${id}.mp4`
+        );
+
+      await fs.writeFile(
+        input,
+        req.file.buffer
       );
 
-      await fs.unlink(
-        req.file.path
-      ).catch(() => {});
+      await resizeVideo(
+        input,
+        resized,
+        ratio
+      );
 
-      await recordUsage({
-        userId:
-          req.user.id,
-        type:
-          "studio",
-        action:
-          `social-preset-${ratio}`
-      });
+      await addWatermark(
+        resized,
+        final
+      );
 
       res.json({
         ok: true,
         ratio,
-        videoUrl:
+        video:
           `/api/video/${path.basename(
-            output
-          )}`
+            final
+          )}`,
       });
     } catch (error) {
-      await fs.unlink(
-        req.file?.path
-      ).catch(() => {});
-
-      await logError(
+      await recordError(
         error,
         {
           route:
-            "/api/studio/social-preset",
-          userId:
-            req.user.id
+            "/api/studio/social",
         }
       );
 
-      errorResponse(
-        res,
-        500,
-        "SOCIAL_PRESET_FAILED",
-        "Unable to create social preset."
-      );
+      res.status(500).json({
+        ok: false,
+        error:
+          "SOCIAL_EXPORT_FAILED",
+        message:
+          "Unable to create the social preset export.",
+      });
     }
   }
 );
 
-// ================================================================
-// ADMIN
-// ================================================================
-
-async function ensureAdminAccount() {
-  if (
-    !ADMIN_EMAIL ||
-    !ADMIN_PASSWORD
-  ) {
-    return;
-  }
-
-  const users =
-    await readJson(
-      USERS_FILE,
-      []
-    );
-
-  let admin =
-    users.find(
-      u =>
-        u.email ===
-        ADMIN_EMAIL
-    );
-
-  if (!admin) {
-    const passwordData =
-      hashPassword(
-        ADMIN_PASSWORD
-      );
-
-    admin = {
-      id: randomUUID(),
-      name: "MAMAKI Administrator",
-      email: ADMIN_EMAIL,
-      passwordHash:
-        passwordData.hash,
-      passwordSalt:
-        passwordData.salt,
-      role: "admin",
-      disabled: false,
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-      lastLoginAt: null
-    };
-
-    users.push(admin);
-  } else {
-    admin.role = "admin";
-    admin.disabled = false;
-  }
-
-  await writeJson(
-    USERS_FILE,
-    users
-  );
-}
-
-await ensureAdminAccount();
+/* =========================================================
+   ADMIN
+========================================================= */
 
 app.post(
   "/api/admin/login",
   async (req, res) => {
+    if (
+      !ADMIN_EMAIL ||
+      !ADMIN_PASSWORD
+    ) {
+      return res.status(503).json({
+        ok: false,
+        error:
+          "ADMIN_NOT_CONFIGURED",
+        message:
+          "Admin credentials are not configured in Render.",
+      });
+    }
+
     const email =
-      String(
-        req.body.email || ""
-      )
-      .trim()
-      .toLowerCase();
+      cleanText(
+        req.body.email,
+        200
+      ).toLowerCase();
 
     const password =
       String(
@@ -3143,58 +3107,83 @@ app.post(
       );
 
     if (
-      !ADMIN_EMAIL ||
-      !ADMIN_PASSWORD
+      email !==
+        ADMIN_EMAIL ||
+      password !==
+        ADMIN_PASSWORD
     ) {
-      return errorResponse(
-        res,
-        503,
-        "ADMIN_NOT_CONFIGURED",
-        "Admin account is not configured. Add ADMIN_EMAIL and ADMIN_PASSWORD to Render Environment Variables."
-      );
+      return res.status(401).json({
+        ok: false,
+        error:
+          "INVALID_ADMIN_LOGIN",
+        message:
+          "Invalid administrator credentials.",
+      });
     }
 
     const users =
       await readJson(
         USERS_FILE,
-        []
+        {}
       );
 
-    const admin =
-      users.find(
-        u =>
-          u.email ===
-            email &&
-          u.role ===
-            "admin"
-      );
+    let admin =
+      Object.values(users)
+        .find(
+          user =>
+            user.email ===
+            ADMIN_EMAIL
+        );
 
-    if (
-      !admin ||
-      !verifyPassword(
-        password,
-        admin.passwordHash,
-        admin.passwordSalt
-      )
-    ) {
-      return errorResponse(
-        res,
-        401,
-        "INVALID_ADMIN_CREDENTIALS",
-        "Invalid administrator credentials."
+    if (!admin) {
+      const id =
+        randomUUID();
+
+      const credentials =
+        hashPassword(
+          ADMIN_PASSWORD
+        );
+
+      admin = {
+        id,
+        name: "MAMAKI Administrator",
+        email:
+          ADMIN_EMAIL,
+        salt:
+          credentials.salt,
+        passwordHash:
+          credentials.hash,
+        role: "admin",
+        disabled: false,
+        createdAt:
+          new Date().toISOString(),
+        lastLoginAt: null,
+      };
+
+      users[id] =
+        admin;
+
+      await writeJson(
+        USERS_FILE,
+        users
       );
     }
 
     const token =
       await createSession(
-        admin.id
+        admin.id,
+        "admin"
       );
 
     res.json({
       ok: true,
       token,
-      user:
-        publicUser(admin)
+      admin: {
+        id: admin.id,
+        email:
+          admin.email,
+        role: "admin",
+      },
     });
   }
 );
@@ -3206,93 +3195,94 @@ app.get(
     const users =
       await readJson(
         USERS_FILE,
-        []
+        {}
       );
 
     const usage =
       await readJson(
         USAGE_FILE,
-        []
+        {}
       );
 
-    const errors =
-      await readJson(
-        ERRORS_FILE,
-        []
-      );
+    const projects =
+      await getAllProjects();
 
-    let projectCount = 0;
+    const userList =
+      Object.values(users);
 
-    try {
-      const files =
-        await fs.readdir(
-          PROJECTS
+    let aiGenerations = 0;
+    let aiSeconds = 0;
+    let studioJobs = 0;
+    let narrationJobs = 0;
+
+    for (const item of Object.values(
+      usage
+    )) {
+      aiGenerations +=
+        Number(
+          item.aiGenerations || 0
         );
 
-      projectCount =
-        files.filter(
-          f =>
-            f.endsWith(
-              ".json"
-            )
-        ).length;
-    } catch {}
+      aiSeconds +=
+        Number(
+          item.aiSeconds || 0
+        );
 
-    const aiUsage =
-      usage.filter(
-        r =>
-          r.type ===
-          "ai"
+      studioJobs +=
+        Number(
+          item.studioJobs || 0
+        );
+
+      narrationJobs +=
+        Number(
+          item.narrationJobs || 0
+        );
+    }
+
+    const jobList =
+      Array.from(
+        jobs.values()
       );
 
-    const aiSeconds =
-      aiUsage.reduce(
-        (sum, r) =>
-          sum +
-          Number(
-            r.seconds || 0
-          ),
-        0
-      );
+    const failedJobs =
+      jobList.filter(
+        job =>
+          job.status ===
+          "failed"
+      ).length;
 
     res.json({
       ok: true,
       stats: {
-        users:
-          users.length,
+        version: VERSION,
+        totalUsers:
+          userList.length,
         activeUsers:
-          users.filter(
-            u =>
-              !u.disabled
+          userList.filter(
+            user =>
+              !user.disabled
           ).length,
         disabledUsers:
-          users.filter(
-            u =>
-              u.disabled
+          userList.filter(
+            user =>
+              user.disabled
           ).length,
-        projects:
-          projectCount,
-        totalUsageEvents:
-          usage.length,
-        aiJobs:
-          aiUsage.length,
+        totalProjects:
+          projects.length,
+        aiGenerations,
         aiSeconds,
-        aiMinutes:
-          Math.round(
-            (aiSeconds / 60) *
-              100
-          ) / 100,
-        errors:
-          errors.length,
+        studioJobs,
+        narrationJobs,
         jobsInMemory:
-          jobs.size,
-        uptimeSeconds:
-          Math.round(
-            (Date.now() -
-              appStartTime) /
-              1000
-          )
-      }
+          jobList.length,
+        failedJobs,
+        replicateConfigured:
+          Boolean(
+            REPLICATE_API_TOKEN
+          ),
+        uptime:
+          process.uptime(),
+      },
     });
   }
 );
@@ -3304,15 +3294,42 @@ app.get(
     const users =
       await readJson(
         USERS_FILE,
-        []
+        {}
       );
+
+    const usage =
+      await readJson(
+        USAGE_FILE,
+        {}
+      );
+
+    const list =
+      Object.values(users)
+        .map(user => ({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          disabled:
+            Boolean(
+              user.disabled
+            ),
+          createdAt:
+            user.createdAt,
+          lastLoginAt:
+            user.lastLoginAt,
+          usage:
+            usage[user.id] || {
+              aiGenerations: 0,
+              aiSeconds: 0,
+              studioJobs: 0,
+              narrationJobs: 0,
+            },
+        }));
 
     res.json({
       ok: true,
-      users:
-        users.map(
-          publicUser
-        )
+      users: list,
     });
   }
 );
@@ -3324,90 +3341,93 @@ app.get(
     const users =
       await readJson(
         USERS_FILE,
-        []
+        {}
+      );
+
+    const usage =
+      await readJson(
+        USAGE_FILE,
+        {}
       );
 
     const user =
-      users.find(
-        u =>
-          u.id ===
-          req.params.id
-      );
+      users[
+        req.params.id
+      ];
 
     if (!user) {
-      return errorResponse(
-        res,
-        404,
-        "USER_NOT_FOUND",
-        "User not found."
-      );
+      return res.status(404).json({
+        ok: false,
+        error:
+          "USER_NOT_FOUND",
+      });
     }
 
-    const usage =
-      await getUserUsage(
-        user.id
-      );
-
     const projects =
-      await getUserProjects(
-        user.id
+      (
+        await getAllProjects()
+      ).filter(
+        project =>
+          project.userId ===
+          user.id
       );
 
     res.json({
       ok: true,
-      user:
-        publicUser(user),
-      usage,
-      projects
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        disabled:
+          Boolean(
+            user.disabled
+          ),
+        createdAt:
+          user.createdAt,
+        lastLoginAt:
+          user.lastLoginAt,
+      },
+      usage:
+        usage[user.id] || {},
+      projects,
     });
   }
 );
 
-app.patch(
-  "/api/admin/users/:id/status",
+app.post(
+  "/api/admin/users/:id/disable",
   requireAdmin,
   async (req, res) => {
     const users =
       await readJson(
         USERS_FILE,
-        []
+        {}
       );
 
     const user =
-      users.find(
-        u =>
-          u.id ===
-          req.params.id
-      );
+      users[
+        req.params.id
+      ];
 
     if (!user) {
-      return errorResponse(
-        res,
-        404,
-        "USER_NOT_FOUND",
-        "User not found."
-      );
-    }
-
-    if (
-      user.role ===
-      "admin"
-    ) {
-      return errorResponse(
-        res,
-        400,
-        "ADMIN_PROTECTED",
-        "Administrator account cannot be disabled from this endpoint."
-      );
+      return res.status(404).json({
+        ok: false,
+        error:
+          "USER_NOT_FOUND",
+      });
     }
 
     user.disabled =
       Boolean(
-        req.body.disabled
+        req.body.disabled !==
+          undefined
+          ? req.body.disabled
+          : true
       );
 
-    user.updatedAt =
-      nowIso();
+    users[user.id] =
+      user;
 
     await writeJson(
       USERS_FILE,
@@ -3416,8 +3436,11 @@ app.patch(
 
     res.json({
       ok: true,
-      user:
-        publicUser(user)
+      user: {
+        id: user.id,
+        disabled:
+          user.disabled,
+      },
     });
   }
 );
@@ -3431,7 +3454,25 @@ app.get(
       jobs:
         Array.from(
           jobs.values()
-        )
+        ).map(job => ({
+          id: job.id,
+          userId:
+            job.userId,
+          status:
+            job.status,
+          progress:
+            job.progress,
+          message:
+            job.message,
+          createdAt:
+            job.createdAt,
+          completedAt:
+            job.completedAt ||
+            null,
+          error:
+            job.error ||
+            null,
+        })),
     });
   }
 );
@@ -3443,352 +3484,33 @@ app.get(
     const errors =
       await readJson(
         ERRORS_FILE,
-        []
+        {}
       );
 
-    res.json({
-      ok: true,
-      errors:
-        errors.slice(-200)
-          .reverse()
-    });
-  }
-);
-
-// ================================================================
-// SYSTEM STATUS
-// ================================================================
-
-app.get(
-  "/api/status",
-  async (req, res) => {
-    const authenticatedUser =
-      await getUserFromRequest(
-        req
-      );
-
-    res.json({
-      ok: true,
-      version:
-        "13.0.0",
-      name:
-        "MAMAKI AI Video Studio",
-      status:
-        "online",
-      uptimeSeconds:
-        Math.round(
-          (Date.now() -
-            appStartTime) /
-            1000
-        ),
-      node:
-        process.version,
-      ffmpeg:
-        Boolean(ffmpegPath),
-      replicate:
-        {
-          configured:
-            Boolean(
-              REPLICATE_API_TOKEN
-            ),
-          textToVideo:
-            T2V_MODEL,
-          imageToVideo:
-            I2V_MODEL
-        },
-      features: {
-        authentication:
-          true,
-        personalAccount:
-          true,
-        projects:
-          true,
-        usageTracking:
-          true,
-        textToVideo:
-          true,
-        imageToVideo:
-          true,
-        photoToVideo:
-          true,
-        videoTrimmer:
-          true,
-        combineVideos:
-          true,
-        narration:
-          true,
-        subtitles:
-          true,
-        promptEnhancement:
-          true,
-        socialPresets:
-          true,
-        watermark:
-          true,
-        admin:
-          Boolean(
-            ADMIN_EMAIL &&
-            ADMIN_PASSWORD
-          )
-      },
-      authenticated:
-        Boolean(
-          authenticatedUser
+    const list =
+      Object.values(errors)
+        .sort(
+          (a, b) =>
+            String(
+              b.createdAt
+            ).localeCompare(
+              String(
+                a.createdAt
+              )
+            )
         )
-    });
-  }
-);
+        .slice(0, 200);
 
-app.get(
-  "/health",
-  async (req, res) => {
     res.json({
       ok: true,
-      service:
-        "mamaki-ai-video",
-      version:
-        "13.0.0",
-      timestamp:
-        nowIso()
+      errors: list,
     });
   }
 );
 
-// ================================================================
-// ADMIN WEB DASHBOARD
-// ================================================================
-
-app.get(
-  "/admin",
-  (req, res) => {
-    res.type("html").send(`
-<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MAMAKI Admin</title>
-<style>
-body{
-  margin:0;
-  background:#080808;
-  color:#fff;
-  font-family:Arial,sans-serif;
-}
-main{
-  max-width:1100px;
-  margin:auto;
-  padding:30px 20px;
-}
-.card{
-  background:#151515;
-  border:1px solid #292929;
-  border-radius:16px;
-  padding:20px;
-  margin-bottom:20px;
-}
-input,button{
-  width:100%;
-  box-sizing:border-box;
-  padding:13px;
-  margin:6px 0;
-  border-radius:10px;
-  border:1px solid #333;
-}
-button{
-  cursor:pointer;
-  background:#fff;
-  color:#000;
-  font-weight:bold;
-}
-.grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-  gap:12px;
-}
-.stat{
-  background:#101010;
-  padding:18px;
-  border-radius:12px;
-}
-.stat b{
-  display:block;
-  font-size:28px;
-  margin-top:8px;
-}
-pre{
-  white-space:pre-wrap;
-  overflow:auto;
-}
-</style>
-</head>
-<body>
-<main>
-
-<h1>✨ MAMAKI ADMIN</h1>
-<p>Private platform administration dashboard</p>
-
-<div id="login" class="card">
-<h2>Administrator Login</h2>
-<input id="email" type="email" placeholder="Admin email">
-<input id="password" type="password" placeholder="Admin password">
-<button onclick="login()">Login</button>
-<p id="loginStatus"></p>
-</div>
-
-<div id="dashboard" style="display:none">
-
-<div class="card">
-<h2>Platform Overview</h2>
-<div class="grid" id="stats"></div>
-</div>
-
-<div class="card">
-<h2>Users</h2>
-<pre id="users">Loading...</pre>
-</div>
-
-<div class="card">
-<h2>Jobs</h2>
-<pre id="jobs">Loading...</pre>
-</div>
-
-<div class="card">
-<h2>Error Monitor</h2>
-<pre id="errors">Loading...</pre>
-</div>
-
-<button onclick="logout()">Logout</button>
-
-</div>
-
-</main>
-
-<script>
-let token = localStorage.getItem("mamaki_admin_token");
-
-async function api(url, options={}){
-  options.headers = {
-    ...(options.headers || {}),
-    "Authorization":"Bearer " + token,
-    "Content-Type":"application/json"
-  };
-
-  const response = await fetch(url, options);
-  return response.json();
-}
-
-async function login(){
-  const email =
-    document.getElementById("email").value;
-
-  const password =
-    document.getElementById("password").value;
-
-  const response =
-    await fetch("/api/admin/login",{
-      method:"POST",
-      headers:{
-        "Content-Type":"application/json"
-      },
-      body:JSON.stringify({
-        email,
-        password
-      })
-    });
-
-  const data =
-    await response.json();
-
-  if(!data.ok){
-    document.getElementById("loginStatus").textContent =
-      data.message || "Login failed";
-    return;
-  }
-
-  token=data.token;
-
-  localStorage.setItem(
-    "mamaki_admin_token",
-    token
-  );
-
-  document.getElementById("login").style.display="none";
-  document.getElementById("dashboard").style.display="block";
-
-  loadDashboard();
-}
-
-async function loadDashboard(){
-
-  const stats =
-    await api("/api/admin/stats");
-
-  if(!stats.ok){
-    logout();
-    return;
-  }
-
-  const s=stats.stats;
-
-  document.getElementById("stats").innerHTML = [
-    ["Users",s.users],
-    ["Active Users",s.activeUsers],
-    ["Projects",s.projects],
-    ["AI Jobs",s.aiJobs],
-    ["AI Minutes",s.aiMinutes],
-    ["Errors",s.errors],
-    ["Running Jobs",s.jobsInMemory],
-    ["Uptime",s.uptimeSeconds+"s"]
-  ].map(x =>
-    '<div class="stat">'+
-    x[0]+'<b>'+x[1]+'</b>'+
-    '</div>'
-  ).join("");
-
-  const users =
-    await api("/api/admin/users");
-
-  document.getElementById("users").textContent =
-    JSON.stringify(users.users,null,2);
-
-  const jobs =
-    await api("/api/admin/jobs");
-
-  document.getElementById("jobs").textContent =
-    JSON.stringify(jobs.jobs,null,2);
-
-  const errors =
-    await api("/api/admin/errors");
-
-  document.getElementById("errors").textContent =
-    JSON.stringify(errors.errors,null,2);
-}
-
-function logout(){
-  localStorage.removeItem(
-    "mamaki_admin_token"
-  );
-
-  location.reload();
-}
-
-if(token){
-  document.getElementById("login").style.display="none";
-  document.getElementById("dashboard").style.display="block";
-  loadDashboard();
-}
-</script>
-
-</body>
-</html>
-`);
-  }
-);
-
-// ================================================================
-// ACCOUNT WEB DASHBOARD
-// ================================================================
+/* =========================================================
+   BUILT-IN ACCOUNT PAGE
+========================================================= */
 
 app.get(
   "/account",
@@ -3799,97 +3521,327 @@ app.get(
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MAMAKI Account</title>
+<title>MAMAKI AI Account</title>
 <style>
 body{
   margin:0;
-  background:#090909;
-  color:#fff;
   font-family:Arial,sans-serif;
+  background:#08090d;
+  color:#fff;
 }
 main{
   max-width:900px;
-  margin:auto;
-  padding:30px 20px;
+  margin:40px auto;
+  padding:20px;
 }
 .card{
-  background:#151515;
-  border:1px solid #292929;
-  border-radius:16px;
-  padding:20px;
-  margin-bottom:18px;
-}
-input,button{
-  width:100%;
-  box-sizing:border-box;
-  padding:13px;
-  margin:6px 0;
-  border-radius:10px;
-  border:1px solid #333;
+  background:#12151d;
+  border:1px solid #252a35;
+  border-radius:18px;
+  padding:24px;
+  margin-bottom:20px;
 }
 button{
-  background:#fff;
-  color:#000;
-  font-weight:bold;
+  padding:12px 18px;
+  border:0;
+  border-radius:10px;
+  cursor:pointer;
 }
-.grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-  gap:12px;
+input{
+  width:100%;
+  box-sizing:border-box;
+  padding:12px;
+  margin:7px 0;
+  border-radius:8px;
+  border:1px solid #333;
+  background:#090b10;
+  color:white;
 }
+.hidden{display:none}
 .stat{
-  padding:18px;
-  border-radius:12px;
-  background:#101010;
-}
-.stat b{
-  display:block;
-  font-size:26px;
-  margin-top:7px;
+  font-size:28px;
+  font-weight:bold;
 }
 </style>
 </head>
-
 <body>
 <main>
 
-<h1>✨ MAMAKI ACCOUNT</h1>
+<div class="card">
+<h1>✨ MAMAKI AI</h1>
+<p>Personal Account</p>
+</div>
 
 <div id="auth" class="card">
 <h2>Login</h2>
 <input id="email" placeholder="Email">
 <input id="password" type="password" placeholder="Password">
 <button onclick="login()">Login</button>
-
-<hr>
-
-<h2>Create Account</h2>
-<input id="name" placeholder="Full name">
-<input id="signupEmail" placeholder="Email">
-<input id="signupPassword" type="password" placeholder="Password">
-<button onclick="signup()">Create Account</button>
-
 <p id="message"></p>
 </div>
 
-<div id="account" style="display:none">
+<div id="dashboard" class="hidden">
 
 <div class="card">
-<h2 id="welcome"></h2>
+<h2 id="name"></h2>
 <p id="accountEmail"></p>
-</div>
-
-<div class="card">
-<h2>Usage</h2>
-<div id="usage" class="grid"></div>
-</div>
-
-<div class="card">
-<h2>My Projects</h2>
-<div id="projects"></div>
-</div>
-
 <button onclick="logout()">Logout</button>
+</div>
+
+<div class="card">
+<h2>📊 Usage</h2>
+<p>AI Generations</p>
+<div id="generations" class="stat">0</div>
+<p>AI Seconds</p>
+<div id="seconds" class="stat">0</div>
+<p>Free Studio Jobs</p>
+<div id="studio" class="stat">0</div>
+<p>Narration Jobs</p>
+<div id="narration" class="stat">0</div>
+</div>
+
+<div class="card">
+<h2>📁 My Projects</h2>
+<div id="projects">Loading...</div>
+</div>
+
+</div>
+
+</main>
+
+<script>
+let token = localStorage.getItem("mamaki_token");
+
+async function api(url, options={}) {
+  options.headers = {
+    ...(options.headers || {}),
+    ...(token ? {Authorization:"Bearer "+token} : {})
+  };
+
+  const response = await fetch(url, options);
+  return response.json();
+}
+
+async function login(){
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+
+  const data = await api("/api/auth/login",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({email,password})
+  });
+
+  document.getElementById("message").textContent =
+    data.message || "";
+
+  if(data.ok){
+    token = data.token;
+    localStorage.setItem("mamaki_token", token);
+    load();
+  }
+}
+
+async function load(){
+  const data = await api("/api/account");
+
+  if(!data.ok){
+    document.getElementById("auth").classList.remove("hidden");
+    document.getElementById("dashboard").classList.add("hidden");
+    return;
+  }
+
+  document.getElementById("auth").classList.add("hidden");
+  document.getElementById("dashboard").classList.remove("hidden");
+
+  document.getElementById("name").textContent =
+    "Welcome, " + data.account.name;
+
+  document.getElementById("accountEmail").textContent =
+    data.account.email;
+
+  document.getElementById("generations").textContent =
+    data.usage.aiGenerations || 0;
+
+  document.getElementById("seconds").textContent =
+    data.usage.aiSeconds || 0;
+
+  document.getElementById("studio").textContent =
+    data.usage.studioJobs || 0;
+
+  document.getElementById("narration").textContent =
+    data.usage.narrationJobs || 0;
+
+  const projects = await api("/api/projects");
+
+  if(projects.ok && projects.projects.length){
+    document.getElementById("projects").innerHTML =
+      projects.projects.map(p =>
+        "<div class='card'><strong>"+
+        (p.name || p.title || "MAMAKI Production")+
+        "</strong><br>"+
+        (p.video || "")+
+        "</div>"
+      ).join("");
+  }else{
+    document.getElementById("projects").textContent =
+      "No projects yet.";
+  }
+}
+
+async function logout(){
+  await api("/api/auth/logout",{method:"POST"});
+  localStorage.removeItem("mamaki_token");
+  token = "";
+  location.reload();
+}
+
+load();
+</script>
+
+</body>
+</html>
+`);
+  }
+);
+
+/* =========================================================
+   BUILT-IN ADMIN PAGE
+========================================================= */
+
+app.get(
+  "/admin",
+  (req, res) => {
+    res.type("html").send(`
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MAMAKI AI Admin</title>
+<style>
+body{
+  margin:0;
+  font-family:Arial,sans-serif;
+  background:#07080c;
+  color:white;
+}
+main{
+  max-width:1100px;
+  margin:30px auto;
+  padding:20px;
+}
+.card{
+  background:#12151d;
+  border:1px solid #272c38;
+  border-radius:18px;
+  padding:22px;
+  margin-bottom:18px;
+}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:14px;
+}
+.stat{
+  font-size:30px;
+  font-weight:bold;
+}
+input{
+  display:block;
+  width:100%;
+  box-sizing:border-box;
+  margin:8px 0;
+  padding:12px;
+  background:#080a0f;
+  border:1px solid #333;
+  color:#fff;
+  border-radius:8px;
+}
+button{
+  padding:12px 18px;
+  border:0;
+  border-radius:10px;
+  cursor:pointer;
+}
+.hidden{display:none}
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+td,th{
+  padding:10px;
+  border-bottom:1px solid #292d37;
+  text-align:left;
+}
+</style>
+</head>
+<body>
+<main>
+
+<div class="card">
+<h1>✨ MAMAKI AI ADMIN</h1>
+<p>Private platform control center</p>
+</div>
+
+<div id="login" class="card">
+<h2>Administrator Login</h2>
+<input id="email" placeholder="Admin email">
+<input id="password" type="password" placeholder="Admin password">
+<button onclick="login()">Login</button>
+<p id="msg"></p>
+</div>
+
+<div id="dashboard" class="hidden">
+
+<div class="grid">
+
+<div class="card">
+<p>Users</p>
+<div id="users" class="stat">0</div>
+</div>
+
+<div class="card">
+<p>Projects</p>
+<div id="projects" class="stat">0</div>
+</div>
+
+<div class="card">
+<p>AI Generations</p>
+<div id="generations" class="stat">0</div>
+</div>
+
+<div class="card">
+<p>AI Seconds</p>
+<div id="seconds" class="stat">0</div>
+</div>
+
+<div class="card">
+<p>Studio Jobs</p>
+<div id="studio" class="stat">0</div>
+</div>
+
+<div class="card">
+<p>Failed Jobs</p>
+<div id="failed" class="stat">0</div>
+</div>
+
+</div>
+
+<div class="card">
+<h2>👥 Users</h2>
+<div id="userTable">Loading...</div>
+</div>
+
+<div class="card">
+<h2>🎬 Jobs</h2>
+<div id="jobTable">Loading...</div>
+</div>
+
+<div class="card">
+<h2>🚨 Errors</h2>
+<div id="errorTable">Loading...</div>
+</div>
 
 </div>
 
@@ -3897,203 +3849,158 @@ button{
 
 <script>
 
-let token =
-localStorage.getItem(
-  "mamaki_token"
-);
+let token = localStorage.getItem("mamaki_admin_token");
 
-async function request(
-  url,
-  options={}
-){
-  options.headers={
-    ...(options.headers||{}),
-    "Content-Type":"application/json"
+async function api(url, options={}){
+  options.headers = {
+    ...(options.headers || {}),
+    ...(token ? {Authorization:"Bearer "+token} : {})
   };
 
-  if(token){
-    options.headers.Authorization =
-      "Bearer " + token;
-  }
-
-  const response =
-    await fetch(url,options);
-
+  const response = await fetch(url, options);
   return response.json();
 }
 
 async function login(){
 
+  const email =
+    document.getElementById("email").value;
+
+  const password =
+    document.getElementById("password").value;
+
   const data =
-    await request(
-      "/api/auth/login",
-      {
-        method:"POST",
-        body:JSON.stringify({
-          email:
-            document.getElementById(
-              "email"
-            ).value,
-          password:
-            document.getElementById(
-              "password"
-            ).value
-        })
-      }
+    await api("/api/admin/login",{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json"
+      },
+      body:JSON.stringify({
+        email,
+        password
+      })
+    });
+
+  document.getElementById("msg").textContent =
+    data.message || "";
+
+  if(data.ok){
+
+    token = data.token;
+
+    localStorage.setItem(
+      "mamaki_admin_token",
+      token
     );
 
-  if(!data.ok){
-    document.getElementById(
-      "message"
-    ).textContent =
-      data.message;
-    return;
+    loadDashboard();
   }
-
-  token=data.token;
-
-  localStorage.setItem(
-    "mamaki_token",
-    token
-  );
-
-  loadAccount();
 }
 
-async function signup(){
+async function loadDashboard(){
 
-  const data =
-    await request(
-      "/api/auth/signup",
-      {
-        method:"POST",
-        body:JSON.stringify({
-          name:
-            document.getElementById(
-              "name"
-            ).value,
-          email:
-            document.getElementById(
-              "signupEmail"
-            ).value,
-          password:
-            document.getElementById(
-              "signupPassword"
-            ).value
-        })
-      }
-    );
+  const stats =
+    await api("/api/admin/stats");
 
-  if(!data.ok){
-    document.getElementById(
-      "message"
-    ).textContent =
-      data.message;
+  if(!stats.ok){
+    document.getElementById("login")
+      .classList.remove("hidden");
+
+    document.getElementById("dashboard")
+      .classList.add("hidden");
+
     return;
   }
 
-  token=data.token;
+  document.getElementById("login")
+    .classList.add("hidden");
 
-  localStorage.setItem(
-    "mamaki_token",
-    token
-  );
+  document.getElementById("dashboard")
+    .classList.remove("hidden");
 
-  loadAccount();
-}
+  document.getElementById("users").textContent =
+    stats.stats.totalUsers;
 
-async function loadAccount(){
+  document.getElementById("projects").textContent =
+    stats.stats.totalProjects;
 
-  const data =
-    await request(
-      "/api/account"
-    );
+  document.getElementById("generations").textContent =
+    stats.stats.aiGenerations;
 
-  if(!data.ok){
-    logout();
-    return;
+  document.getElementById("seconds").textContent =
+    stats.stats.aiSeconds;
+
+  document.getElementById("studio").textContent =
+    stats.stats.studioJobs;
+
+  document.getElementById("failed").textContent =
+    stats.stats.failedJobs;
+
+  const users =
+    await api("/api/admin/users");
+
+  if(users.ok){
+
+    document.getElementById("userTable").innerHTML =
+      "<table><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>AI</th></tr>"+
+      users.users.map(u =>
+        "<tr>"+
+        "<td>"+escapeHtml(u.name)+"</td>"+
+        "<td>"+escapeHtml(u.email)+"</td>"+
+        "<td>"+escapeHtml(u.role)+"</td>"+
+        "<td>"+(u.disabled ? "Disabled":"Active")+"</td>"+
+        "<td>"+(u.usage.aiGenerations || 0)+"</td>"+
+        "</tr>"
+      ).join("")+
+      "</table>";
   }
 
-  document.getElementById(
-    "auth"
-  ).style.display="none";
+  const jobs =
+    await api("/api/admin/jobs");
 
-  document.getElementById(
-    "account"
-  ).style.display="block";
+  if(jobs.ok){
 
-  document.getElementById(
-    "welcome"
-  ).textContent =
-    "Welcome, " +
-    data.user.name;
-
-  document.getElementById(
-    "accountEmail"
-  ).textContent =
-    data.user.email;
-
-  const u=data.usage;
-
-  document.getElementById(
-    "usage"
-  ).innerHTML=[
-    ["AI Jobs",u.aiJobs],
-    ["AI Minutes",u.aiMinutes],
-    ["Studio Jobs",u.studioJobs],
-    ["Total Jobs",u.totalJobs],
-    ["Projects",data.projectsCount]
-  ].map(x =>
-    '<div class="stat">'+
-    x[0]+
-    '<b>'+
-    x[1]+
-    '</b></div>'
-  ).join("");
-
-  const projects =
-    await request(
-      "/api/projects"
-    );
-
-  document.getElementById(
-    "projects"
-  ).innerHTML =
-    projects.projects.length
-    ? projects.projects.map(
-        p =>
-          '<div class="card">'+
-          '<b>'+
-          p.name+
-          '</b><br>'+
-          (p.type||"video")+
-          '<br>'+
-          (p.videoUrl||
-            "No video")+
-          '</div>'
+    document.getElementById("jobTable").innerHTML =
+      jobs.jobs.length
+      ? jobs.jobs.map(j =>
+        "<div class='card'>"+
+        "<strong>"+escapeHtml(j.id)+"</strong><br>"+
+        "Status: "+escapeHtml(j.status)+
+        "<br>Progress: "+j.progress+"%"+
+        "<br>"+escapeHtml(j.message || "")+
+        "</div>"
       ).join("")
-    : "<p>No projects yet.</p>";
+      : "No active jobs.";
+  }
+
+  const errors =
+    await api("/api/admin/errors");
+
+  if(errors.ok){
+
+    document.getElementById("errorTable").innerHTML =
+      errors.errors.length
+      ? errors.errors.slice(0,20).map(e =>
+        "<div class='card'>"+
+        "<strong>"+escapeHtml(e.code || "ERROR")+"</strong><br>"+
+        escapeHtml(e.message || "")+
+        "<br><small>"+escapeHtml(e.createdAt || "")+"</small>"+
+        "</div>"
+      ).join("")
+      : "No recorded errors.";
+  }
 }
 
-async function logout(){
-
-  await request(
-    "/api/auth/logout",
-    {
-      method:"POST"
-    }
-  ).catch(()=>{});
-
-  localStorage.removeItem(
-    "mamaki_token"
-  );
-
-  location.reload();
+function escapeHtml(value){
+  return String(value || "")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#039;");
 }
 
-if(token){
-  loadAccount();
-}
+loadDashboard();
 
 </script>
 
@@ -4103,9 +4010,9 @@ if(token){
   }
 );
 
-// ================================================================
-// STATIC FRONTEND
-// ================================================================
+/* =========================================================
+   ROOT
+========================================================= */
 
 app.get(
   "/",
@@ -4119,77 +4026,103 @@ app.get(
   }
 );
 
-// ================================================================
-// 404
-// ================================================================
+/* =========================================================
+   404
+========================================================= */
 
 app.use(
   (req, res) => {
     res.status(404).json({
       ok: false,
-      code: "NOT_FOUND",
+      error:
+        "NOT_FOUND",
       message:
-        "MAMAKI endpoint not found."
+        "MAMAKI endpoint not found.",
     });
   }
 );
 
-// ================================================================
-// GLOBAL ERROR HANDLER
-// ================================================================
+/* =========================================================
+   GLOBAL ERROR HANDLER
+========================================================= */
 
 app.use(
-  async (
-    error,
-    req,
-    res,
-    next
-  ) => {
-    await logError(
+  async (error, req, res, next) => {
+    await recordError(
       error,
       {
         route:
-          req.originalUrl
+          req.originalUrl,
+        method:
+          req.method,
       }
     );
 
-    if (
-      res.headersSent
-    ) {
+    if (res.headersSent) {
       return next(error);
     }
 
-    errorResponse(
-      res,
-      500,
-      "SERVER_ERROR",
-      "An unexpected server error occurred."
-    );
+    res.status(500).json({
+      ok: false,
+      error:
+        "INTERNAL_SERVER_ERROR",
+      message:
+        "MAMAKI encountered an unexpected server error.",
+    });
   }
 );
 
-// ================================================================
-// START
-// ================================================================
+/* =========================================================
+   JOB CLEANUP
+========================================================= */
+
+setInterval(
+  () => {
+    const now =
+      Date.now();
+
+    for (const [
+      id,
+      job,
+    ] of jobs.entries()) {
+      const finished =
+        job.status ===
+          "completed" ||
+        job.status ===
+          "failed";
+
+      const time =
+        Date.parse(
+          job.completedAt ||
+            job.createdAt ||
+            ""
+        );
+
+      if (
+        finished &&
+        Number.isFinite(time) &&
+        now - time >
+          60 * 60 * 1000
+      ) {
+        jobs.delete(id);
+      }
+    }
+  },
+  10 * 60 * 1000
+);
+
+/* =========================================================
+   START
+========================================================= */
+
+await ensureStorage();
 
 app.listen(
   PORT,
   HOST,
   () => {
     console.log(
-      "================================================"
-    );
-
-    console.log(
-      "✨ MAMAKI AI VIDEO STUDIO"
-    );
-
-    console.log(
-      "Server version: 13.0.0"
-    );
-
-    console.log(
-      `Server running on ${HOST}:${PORT}`
+      `✨ MAMAKI AI v${VERSION} running on ${HOST}:${PORT}`
     );
 
     console.log(
@@ -4203,38 +4136,6 @@ app.listen(
         ADMIN_EMAIL &&
         ADMIN_PASSWORD
       )}`
-    );
-
-    console.log(
-      "Authentication: ENABLED"
-    );
-
-    console.log(
-      "Personal accounts: ENABLED"
-    );
-
-    console.log(
-      "Projects: ENABLED"
-    );
-
-    console.log(
-      "Voice & narration: ENABLED"
-    );
-
-    console.log(
-      "Subtitles: ENABLED"
-    );
-
-    console.log(
-      "Prompt enhancement: ENABLED"
-    );
-
-    console.log(
-      "Social presets: ENABLED"
-    );
-
-    console.log(
-      "================================================"
     );
   }
 );
