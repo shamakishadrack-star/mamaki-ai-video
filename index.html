@@ -2,241 +2,292 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#080b16">
-<meta name="description" content="MAMAKI AI Video Creative Studio">
-<title>MAMAKI AI Video Studio</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="theme-color" content="#050509">
+<meta name="description" content="MAMAKI AI — Intelligent AI Video Creative Studio">
+<title>MAMAKI AI — Intelligent AI Video Creative Studio</title>
 
 <style>
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
+
+html{
+  scroll-behavior:smooth;
+}
+
 body{
   margin:0;
-  color:#f7f8fc;
-  background:
-    radial-gradient(circle at 10% 0%,rgba(124,58,237,.18),transparent 28%),
-    radial-gradient(circle at 90% 0%,rgba(37,99,235,.14),transparent 30%),
-    #070914;
   font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  background:#050509;
+  color:#fff;
+  line-height:1.45;
 }
-button,input,textarea,select{font:inherit}
-button{cursor:pointer}
-button:disabled{cursor:not-allowed;opacity:.55}
+
+button,input,textarea,select{
+  font:inherit;
+}
+
+button{
+  cursor:pointer;
+}
+
+button:disabled{
+  cursor:not-allowed;
+  opacity:.55;
+}
+
+a{
+  text-decoration:none;
+  color:inherit;
+}
 
 :root{
-  --panel:#0d1120;
-  --panel2:#101526;
-  --border:#252b40;
-  --muted:#8d96aa;
-  --text:#f7f8fc;
-  --purple:#7c3aed;
-  --blue:#2563eb;
-  --green:#22c55e;
+  --bg:#050509;
+  --card:#0d0d14;
+  --card2:#12121b;
+  --line:rgba(255,255,255,.09);
+  --muted:#9b9bab;
+  --text:#fff;
+  --accent:#9b5cff;
+  --accent2:#ff4fd8;
+  --success:#43e6a3;
+  --danger:#ff6262;
+  --warning:#ffc857;
 }
 
-.topbar{
+body:before{
+  content:"";
+  position:fixed;
+  width:520px;
+  height:520px;
+  left:-200px;
+  top:-220px;
+  background:rgba(155,92,255,.14);
+  filter:blur(110px);
+  pointer-events:none;
+  z-index:-1;
+}
+
+body:after{
+  content:"";
+  position:fixed;
+  width:480px;
+  height:480px;
+  right:-220px;
+  bottom:-180px;
+  background:rgba(255,79,216,.10);
+  filter:blur(110px);
+  pointer-events:none;
+  z-index:-1;
+}
+
+::selection{
+  background:#9b5cff;
+  color:#fff;
+}
+
+/* =========================================================
+   HEADER
+========================================================= */
+
+header{
   position:sticky;
   top:0;
   z-index:100;
-  height:68px;
+  backdrop-filter:blur(20px);
+  -webkit-backdrop-filter:blur(20px);
+  background:rgba(5,5,9,.84);
+  border-bottom:1px solid var(--line);
+}
+
+.nav{
+  max-width:1280px;
+  margin:auto;
+  min-height:72px;
   display:flex;
   align-items:center;
   justify-content:space-between;
-  padding:0 4%;
-  background:rgba(7,9,20,.84);
-  backdrop-filter:blur(20px);
-  border-bottom:1px solid var(--border);
+  gap:16px;
+  padding:0 20px;
 }
 
-.brand{
+.logo{
+  display:flex;
+  align-items:center;
+  gap:9px;
   font-size:20px;
   font-weight:950;
   letter-spacing:-.7px;
+  white-space:nowrap;
 }
 
-.brand span{color:#a78bfa}
+.logo span{
+  background:linear-gradient(90deg,#fff,#c28cff,#ff70df);
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+}
 
-.nav{
+.navlinks{
   display:flex;
-  gap:6px;
+  align-items:center;
+  gap:5px;
 }
 
-.nav button{
-  border:1px solid transparent;
+.navlinks button{
+  border:0;
   background:transparent;
-  color:#aeb6c9;
+  color:#aaaab8;
+  padding:9px 12px;
   border-radius:10px;
-  padding:9px 13px;
 }
 
-.nav button:hover{
-  background:#111629;
+.navlinks button:hover{
+  background:#15151e;
   color:#fff;
-  border-color:#293149;
 }
 
-.container{
-  width:min(1180px,92%);
+.auth-btn{
+  border:1px solid rgba(255,255,255,.15);
+  background:#fff;
+  color:#050509;
+  border-radius:999px;
+  padding:10px 16px;
+  font-weight:850;
+  min-width:100px;
+}
+
+/* =========================================================
+   MAIN
+========================================================= */
+
+main{
+  max-width:1280px;
   margin:auto;
+  padding:34px 20px 90px;
 }
 
 .hero{
   text-align:center;
-  padding:75px 0 38px;
+  padding:50px 0 38px;
 }
 
 .badge{
   display:inline-flex;
   align-items:center;
-  gap:7px;
-  border:1px solid rgba(139,92,246,.4);
-  background:rgba(124,58,237,.11);
-  color:#c4b5fd;
+  gap:8px;
+  border:1px solid var(--line);
+  background:rgba(255,255,255,.04);
+  padding:8px 14px;
   border-radius:999px;
-  padding:8px 13px;
-  font-size:12px;
-  font-weight:800;
+  color:#dedee8;
+  font-size:13px;
+  font-weight:700;
 }
 
 .hero h1{
-  margin:22px 0 15px;
-  font-size:clamp(42px,7vw,76px);
-  line-height:.98;
-  letter-spacing:-4px;
+  font-size:clamp(44px,7vw,84px);
+  line-height:.96;
+  margin:21px auto 18px;
+  max-width:1050px;
+  letter-spacing:-4.5px;
 }
 
 .gradient{
-  background:linear-gradient(90deg,#a78bfa,#60a5fa,#c084fc);
+  background:linear-gradient(90deg,#fff,#b978ff,#ff63dc);
   -webkit-background-clip:text;
   background-clip:text;
   color:transparent;
 }
 
 .hero p{
-  max-width:700px;
+  max-width:760px;
   margin:auto;
-  color:#929bad;
-  line-height:1.7;
-  font-size:15px;
+  color:var(--muted);
+  font-size:17px;
+  line-height:1.75;
 }
 
-.workspace{
-  padding:28px;
-  border-radius:28px;
-  background:rgba(13,17,32,.92);
-  border:1px solid var(--border);
-  box-shadow:0 35px 100px rgba(0,0,0,.35);
+/* =========================================================
+   GLOBAL CARDS
+========================================================= */
+
+.card{
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255,255,255,.045),
+      rgba(255,255,255,.018)
+    );
+  border:1px solid var(--line);
+  border-radius:24px;
+  padding:22px;
+  box-shadow:0 25px 80px rgba(0,0,0,.25);
 }
 
-.mode{
+.card h2,
+.card h3{
+  margin-top:0;
+}
+
+.card-subtitle{
+  color:#9999a8;
+  font-size:13px;
+  margin-top:-6px;
+}
+
+/* =========================================================
+   STUDIO
+========================================================= */
+
+.studio{
+  display:grid;
+  grid-template-columns:minmax(0,1.55fr) minmax(300px,.72fr);
+  gap:20px;
+}
+
+.tabs{
   display:grid;
   grid-template-columns:1fr 1fr;
-  gap:10px;
+  gap:8px;
+  margin-bottom:18px;
 }
 
-.mode button{
-  padding:15px;
+.tab{
+  padding:14px;
   border-radius:13px;
-  border:1px solid var(--border);
-  background:#090d19;
-  color:#aeb6c9;
-  font-weight:900;
+  border:1px solid var(--line);
+  background:#0b0b11;
+  color:#aaa;
+  font-weight:850;
 }
 
-.mode button.active{
-  color:#fff;
-  border-color:transparent;
-  background:linear-gradient(135deg,var(--purple),var(--blue));
-}
-
-.autopilot{
-  display:flex;
-  gap:17px;
-  margin:22px 0;
-  padding:20px;
-  border-radius:20px;
-  border:1px solid rgba(139,92,246,.4);
-  background:linear-gradient(
-    135deg,
-    rgba(124,58,237,.15),
-    rgba(37,99,235,.07)
-  );
-}
-
-.autoicon{
-  min-width:52px;
-  width:52px;
-  height:52px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  border-radius:16px;
-  font-size:25px;
-  background:linear-gradient(135deg,#7c3aed,#2563eb);
-}
-
-.autopilot h3{
-  margin:0;
-  font-size:18px;
-}
-
-.ai-badge{
-  display:inline-block;
-  margin-left:7px;
-  padding:4px 8px;
-  border-radius:999px;
-  font-size:9px;
-  letter-spacing:1px;
-  background:rgba(124,58,237,.2);
-  color:#c4b5fd;
-}
-
-.autopilot p{
-  margin:8px 0 12px;
-  color:#9aa3b6;
-  font-size:13px;
-  line-height:1.6;
-}
-
-.chips{
-  display:flex;
-  flex-wrap:wrap;
-  gap:7px;
-}
-
-.chip{
-  padding:7px 10px;
-  border-radius:999px;
-  border:1px solid #293048;
-  background:#0b1020;
-  color:#b9c1d2;
-  font-size:11px;
+.tab.active{
+  background:#fff;
+  color:#050509;
 }
 
 label{
   display:block;
-  margin:18px 0 8px;
-  color:#dce0eb;
+  color:#ddd;
   font-size:13px;
-  font-weight:850;
+  font-weight:750;
+  margin:14px 0 7px;
 }
 
 textarea,
-input[type=file],
-input[type=text],
-input[type=number],
+input,
 select{
   width:100%;
-  color:#f5f7ff;
-  background:#090d19;
-  border:1px solid var(--border);
-  border-radius:12px;
-  padding:12px;
+  border:1px solid var(--line);
+  border-radius:13px;
+  background:#08080d;
+  color:#fff;
+  padding:13px;
   outline:none;
 }
 
 textarea{
-  min-height:145px;
+  min-height:150px;
   resize:vertical;
   line-height:1.55;
 }
@@ -244,433 +295,673 @@ textarea{
 textarea:focus,
 input:focus,
 select:focus{
-  border-color:#7c3aed;
+  border-color:rgba(180,110,255,.75);
+  box-shadow:0 0 0 3px rgba(155,92,255,.08);
 }
 
-.small-info{
-  margin:8px 0;
-  color:#788196;
-  font-size:12px;
-  line-height:1.55;
-}
-
-.enhance{
-  margin-top:10px;
-  padding:10px 14px;
-  color:#d5c7ff;
-  background:#171126;
-  border:1px solid #3b3156;
-  border-radius:10px;
-  font-weight:800;
+.row{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
 }
 
 .styles{
-  display:flex;
-  flex-wrap:wrap;
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
   gap:8px;
 }
 
 .style{
-  padding:9px 12px;
-  color:#aeb6c9;
-  background:#090d19;
-  border:1px solid var(--border);
-  border-radius:999px;
+  padding:10px 5px;
+  border:1px solid var(--line);
+  background:#09090e;
+  border-radius:11px;
+  color:#aaa;
+  font-size:11px;
+  font-weight:750;
+}
+
+.style:hover{
+  border-color:rgba(167,108,255,.5);
+  color:#fff;
 }
 
 .style.active{
-  color:#ddd6fe;
-  background:#24164b;
-  border-color:#7c3aed;
+  border-color:#a76cff;
+  background:rgba(155,92,255,.18);
+  color:#fff;
 }
 
-.controls{
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:13px;
+.actions{
+  display:flex;
+  gap:10px;
+  margin-top:14px;
+}
+
+.primary{
+  border:0;
+  border-radius:14px;
+  padding:14px 17px;
+  font-weight:900;
+  background:linear-gradient(90deg,#fff,#e8d8ff);
+  color:#09090d;
+}
+
+.secondary{
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:13px 16px;
+  font-weight:800;
+  background:#101018;
+  color:#fff;
+}
+
+.secondary:hover{
+  background:#181822;
 }
 
 .generate{
   width:100%;
-  margin-top:25px;
-  padding:17px;
-  border:0;
-  border-radius:15px;
-  color:#fff;
-  font-weight:950;
-  background:linear-gradient(135deg,#7c3aed,#2563eb);
-  box-shadow:0 18px 45px rgba(124,58,237,.24);
+  margin-top:18px;
+  font-size:15px;
+  padding:16px;
 }
 
-.status{
-  display:none;
-  margin-top:20px;
-  padding:20px;
-  border-radius:18px;
-  background:#090d19;
-  border:1px solid var(--border);
+/* =========================================================
+   DIRECTOR CARD
+========================================================= */
+
+.side-card{
+  height:max-content;
 }
 
-.status-title{
+.director-head{
   display:flex;
   align-items:center;
   justify-content:space-between;
-  gap:15px;
+  gap:12px;
+  margin-bottom:10px;
 }
 
-.status-stage{
-  font-weight:900;
+.live-dot{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  padding:6px 9px;
+  border-radius:999px;
+  font-size:11px;
+  color:#b7b7c5;
+  border:1px solid var(--line);
+  background:#09090e;
 }
 
-.status-percent{
-  color:#a78bfa;
-  font-weight:900;
+.live-dot i{
+  width:7px;
+  height:7px;
+  display:block;
+  border-radius:50%;
+  background:#43e6a3;
+  box-shadow:0 0 12px #43e6a3;
 }
 
-.status-message{
-  color:#969fb2;
+.feature{
+  padding:14px 0;
+  border-bottom:1px solid var(--line);
+}
+
+.feature:last-child{
+  border-bottom:0;
+}
+
+.feature strong{
+  display:block;
+  margin-bottom:5px;
+}
+
+.feature span{
+  color:#92929f;
   font-size:13px;
-  line-height:1.5;
+  line-height:1.55;
+}
+
+.engine-note{
+  margin-top:17px;
+  padding:13px;
+  border-radius:14px;
+  border:1px solid rgba(155,92,255,.18);
+  background:rgba(155,92,255,.07);
+  color:#bdb7ce;
+  font-size:12px;
+  line-height:1.55;
+}
+
+/* =========================================================
+   STATUS
+========================================================= */
+
+.status{
+  display:none;
+  margin-top:18px;
+  padding:17px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:#09090e;
+}
+
+.status-top{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  font-weight:850;
 }
 
 .progress{
-  height:9px;
-  background:#1a2031;
+  height:8px;
+  background:#20202a;
+  border-radius:99px;
   overflow:hidden;
-  border-radius:999px;
+  margin-top:12px;
 }
 
 .progress-bar{
-  width:0;
+  width:0%;
   height:100%;
-  background:linear-gradient(90deg,#8b5cf6,#38bdf8);
-  transition:.35s;
+  background:linear-gradient(90deg,#9b5cff,#ff4fd8);
+  transition:width .4s ease;
 }
 
-.result{
+.status-message{
+  color:#aaa;
+  margin-top:9px;
+  font-size:13px;
+}
+
+.scene-info{
+  color:#77778a;
+  font-size:11px;
+  margin-top:6px;
+}
+
+/* =========================================================
+   RESULT
+========================================================= */
+
+.preview{
   display:none;
-  margin-top:25px;
-  padding:22px;
-  border-radius:22px;
-  border:1px solid #30374d;
-  background:#090d19;
+  margin-top:18px;
+  border-top:1px solid var(--line);
+  padding-top:18px;
 }
 
-.result video{
+.preview video{
   width:100%;
-  max-height:680px;
-  border-radius:16px;
+  border-radius:18px;
   background:#000;
+  max-height:650px;
 }
 
-.result-actions{
-  display:flex;
-  flex-wrap:wrap;
+.preview-actions{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
   gap:10px;
-  margin-top:15px;
+  margin-top:12px;
 }
 
-.action{
-  padding:12px 16px;
-  border-radius:11px;
-  border:1px solid var(--border);
-  background:#12182a;
+.preview-actions a,
+.preview-actions button{
+  text-align:center;
+  padding:13px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:#12121a;
   color:#fff;
   font-weight:800;
-  text-decoration:none;
 }
 
-.action.primary{
-  color:#070914;
-  background:#fff;
+.preview-actions a:hover,
+.preview-actions button:hover{
+  background:#1a1a24;
 }
+
+/* =========================================================
+   SECTIONS
+========================================================= */
 
 .section{
-  margin:70px 0;
+  margin-top:38px;
 }
 
-.section-head{
-  margin-bottom:20px;
+.section-title{
+  display:flex;
+  align-items:end;
+  justify-content:space-between;
+  gap:15px;
+  margin-bottom:16px;
 }
 
-.section-head h2{
-  margin:0 0 7px;
-  font-size:27px;
-}
-
-.section-head p{
+.section-title h2{
   margin:0;
-  color:#818a9f;
 }
 
-.dashboard{
-  display:grid;
-  grid-template-columns:repeat(4,1fr);
-  gap:12px;
-  margin-bottom:15px;
+.section-title p{
+  color:#999;
+  margin:5px 0 0;
+  font-size:13px;
 }
 
-.stat{
-  padding:17px;
-  border:1px solid var(--border);
-  border-radius:16px;
-  background:#0d1120;
-}
+/* =========================================================
+   PROJECTS
+========================================================= */
 
-.stat strong{
-  display:block;
-  font-size:24px;
-}
-
-.stat span{
-  color:#7f889c;
-  font-size:11px;
+.project-toolbar{
+  display:flex;
+  gap:10px;
+  align-items:center;
 }
 
 .projects{
   display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(250px,1fr));
+  grid-template-columns:repeat(3,1fr);
   gap:15px;
 }
 
 .project{
+  border:1px solid var(--line);
+  background:#0c0c13;
+  border-radius:19px;
   overflow:hidden;
-  border:1px solid var(--border);
-  border-radius:18px;
-  background:#0d1120;
 }
 
-.project-preview{
+.project video{
+  width:100%;
   aspect-ratio:16/9;
-  background:#060810;
+  object-fit:cover;
+  background:#000;
+}
+
+.project-empty-preview{
+  aspect-ratio:16/9;
   display:flex;
   align-items:center;
   justify-content:center;
-  color:#667087;
+  background:#07070c;
+  color:#555;
+  font-size:28px;
 }
 
-.project-body{
-  padding:16px;
+.project-info{
+  padding:14px;
 }
 
-.project-title{
-  margin:0 0 7px;
-  font-weight:900;
+.project-info strong{
+  display:block;
+  margin-bottom:5px;
+}
+
+.project-info small{
+  color:#858594;
 }
 
 .project-meta{
-  color:#7e879b;
-  font-size:11px;
-  line-height:1.6;
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-top:10px;
+}
+
+.chip{
+  border:1px solid var(--line);
+  background:#101018;
+  color:#aaa;
+  border-radius:999px;
+  padding:4px 8px;
+  font-size:10px;
 }
 
 .project-actions{
   display:flex;
   gap:7px;
-  margin-top:13px;
+  margin-top:12px;
 }
 
-.project-actions a,
-.project-actions button{
+.project-actions button,
+.project-actions a{
   flex:1;
-  padding:9px;
-  border-radius:9px;
-  border:1px solid var(--border);
-  background:#141a2b;
-  color:#fff;
-  text-decoration:none;
   text-align:center;
-  font-size:11px;
+  border:1px solid var(--line);
+  background:#15151e;
+  color:#fff;
+  border-radius:10px;
+  padding:9px 8px;
+  font-size:12px;
   font-weight:800;
 }
 
-.studio-grid{
+.project-actions .danger{
+  color:#ff7777;
+}
+
+/* =========================================================
+   FREE STUDIO
+========================================================= */
+
+.tools{
   display:grid;
-  grid-template-columns:repeat(2,1fr);
+  grid-template-columns:repeat(3,1fr);
   gap:15px;
 }
 
 .tool{
   padding:20px;
-  border-radius:18px;
-  border:1px solid var(--border);
-  background:#0d1120;
+  border:1px solid var(--line);
+  background:#0c0c13;
+  border-radius:20px;
 }
 
-.tool h3{
-  margin:0 0 8px;
+.tool:hover{
+  border-color:rgba(255,255,255,.15);
+  transform:translateY(-1px);
+}
+
+.tool .icon{
+  font-size:28px;
+  margin-bottom:10px;
 }
 
 .tool p{
-  color:#858ea2;
-  font-size:12px;
+  color:#92929f;
+  font-size:13px;
   line-height:1.55;
+  min-height:42px;
 }
 
-.tool button{
-  width:100%;
-  margin-top:10px;
-  padding:12px;
-  border:0;
-  border-radius:10px;
-  background:#7c3aed;
-  color:#fff;
-  font-weight:850;
-}
-
-.utility-row{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:10px;
-}
+/* =========================================================
+   FEATURE GRID
+========================================================= */
 
 .feature-grid{
   display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:13px;
+  grid-template-columns:repeat(4,1fr);
+  gap:14px;
 }
 
-.feature{
+.feature-box{
+  border:1px solid var(--line);
+  background:#0c0c13;
+  border-radius:18px;
   padding:18px;
-  border-radius:17px;
-  border:1px solid var(--border);
-  background:#0d1120;
 }
 
-.feature-icon{
-  font-size:23px;
+.feature-box .big-icon{
+  font-size:25px;
 }
 
-.feature h3{
+.feature-box h3{
   margin:10px 0 5px;
+  font-size:15px;
 }
 
-.feature p{
-  margin:0;
-  color:#818a9f;
+.feature-box p{
+  color:#8e8e9d;
   font-size:12px;
   line-height:1.55;
+  margin:0;
 }
 
-.notice{
-  padding:15px;
-  border-radius:14px;
-  border:1px solid #3a304e;
-  background:#151023;
-  color:#b9accf;
-  font-size:12px;
-  line-height:1.6;
+/* =========================================================
+   MODALS
+========================================================= */
+
+.modal{
+  display:none;
+  position:fixed;
+  inset:0;
+  z-index:9999;
+  align-items:center;
+  justify-content:center;
+  background:rgba(0,0,0,.78);
+  backdrop-filter:blur(8px);
+  padding:18px;
 }
 
-.billing{
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:15px;
+.modal-box{
+  width:min(520px,100%);
+  max-height:92vh;
+  overflow:auto;
+  background:#0d0d14;
+  border:1px solid var(--line);
+  border-radius:24px;
+  padding:24px;
+  box-shadow:0 30px 100px rgba(0,0,0,.65);
 }
 
-.plan{
-  padding:22px;
-  border-radius:20px;
-  border:1px solid var(--border);
-  background:#0d1120;
+.modal-wide{
+  width:min(760px,100%);
 }
 
-.plan.featured{
-  border-color:#7c3aed;
-  box-shadow:0 20px 50px rgba(124,58,237,.12);
+.modal-close{
+  float:right;
+  border:0;
+  background:#1b1b25;
+  color:#fff;
+  width:34px;
+  height:34px;
+  border-radius:50%;
 }
 
-.plan h3{
+.modal h2{
   margin-top:0;
 }
 
-.price{
-  font-size:30px;
-  font-weight:950;
+.modal-message{
+  min-height:22px;
+  color:#aaa;
+  font-size:13px;
+  margin-top:10px;
 }
 
-.plan ul{
-  padding-left:18px;
-  color:#919aad;
-  line-height:1.8;
+.account-box{
+  padding:15px;
+  border-radius:15px;
+  background:#09090e;
+  border:1px solid var(--line);
+  margin:15px 0;
+}
+
+.usage-grid{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:10px;
+  margin-top:15px;
+}
+
+.usage-card{
+  padding:14px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:#101018;
+}
+
+.usage-card small{
+  display:block;
+  color:#77778a;
+  margin-bottom:5px;
+}
+
+.usage-card strong{
+  font-size:20px;
+}
+
+/* =========================================================
+   TOOL OUTPUT
+========================================================= */
+
+.tool-result{
+  margin-top:15px;
+}
+
+.tool-result video{
+  width:100%;
+  border-radius:14px;
+  background:#000;
+}
+
+.audio-result audio{
+  width:100%;
+  margin-top:12px;
+}
+
+.helper{
+  color:#77778a;
+  font-size:11px;
+  line-height:1.5;
+}
+
+textarea.code-area{
+  min-height:220px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
   font-size:12px;
 }
 
-.plan button{
-  width:100%;
-  padding:12px;
-  border:0;
-  border-radius:10px;
-  background:#7c3aed;
-  color:#fff;
-  font-weight:850;
+/* =========================================================
+   TOAST
+========================================================= */
+
+.toast{
+  position:fixed;
+  right:18px;
+  bottom:18px;
+  z-index:12000;
+  width:min(390px,calc(100vw - 36px));
+  padding:15px 16px;
+  border-radius:15px;
+  border:1px solid var(--line);
+  background:#11111a;
+  box-shadow:0 20px 60px rgba(0,0,0,.45);
+  display:none;
 }
+
+.toast.show{
+  display:block;
+}
+
+.toast-title{
+  font-weight:900;
+  margin-bottom:4px;
+}
+
+.toast-message{
+  color:#aaa;
+  font-size:12px;
+  line-height:1.5;
+}
+
+/* =========================================================
+   FOOTER
+========================================================= */
 
 footer{
-  padding:60px 0;
   text-align:center;
-  color:#626c80;
-  line-height:1.8;
+  color:#777;
+  padding:35px 20px;
+  border-top:1px solid var(--line);
 }
 
-.hidden{
-  display:none!important;
+footer small{
+  display:block;
+  margin-top:6px;
 }
 
-@media(max-width:800px){
-  .nav button:nth-child(2){
+/* =========================================================
+   RESPONSIVE
+========================================================= */
+
+@media(max-width:1050px){
+
+  .studio{
+    grid-template-columns:1fr;
+  }
+
+  .feature-grid{
+    grid-template-columns:repeat(2,1fr);
+  }
+}
+
+@media(max-width:900px){
+
+  .tools{
+    grid-template-columns:1fr 1fr;
+  }
+
+  .projects{
+    grid-template-columns:1fr 1fr;
+  }
+
+  .styles{
+    grid-template-columns:repeat(5,1fr);
+  }
+}
+
+@media(max-width:650px){
+
+  .nav{
+    padding:0 13px;
+  }
+
+  .navlinks{
     display:none;
   }
 
+  main{
+    padding:22px 13px 60px;
+  }
+
   .hero{
-    padding-top:55px;
+    padding-top:25px;
   }
 
   .hero h1{
     letter-spacing:-2.5px;
+    font-size:clamp(40px,12vw,60px);
   }
 
-  .controls,
-  .dashboard,
-  .feature-grid,
-  .billing{
-    grid-template-columns:1fr 1fr;
+  .hero p{
+    font-size:14px;
   }
 
-  .studio-grid{
-    grid-template-columns:1fr;
-  }
-}
-
-@media(max-width:560px){
-  .topbar{
-    height:62px;
-  }
-
-  .brand{
-    font-size:17px;
-  }
-
-  .nav button{
-    padding:7px 8px;
-    font-size:10px;
-  }
-
-  .workspace{
-    padding:17px;
-  }
-
-  .mode,
-  .controls,
-  .dashboard,
-  .feature-grid,
-  .billing,
-  .utility-row{
+  .row{
     grid-template-columns:1fr;
   }
 
-  .autopilot{
+  .styles{
+    grid-template-columns:repeat(3,1fr);
+  }
+
+  .tools,
+  .projects,
+  .feature-grid{
+    grid-template-columns:1fr;
+  }
+
+  .actions{
     flex-direction:column;
+  }
+
+  .preview-actions{
+    grid-template-columns:1fr;
+  }
+
+  .project-toolbar{
+    width:100%;
+  }
+
+  .section-title{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+
+  .usage-grid{
+    grid-template-columns:1fr 1fr;
   }
 }
 </style>
@@ -678,22 +969,55 @@ footer{
 
 <body>
 
-<header class="topbar">
-  <div class="brand">✨ MAMAKI <span>AI</span></div>
+<header>
 
-  <nav class="nav">
-    <button onclick="go('create')">Create</button>
-    <button onclick="go('projects')">Projects</button>
-    <button onclick="go('studio')">Free Studio</button>
-    <button onclick="go('features')">Features</button>
-  </nav>
+  <div class="nav">
+
+    <div class="logo">
+      ✨ <span>MAMAKI AI</span>
+    </div>
+
+    <div class="navlinks">
+      <button onclick="scrollToId('studio')">
+        Studio
+      </button>
+
+      <button onclick="scrollToId('projectsSection')">
+        Projects
+      </button>
+
+      <button onclick="scrollToId('freeStudio')">
+        Free Studio
+      </button>
+
+      <button onclick="scrollToId('featuresSection')">
+        Features
+      </button>
+    </div>
+
+    <button
+      id="authButton"
+      class="auth-btn"
+      onclick="handleAuthButton()">
+      🔐 Login
+    </button>
+
+  </div>
+
 </header>
 
 
-<main class="container">
+<main>
+
+<!-- ========================================================
+     HERO
+========================================================= -->
 
 <section class="hero">
-  <div class="badge">✨ Intelligent AI Video Creative Studio</div>
+
+  <div class="badge">
+    ✨ Intelligent AI Video Creative Studio
+  </div>
 
   <h1>
     Create with
@@ -701,189 +1025,627 @@ footer{
   </h1>
 
   <p>
-    Create, edit, enhance and prepare professional videos
-    from one intelligent creative workspace.
+    Turn ideas, scripts and images into professional video
+    productions with AI generation, creative tools, narration,
+    subtitles and social-ready exports.
   </p>
+
 </section>
 
 
-<section id="create" class="workspace">
+<!-- ========================================================
+     MAIN STUDIO
+========================================================= -->
 
-  <div class="mode">
-    <button id="t2vBtn" class="active" onclick="setMode('text')">
-      🎬 Text → Video
+<section id="studio" class="studio">
+
+  <div class="card">
+
+    <h2>🎬 AI Video Studio</h2>
+
+    <p class="card-subtitle">
+      Build a production with MAMAKI's AI Director.
+    </p>
+
+    <div class="tabs">
+
+      <button
+        id="textTab"
+        class="tab active"
+        onclick="setMode('text')">
+        ✍️ Text → Video
+      </button>
+
+      <button
+        id="imageTab"
+        class="tab"
+        onclick="setMode('image')">
+        🖼️ Image → Video
+      </button>
+
+    </div>
+
+
+    <label for="prompt">
+      Describe your video
+    </label>
+
+    <textarea
+      id="prompt"
+      placeholder="Example: A cinematic drone shot flying over a beautiful African city at sunset, realistic lighting, people moving naturally, professional film production..."></textarea>
+
+
+    <div class="actions">
+
+      <button
+        id="enhanceButton"
+        class="secondary"
+        onclick="enhancePrompt()">
+        ✨ AI Enhance Prompt
+      </button>
+
+      <button
+        class="secondary"
+        onclick="clearPrompt()">
+        Clear
+      </button>
+
+    </div>
+
+
+    <label>
+      Visual Style
+    </label>
+
+    <div class="styles">
+
+      <button class="style active" data-style="Cinematic">
+        🎬 Cinematic
+      </button>
+
+      <button class="style" data-style="Realistic">
+        📷 Realistic
+      </button>
+
+      <button class="style" data-style="Documentary">
+        🎥 Documentary
+      </button>
+
+      <button class="style" data-style="Commercial">
+        💎 Commercial
+      </button>
+
+      <button class="style" data-style="3D Animation">
+        🧊 3D
+      </button>
+
+      <button class="style" data-style="Anime">
+        🌸 Anime
+      </button>
+
+      <button class="style" data-style="Fantasy">
+        🧙 Fantasy
+      </button>
+
+      <button class="style" data-style="Sci-Fi">
+        🚀 Sci-Fi
+      </button>
+
+      <button class="style" data-style="Horror">
+        👻 Horror
+      </button>
+
+      <button class="style" data-style="Cartoon">
+        🖍️ Cartoon
+      </button>
+
+    </div>
+
+
+    <div class="row">
+
+      <div>
+
+        <label for="duration">
+          Production Duration
+        </label>
+
+        <select id="duration">
+
+          <option value="5">5 seconds</option>
+          <option value="10">10 seconds</option>
+          <option value="15">15 seconds</option>
+          <option value="20">20 seconds</option>
+          <option value="30">30 seconds</option>
+          <option value="60">1 minute</option>
+          <option value="120">2 minutes</option>
+          <option value="300">5 minutes</option>
+          <option value="600">10 minutes</option>
+          <option value="1800">30 minutes</option>
+          <option value="3600">1 hour</option>
+          <option value="7200">2 hours</option>
+
+        </select>
+
+      </div>
+
+
+      <div>
+
+        <label for="ratio">
+          Aspect Ratio
+        </label>
+
+        <select id="ratio">
+
+          <option value="16:9">
+            16:9 — YouTube / Landscape
+          </option>
+
+          <option value="9:16">
+            9:16 — TikTok / Reels / Shorts
+          </option>
+
+          <option value="1:1">
+            1:1 — Square
+          </option>
+
+        </select>
+
+      </div>
+
+    </div>
+
+
+    <div class="row">
+
+      <div>
+
+        <label for="quality">
+          Quality
+        </label>
+
+        <select id="quality">
+
+          <option value="Standard HD">
+            Standard HD
+          </option>
+
+          <option value="High">
+            High
+          </option>
+
+          <option value="Cinematic">
+            Cinematic
+          </option>
+
+        </select>
+
+      </div>
+
+
+      <div>
+
+        <label for="referenceImage">
+          Reference Image
+        </label>
+
+        <input
+          id="referenceImage"
+          type="file"
+          accept="image/jpeg,image/png,image/webp">
+
+        <div class="helper">
+          Used for Image → Video or as the first scene reference.
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <button
+      id="generateButton"
+      class="primary generate"
+      onclick="startProduction()">
+
+      ✨ Generate AI Video
+
     </button>
 
-    <button id="i2vBtn" onclick="setMode('image')">
-      🖼️ Image → Video
-    </button>
+
+    <div id="status" class="status">
+
+      <div class="status-top">
+
+        <span id="statusStage">
+          MAMAKI AI
+        </span>
+
+        <span id="statusPercent">
+          0%
+        </span>
+
+      </div>
+
+      <div class="progress">
+
+        <div
+          id="progressBar"
+          class="progress-bar">
+        </div>
+
+      </div>
+
+      <div
+        id="statusMessage"
+        class="status-message">
+        Preparing...
+      </div>
+
+      <div
+        id="sceneInfo"
+        class="scene-info">
+      </div>
+
+    </div>
+
+
+    <div id="preview" class="preview">
+
+      <h3>🎉 Your MAMAKI Video</h3>
+
+      <video
+        id="resultVideo"
+        controls
+        playsinline
+        preload="metadata">
+      </video>
+
+      <div class="preview-actions">
+
+        <a
+          id="downloadLink"
+          href="#"
+          download="mamaki-ai-video.mp4">
+          ⬇️ Download
+        </a>
+
+        <button onclick="saveCurrentProject()">
+          💾 Save Project
+        </button>
+
+        <button onclick="openSocialTool(currentVideoUrl)">
+          📱 Social Export
+        </button>
+
+      </div>
+
+    </div>
+
   </div>
 
 
-  <div class="autopilot">
+  <!-- DIRECTOR -->
 
-    <div class="autoicon">✨</div>
+  <div class="card side-card">
+
+    <div class="director-head">
+
+      <h2 style="margin:0">
+        🤖 MAMAKI Autopilot
+      </h2>
+
+      <span class="live-dot">
+        <i></i>
+        Ready
+      </span>
+
+    </div>
+
+    <p style="color:#999;line-height:1.6">
+      MAMAKI automatically manages the production pipeline
+      after you submit your idea.
+    </p>
+
+
+    <div class="feature">
+
+      <strong>
+        🧠 AI Director
+      </strong>
+
+      <span>
+        Structures your idea and prepares scene-ready prompts.
+      </span>
+
+    </div>
+
+
+    <div class="feature">
+
+      <strong>
+        🎥 AI Generation
+      </strong>
+
+      <span>
+        Uses your connected AI video generation provider.
+      </span>
+
+    </div>
+
+
+    <div class="feature">
+
+      <strong>
+        🎞️ Multi-Scene Production
+      </strong>
+
+      <span>
+        Long productions are assembled from multiple generated scenes.
+      </span>
+
+    </div>
+
+
+    <div class="feature">
+
+      <strong>
+        🎵 Audio
+      </strong>
+
+      <span>
+        MAMAKI automatically adds production background audio to AI videos.
+      </span>
+
+    </div>
+
+
+    <div class="feature">
+
+      <strong>
+        ✨ MAMAKI Branding
+      </strong>
+
+      <span>
+        Final generated productions receive MAMAKI branding.
+      </span>
+
+    </div>
+
+
+    <div class="feature">
+
+      <strong>
+        📁 Personal Projects
+      </strong>
+
+      <span>
+        Save your productions under your authenticated MAMAKI account.
+      </span>
+
+    </div>
+
+
+    <div class="engine-note">
+      AI generation requires an active Replicate account/credit.
+      Free Studio tools remain separate from AI generation.
+    </div>
+
+  </div>
+
+</section>
+
+
+<!-- ========================================================
+     PROJECTS
+========================================================= -->
+
+<section
+  id="projectsSection"
+  class="section">
+
+  <div class="section-title">
 
     <div>
+
+      <h2>
+        📁 My Projects
+      </h2>
+
+      <p>
+        Your saved MAMAKI productions.
+      </p>
+
+    </div>
+
+    <div class="project-toolbar">
+
+      <button
+        class="secondary"
+        onclick="loadProjects()">
+        🔄 Refresh
+      </button>
+
+    </div>
+
+  </div>
+
+
+  <div
+    id="projectsList"
+    class="projects">
+
+    <div class="card">
+      Login to see your projects.
+    </div>
+
+  </div>
+
+</section>
+
+
+<!-- ========================================================
+     FREE STUDIO
+========================================================= -->
+
+<section
+  id="freeStudio"
+  class="section">
+
+  <div class="section-title">
+
+    <div>
+
+      <h2>
+        🛠️ Free Studio
+      </h2>
+
+      <p>
+        Practical video production tools that do not require AI generation.
+      </p>
+
+    </div>
+
+  </div>
+
+
+  <div class="tools">
+
+
+    <div class="tool">
+
+      <div class="icon">
+        🖼️
+      </div>
+
       <h3>
-        MAMAKI Autopilot
-        <span class="ai-badge">AI DIRECTOR</span>
+        Photo → Video
       </h3>
 
       <p>
-        Automatically plans scenes, generates short AI clips,
-        assembles long-form productions, adds audio processing
-        and applies MAMAKI branding.
+        Turn up to 50 photos into a branded video presentation.
       </p>
 
-      <div class="chips">
-        <span class="chip">🎬 Scene Planning</span>
-        <span class="chip">🤖 Wan AI</span>
-        <span class="chip">🔗 Auto Assembly</span>
-        <span class="chip">🎵 Audio</span>
-        <span class="chip">✨ Watermark</span>
+      <button
+        class="secondary"
+        onclick="openPhotoTool()">
+        Open Tool
+      </button>
+
+    </div>
+
+
+    <div class="tool">
+
+      <div class="icon">
+        ✂️
       </div>
+
+      <h3>
+        Video Trimmer
+      </h3>
+
+      <p>
+        Cut a section from an uploaded video.
+      </p>
+
+      <button
+        class="secondary"
+        onclick="openTrimTool()">
+        Open Tool
+      </button>
+
     </div>
 
-  </div>
 
+    <div class="tool">
 
-  <label>Describe your video</label>
+      <div class="icon">
+        🎞️
+      </div>
 
-  <textarea
-    id="prompt"
-    placeholder="Describe exactly what you want to create..."
-  ></textarea>
+      <h3>
+        Combine Videos
+      </h3>
 
-  <button class="enhance" onclick="enhancePrompt()">
-    ✨ Enhance Prompt
-  </button>
+      <p>
+        Join multiple video clips into one production.
+      </p>
 
+      <button
+        class="secondary"
+        onclick="openCombineTool()">
+        Open Tool
+      </button>
 
-  <label>Style</label>
-
-  <div class="styles">
-    <button class="style active" data-style="cinematic">🎬 Cinematic</button>
-    <button class="style" data-style="realistic">📷 Realistic</button>
-    <button class="style" data-style="documentary">🎥 Documentary</button>
-    <button class="style" data-style="commercial">💎 Commercial</button>
-    <button class="style" data-style="3d">🧊 3D</button>
-    <button class="style" data-style="anime">🌸 Anime</button>
-    <button class="style" data-style="fantasy">🧙 Fantasy</button>
-    <button class="style" data-style="scifi">🚀 Sci-Fi</button>
-    <button class="style" data-style="horror">👻 Horror</button>
-    <button class="style" data-style="cartoon">🎨 Cartoon</button>
-  </div>
-
-
-  <div class="controls">
-
-    <div>
-      <label>Duration</label>
-      <select id="duration">
-        <option value="5s">5 seconds</option>
-        <option value="10s">10 seconds</option>
-        <option value="15s">15 seconds</option>
-        <option value="20s">20 seconds</option>
-        <option value="30s">30 seconds</option>
-        <option value="1m">1 minute</option>
-        <option value="2m">2 minutes</option>
-        <option value="5m">5 minutes</option>
-        <option value="10m">10 minutes</option>
-        <option value="30m">30 minutes</option>
-        <option value="1h">1 hour</option>
-        <option value="2h">2 hours</option>
-      </select>
     </div>
 
-    <div>
-      <label>Format</label>
-      <select id="ratio">
-        <option value="16:9">16:9 — YouTube</option>
-        <option value="9:16">9:16 — Shorts / Reels</option>
-        <option value="1:1">1:1 — Social</option>
-      </select>
+
+    <div class="tool">
+
+      <div class="icon">
+        🎙️
+      </div>
+
+      <h3>
+        AI Narration
+      </h3>
+
+      <p>
+        Convert written text into a downloadable narration track.
+      </p>
+
+      <button
+        class="secondary"
+        onclick="openNarrationTool()">
+        Open Tool
+      </button>
+
     </div>
 
-    <div>
-      <label>AI Quality</label>
-      <select id="quality">
-        <option>Standard HD</option>
-        <option>Cinematic</option>
-      </select>
+
+    <div class="tool">
+
+      <div class="icon">
+        💬
+      </div>
+
+      <h3>
+        Subtitles
+      </h3>
+
+      <p>
+        Burn SRT or compatible subtitle text directly into a video.
+      </p>
+
+      <button
+        class="secondary"
+        onclick="openSubtitleTool()">
+        Open Tool
+      </button>
+
     </div>
 
-  </div>
 
+    <div class="tool">
 
-  <label>Optional Reference Image</label>
+      <div class="icon">
+        📱
+      </div>
 
-  <input
-    id="referenceImage"
-    type="file"
-    accept="image/jpeg,image/png,image/webp"
-  >
+      <h3>
+        Social Export
+      </h3>
 
-  <p class="small-info">
-    Empty = Text → Video.
-    Add an image = Image → Video.
-    Image → Video keeps the existing Wan I2V pipeline.
-  </p>
+      <p>
+        Prepare videos for landscape, vertical or square platforms.
+      </p>
 
-
-  <button
-    id="generateButton"
-    class="generate"
-    onclick="startProduction()"
-  >
-    ✨ GENERATE VIDEO
-  </button>
-
-
-  <div id="status" class="status">
-
-    <div class="status-title">
-      <span id="statusStage" class="status-stage">
-        Preparing
-      </span>
-
-      <span id="statusPercent" class="status-percent">
-        0%
-      </span>
-    </div>
-
-    <p id="statusMessage" class="status-message">
-      MAMAKI is preparing your production.
-    </p>
-
-    <div class="progress">
-      <div id="progressBar" class="progress-bar"></div>
-    </div>
-
-  </div>
-
-
-  <div id="result" class="result">
-
-    <h2>🎬 Your MAMAKI Video</h2>
-
-    <p id="resultMessage" class="small-info"></p>
-
-    <video id="resultVideo" controls playsinline></video>
-
-    <div class="result-actions">
-
-      <a
-        id="downloadLink"
-        class="action primary"
-        target="_blank"
-        download
-      >
-        ⬇️ Download
-      </a>
-
-      <button class="action" onclick="saveCurrentProject()">
-        💾 Save Project
+      <button
+        class="secondary"
+        onclick="openSocialTool()">
+        Open Tool
       </button>
 
     </div>
@@ -893,299 +1655,95 @@ footer{
 </section>
 
 
-<section id="projects" class="section">
+<!-- ========================================================
+     FEATURES
+========================================================= -->
 
-  <div class="section-head">
-    <h2>📁 My Projects</h2>
-    <p>Your MAMAKI productions and exported videos.</p>
-  </div>
+<section
+  id="featuresSection"
+  class="section">
 
-  <div class="dashboard">
+  <div class="section-title">
 
-    <div class="stat">
-      <strong id="projectCount">0</strong>
-      <span>Total Projects</span>
-    </div>
+    <div>
 
-    <div class="stat">
-      <strong>0</strong>
-      <span>AI Credits Used</span>
-    </div>
-
-    <div class="stat">
-      <strong>2h</strong>
-      <span>Maximum Production</span>
-    </div>
-
-    <div class="stat">
-      <strong>Free</strong>
-      <span>Studio Tools</span>
-    </div>
-
-  </div>
-
-  <div id="projectGrid" class="projects"></div>
-
-</section>
-
-
-<section id="studio" class="section">
-
-  <div class="section-head">
-    <h2>🎞️ Free Studio</h2>
-    <p>Powerful editing tools that do not require AI generation credits.</p>
-  </div>
-
-
-  <div class="studio-grid">
-
-    <div class="tool">
-
-      <h3>📸 Photo → Video</h3>
+      <h2>
+        ✨ MAMAKI Platform
+      </h2>
 
       <p>
-        Turn multiple photos into a professional video.
-        Add your own music or let MAMAKI create a soft
-        audio bed.
+        Built around the production workflow rather than a single AI button.
       </p>
-
-      <label>Photos</label>
-
-      <input
-        id="photoFiles"
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        multiple
-      >
-
-      <label>Music — optional</label>
-
-      <input
-        id="photoMusic"
-        type="file"
-        accept="audio/*"
-      >
-
-      <div class="utility-row">
-
-        <select id="photoDuration">
-          <option value="5">5 sec/photo</option>
-          <option value="10">10 sec/photo</option>
-          <option value="15">15 sec/photo</option>
-          <option value="30">30 sec/photo</option>
-        </select>
-
-        <select id="photoRatio">
-          <option value="16:9">16:9</option>
-          <option value="9:16">9:16</option>
-          <option value="1:1">1:1</option>
-        </select>
-
-      </div>
-
-      <button onclick="photoVideo()">
-        Create Photo Video
-      </button>
-
-    </div>
-
-
-    <div class="tool">
-
-      <h3>✂️ Video Trimmer</h3>
-
-      <p>
-        Cut unwanted sections and export a clean,
-        watermarked MP4.
-      </p>
-
-      <input
-        id="trimVideo"
-        type="file"
-        accept="video/*"
-      >
-
-      <div class="utility-row">
-
-        <input
-          id="trimStart"
-          type="number"
-          min="0"
-          step=".1"
-          placeholder="Start (sec)"
-        >
-
-        <input
-          id="trimEnd"
-          type="number"
-          min="0"
-          step=".1"
-          placeholder="End (sec)"
-        >
-
-      </div>
-
-      <button onclick="trimVideo()">
-        Trim Video
-      </button>
-
-    </div>
-
-
-    <div class="tool">
-
-      <h3>🔗 Combine Videos</h3>
-
-      <p>
-        Join multiple clips into one production.
-      </p>
-
-      <input
-        id="combineVideos"
-        type="file"
-        accept="video/*"
-        multiple
-      >
-
-      <button onclick="combineVideos()">
-        Combine Clips
-      </button>
-
-    </div>
-
-
-    <div class="tool">
-
-      <h3>🎵 Audio Workspace</h3>
-
-      <p>
-        Add your own music through Photo → Video or
-        the trimming workflow. Audio is mixed through
-        the existing FFmpeg backend.
-      </p>
-
-      <div class="notice">
-        Your original AI generation pipeline is not being
-        changed by these Free Studio tools.
-      </div>
 
     </div>
 
   </div>
 
-</section>
-
-
-<section id="features" class="section">
-
-  <div class="section-head">
-    <h2>🚀 MAMAKI Creative Suite</h2>
-    <p>The platform foundation we are building toward.</p>
-  </div>
 
   <div class="feature-grid">
 
-    <div class="feature">
-      <div class="feature-icon">✨</div>
-      <h3>AI Enhance</h3>
-      <p>Professional prompt enhancement and cinematic direction.</p>
+    <div class="feature-box">
+      <div class="big-icon">🎬</div>
+      <h3>AI Video Creation</h3>
+      <p>
+        Text-to-video and image-to-video production through the connected AI engine.
+      </p>
     </div>
 
-    <div class="feature">
-      <div class="feature-icon">🎙️</div>
+    <div class="feature-box">
+      <div class="big-icon">🤖</div>
+      <h3>Autopilot Director</h3>
+      <p>
+        Multi-scene production and automated assembly for longer projects.
+      </p>
+    </div>
+
+    <div class="feature-box">
+      <div class="big-icon">🎙️</div>
       <h3>Voice & Narration</h3>
-      <p>Prepared for narration, voice-over and audio workflows.</p>
+      <p>
+        Create downloadable narration audio using the configured voice service.
+      </p>
     </div>
 
-    <div class="feature">
-      <div class="feature-icon">📝</div>
+    <div class="feature-box">
+      <div class="big-icon">💬</div>
       <h3>Subtitles</h3>
-      <p>Prepared for caption generation and burned-in subtitle exports.</p>
+      <p>
+        Burn subtitle text into uploaded videos through FFmpeg processing.
+      </p>
     </div>
 
-    <div class="feature">
-      <div class="feature-icon">📱</div>
+    <div class="feature-box">
+      <div class="big-icon">📱</div>
       <h3>Social Presets</h3>
-      <p>YouTube, Shorts, Reels and square social formats.</p>
+      <p>
+        Create landscape, vertical and square versions of videos.
+      </p>
     </div>
 
-    <div class="feature">
-      <div class="feature-icon">💾</div>
-      <h3>Project Workspace</h3>
-      <p>Organize productions and quickly reopen exported videos.</p>
+    <div class="feature-box">
+      <div class="big-icon">📁</div>
+      <h3>Projects</h3>
+      <p>
+        Save, preview, open, download and delete your personal project records.
+      </p>
     </div>
 
-    <div class="feature">
-      <div class="feature-icon">🛡️</div>
-      <h3>Production Safety</h3>
-      <p>Clear errors, background jobs and protected generation workflow.</p>
+    <div class="feature-box">
+      <div class="big-icon">🔐</div>
+      <h3>Accounts</h3>
+      <p>
+        Personal authentication and user-specific project access.
+      </p>
     </div>
 
-  </div>
-
-</section>
-
-
-<section class="section">
-
-  <div class="section-head">
-    <h2>💳 MAMAKI Plans</h2>
-    <p>Payment infrastructure can be connected when you are ready.</p>
-  </div>
-
-  <div class="billing">
-
-    <div class="plan">
-      <h3>Free Studio</h3>
-      <div class="price">₦0</div>
-
-      <ul>
-        <li>Photo → Video</li>
-        <li>Video Trimmer</li>
-        <li>Combine Videos</li>
-        <li>Music tools</li>
-        <li>MAMAKI watermark</li>
-      </ul>
-
-      <button onclick="go('studio')">
-        Open Studio
-      </button>
-    </div>
-
-
-    <div class="plan featured">
-      <h3>Creator</h3>
-      <div class="price">Coming Soon</div>
-
-      <ul>
-        <li>AI video credits</li>
-        <li>Long-form Autopilot</li>
-        <li>Voice & narration</li>
-        <li>Advanced exports</li>
-        <li>More production options</li>
-      </ul>
-
-      <button onclick="comingSoon()">
-        Coming Soon
-      </button>
-    </div>
-
-
-    <div class="plan">
-      <h3>Professional</h3>
-      <div class="price">Coming Soon</div>
-
-      <ul>
-        <li>Large AI credit allowance</li>
-        <li>Priority production</li>
-        <li>Advanced branding</li>
-        <li>Commercial workflow</li>
-        <li>Professional exports</li>
-      </ul>
-
-      <button onclick="comingSoon()">
-        Coming Soon
-      </button>
+    <div class="feature-box">
+      <div class="big-icon">✨</div>
+      <h3>MAMAKI Branding</h3>
+      <p>
+        Studio and AI outputs can receive the MAMAKI watermark.
+      </p>
     </div>
 
   </div>
@@ -1196,48 +1754,874 @@ footer{
 
 
 <footer>
-  ✨ MAMAKI AI Video Creative Studio
-  <br>
-  Create. Imagine. Produce.
+
+  ✨ MAMAKI AI Video Studio
+
+  <small>
+    Intelligent creative production platform
+  </small>
+
 </footer>
+
+
+<!-- ========================================================
+     AUTH MODAL
+========================================================= -->
+
+<div
+  id="authModal"
+  class="modal">
+
+  <div class="modal-box">
+
+    <button
+      class="modal-close"
+      onclick="closeAuthModal()">
+      ✕
+    </button>
+
+    <h2 id="authTitle">
+      🔐 Login to MAMAKI
+    </h2>
+
+    <p style="color:#999">
+      Sign in to create AI videos and manage your projects.
+    </p>
+
+
+    <div id="registerNameWrap" style="display:none">
+
+      <label>
+        Name
+      </label>
+
+      <input
+        id="authName"
+        maxlength="100"
+        placeholder="Your name">
+
+    </div>
+
+
+    <label>
+      Email
+    </label>
+
+    <input
+      id="authEmail"
+      type="email"
+      autocomplete="email"
+      placeholder="you@example.com">
+
+
+    <label>
+      Password
+    </label>
+
+    <input
+      id="authPassword"
+      type="password"
+      autocomplete="current-password"
+      placeholder="At least 6 characters">
+
+
+    <button
+      id="authSubmit"
+      class="primary"
+      style="width:100%;margin-top:15px"
+      onclick="submitAuth()">
+      Login
+    </button>
+
+
+    <button
+      id="authSwitch"
+      class="secondary"
+      style="width:100%;margin-top:10px"
+      onclick="switchAuthMode()">
+      Create an account
+    </button>
+
+
+    <div
+      id="authMessage"
+      class="modal-message">
+    </div>
+
+  </div>
+
+</div>
+
+
+<!-- ========================================================
+     ACCOUNT MODAL
+========================================================= -->
+
+<div
+  id="accountModal"
+  class="modal">
+
+  <div class="modal-box">
+
+    <button
+      class="modal-close"
+      onclick="closeAccountModal()">
+      ✕
+    </button>
+
+    <h2>
+      👤 My MAMAKI Account
+    </h2>
+
+    <div
+      id="accountContent"
+      class="account-box">
+      Loading...
+    </div>
+
+    <button
+      class="secondary"
+      style="width:100%"
+      onclick="logoutMamaki()">
+      🚪 Logout
+    </button>
+
+  </div>
+
+</div>
+
+
+<!-- ========================================================
+     TOOL MODAL
+========================================================= -->
+
+<div
+  id="toolModal"
+  class="modal">
+
+  <div class="modal-box modal-wide">
+
+    <button
+      class="modal-close"
+      onclick="closeToolModal()">
+      ✕
+    </button>
+
+    <h2 id="toolTitle">
+      Free Studio
+    </h2>
+
+    <div id="toolContent"></div>
+
+  </div>
+
+</div>
+
+
+<!-- ========================================================
+     TOAST
+========================================================= -->
+
+<div
+  id="toast"
+  class="toast">
+
+  <div
+    id="toastTitle"
+    class="toast-title">
+    MAMAKI
+  </div>
+
+  <div
+    id="toastMessage"
+    class="toast-message">
+  </div>
+
+</div>
 
 
 <script>
 
-let mode = "text";
-let selectedStyle = "cinematic";
+/* =========================================================
+   MAMAKI AI FRONTEND ENGINE
+   Backend-compatible frontend for MAMAKI v13
+========================================================= */
+
+const AUTH_KEY = "mamaki_auth_token";
+
+let currentUser = null;
+let authMode = "login";
+let selectedStyle = "Cinematic";
+let currentMode = "text";
 let currentVideoUrl = "";
+let currentProjectId = "";
+let pollTimer = null;
+
+const originalFetch =
+  window.fetch.bind(window);
 
 
-function go(id){
+/* =========================================================
+   AUTHENTICATED FETCH
+========================================================= */
+
+window.fetch = async function(input, init = {}){
+
+  const options = {
+    ...init,
+    headers: new Headers(init.headers || {})
+  };
+
+  const token =
+    localStorage.getItem(AUTH_KEY);
+
+  if(token){
+
+    options.headers.set(
+      "Authorization",
+      "Bearer " + token
+    );
+
+  }
+
+  const response =
+    await originalFetch(input, options);
+
+  if(
+    response.status === 401 &&
+    !String(input).includes("/api/auth/")
+  ){
+
+    try{
+
+      const copy = response.clone();
+      const data = await copy.json();
+
+      if(data.error === "AUTH_REQUIRED"){
+
+        localStorage.removeItem(AUTH_KEY);
+        currentUser = null;
+
+        updateAuthButton();
+
+        showToast(
+          "Session expired",
+          "Please log in again.",
+          "warning"
+        );
+
+        openAuthModal();
+      }
+
+    }catch{}
+
+  }
+
+  return response;
+};
+
+
+/* =========================================================
+   NAVIGATION
+========================================================= */
+
+function scrollToId(id){
+
   document
     .getElementById(id)
     ?.scrollIntoView({
       behavior:"smooth",
       block:"start"
     });
+
 }
 
 
-function setMode(value){
+/* =========================================================
+   AUTH UI
+========================================================= */
 
-  mode = value;
-
-  document
-    .getElementById("t2vBtn")
-    .classList.toggle(
-      "active",
-      value === "text"
-    );
+function openAuthModal(){
 
   document
-    .getElementById("i2vBtn")
-    .classList.toggle(
-      "active",
-      value === "image"
-    );
+    .getElementById("authModal")
+    .style.display = "flex";
+
 }
 
+function closeAuthModal(){
+
+  document
+    .getElementById("authModal")
+    .style.display = "none";
+
+}
+
+function switchAuthMode(){
+
+  authMode =
+    authMode === "login"
+      ? "register"
+      : "login";
+
+  const title =
+    document.getElementById("authTitle");
+
+  const nameWrap =
+    document.getElementById("registerNameWrap");
+
+  const submit =
+    document.getElementById("authSubmit");
+
+  const switchButton =
+    document.getElementById("authSwitch");
+
+  const password =
+    document.getElementById("authPassword");
+
+  document
+    .getElementById("authMessage")
+    .textContent = "";
+
+  if(authMode === "register"){
+
+    title.textContent =
+      "✨ Create MAMAKI Account";
+
+    nameWrap.style.display =
+      "block";
+
+    submit.textContent =
+      "Create Account";
+
+    switchButton.textContent =
+      "Already have an account? Login";
+
+    password.autocomplete =
+      "new-password";
+
+  }else{
+
+    title.textContent =
+      "🔐 Login to MAMAKI";
+
+    nameWrap.style.display =
+      "none";
+
+    submit.textContent =
+      "Login";
+
+    switchButton.textContent =
+      "Create an account";
+
+    password.autocomplete =
+      "current-password";
+
+  }
+
+}
+
+
+async function submitAuth(){
+
+  const email =
+    document
+      .getElementById("authEmail")
+      .value
+      .trim();
+
+  const password =
+    document
+      .getElementById("authPassword")
+      .value;
+
+  const name =
+    document
+      .getElementById("authName")
+      .value
+      .trim();
+
+  const message =
+    document.getElementById("authMessage");
+
+  const submit =
+    document.getElementById("authSubmit");
+
+
+  if(!email){
+
+    message.textContent =
+      "Please enter your email.";
+
+    return;
+  }
+
+  if(!password){
+
+    message.textContent =
+      "Please enter your password.";
+
+    return;
+  }
+
+  if(password.length < 6){
+
+    message.textContent =
+      "Password must contain at least 6 characters.";
+
+    return;
+  }
+
+  if(
+    authMode === "register" &&
+    !name
+  ){
+
+    message.textContent =
+      "Please enter your name.";
+
+    return;
+  }
+
+
+  submit.disabled = true;
+
+  message.textContent =
+    "Connecting to MAMAKI...";
+
+
+  try{
+
+    const endpoint =
+      authMode === "login"
+        ? "/api/auth/login"
+        : "/api/auth/register";
+
+    const body =
+      authMode === "login"
+        ? {
+            email,
+            password
+          }
+        : {
+            name,
+            email,
+            password
+          };
+
+
+    const response =
+      await originalFetch(
+        endpoint,
+        {
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json"
+          },
+          body:JSON.stringify(body)
+        }
+      );
+
+
+    const data =
+      await response.json();
+
+
+    if(!response.ok){
+
+      throw new Error(
+        data.message ||
+        data.error ||
+        "Authentication failed."
+      );
+
+    }
+
+
+    if(!data.token){
+
+      throw new Error(
+        "The server did not return a session token."
+      );
+
+    }
+
+
+    localStorage.setItem(
+      AUTH_KEY,
+      data.token
+    );
+
+
+    currentUser =
+      data.user || null;
+
+
+    updateAuthButton();
+
+    closeAuthModal();
+
+    showToast(
+      "Welcome to MAMAKI",
+      "Your account is ready.",
+      "success"
+    );
+
+    await loadProjects();
+
+  }catch(error){
+
+    message.textContent =
+      friendlyError(
+        error.message
+      );
+
+  }finally{
+
+    submit.disabled = false;
+
+  }
+
+}
+
+
+async function verifySession(){
+
+  const token =
+    localStorage.getItem(AUTH_KEY);
+
+  if(!token){
+
+    updateAuthButton();
+
+    return false;
+  }
+
+
+  try{
+
+    const response =
+      await originalFetch(
+        "/api/auth/me",
+        {
+          headers:{
+            Authorization:
+              "Bearer " + token
+          }
+        }
+      );
+
+
+    if(!response.ok){
+
+      localStorage.removeItem(AUTH_KEY);
+      currentUser = null;
+
+      updateAuthButton();
+
+      return false;
+    }
+
+
+    const data =
+      await response.json();
+
+
+    currentUser =
+      data.user || null;
+
+
+    updateAuthButton();
+
+    await loadProjects();
+
+    return true;
+
+  }catch{
+
+    updateAuthButton();
+
+    return false;
+
+  }
+
+}
+
+
+function updateAuthButton(){
+
+  const button =
+    document.getElementById("authButton");
+
+  if(!button){
+    return;
+  }
+
+
+  if(currentUser){
+
+    const name =
+      currentUser.name ||
+      currentUser.email ||
+      "Account";
+
+    button.textContent =
+      "👤 " + name;
+
+  }else{
+
+    button.textContent =
+      "🔐 Login";
+
+  }
+
+}
+
+
+function handleAuthButton(){
+
+  if(currentUser){
+
+    openAccountModal();
+
+  }else{
+
+    authMode = "login";
+
+    document
+      .getElementById("registerNameWrap")
+      .style.display = "none";
+
+    document
+      .getElementById("authTitle")
+      .textContent =
+        "🔐 Login to MAMAKI";
+
+    document
+      .getElementById("authSubmit")
+      .textContent =
+        "Login";
+
+    openAuthModal();
+
+  }
+
+}
+
+
+/* =========================================================
+   ACCOUNT
+========================================================= */
+
+async function openAccountModal(){
+
+  document
+    .getElementById("accountModal")
+    .style.display = "flex";
+
+
+  const content =
+    document.getElementById("accountContent");
+
+
+  content.innerHTML =
+    "Loading account...";
+
+
+  try{
+
+    const response =
+      await fetch("/api/account");
+
+
+    const data =
+      await response.json();
+
+
+    if(!response.ok){
+
+      throw new Error(
+        data.message ||
+        data.error ||
+        "Unable to load account."
+      );
+
+    }
+
+
+    const account =
+      data.account ||
+      currentUser ||
+      {};
+
+    const usage =
+      data.usage || {};
+
+
+    content.innerHTML = `
+
+      <strong>
+        ${escapeHtml(
+          account.name ||
+          "MAMAKI Creator"
+        )}
+      </strong>
+
+      <br>
+
+      <span style="color:#888">
+        ${escapeHtml(
+          account.email || ""
+        )}
+      </span>
+
+      <div class="usage-grid">
+
+        <div class="usage-card">
+          <small>AI Generations</small>
+          <strong>
+            ${Number(
+              usage.aiGenerations || 0
+            )}
+          </strong>
+        </div>
+
+        <div class="usage-card">
+          <small>AI Seconds</small>
+          <strong>
+            ${formatSeconds(
+              usage.aiSeconds || 0
+            )}
+          </strong>
+        </div>
+
+        <div class="usage-card">
+          <small>Studio Jobs</small>
+          <strong>
+            ${Number(
+              usage.studioJobs || 0
+            )}
+          </strong>
+        </div>
+
+        <div class="usage-card">
+          <small>Narration Jobs</small>
+          <strong>
+            ${Number(
+              usage.narrationJobs || 0
+            )}
+          </strong>
+        </div>
+
+      </div>
+
+      <p class="helper" style="margin-top:15px">
+        Maximum AI production duration:
+        ${formatSeconds(
+          data.limits?.maximumProductionSeconds || 7200
+        )}
+      </p>
+
+    `;
+
+  }catch(error){
+
+    content.innerHTML =
+      escapeHtml(
+        friendlyError(
+          error.message
+        )
+      );
+
+  }
+
+}
+
+
+function closeAccountModal(){
+
+  document
+    .getElementById("accountModal")
+    .style.display = "none";
+
+}
+
+
+async function logoutMamaki(){
+
+  const token =
+    localStorage.getItem(AUTH_KEY);
+
+
+  try{
+
+    if(token){
+
+      await originalFetch(
+        "/api/auth/logout",
+        {
+          method:"POST",
+          headers:{
+            Authorization:
+              "Bearer " + token
+          }
+        }
+      );
+
+    }
+
+  }catch{}
+
+
+  localStorage.removeItem(AUTH_KEY);
+
+  currentUser = null;
+
+  updateAuthButton();
+
+  closeAccountModal();
+
+  loadProjects();
+
+  showToast(
+    "Logged out",
+    "Your MAMAKI session has ended.",
+    "success"
+  );
+
+}
+
+
+/* =========================================================
+   MODE
+========================================================= */
+
+function setMode(mode){
+
+  currentMode = mode;
+
+
+  document
+    .getElementById("textTab")
+    .classList.toggle(
+      "active",
+      mode === "text"
+    );
+
+
+  document
+    .getElementById("imageTab")
+    .classList.toggle(
+      "active",
+      mode === "image"
+    );
+
+}
+
+
+/* =========================================================
+   STYLE SELECTOR
+========================================================= */
 
 document
   .querySelectorAll(".style")
@@ -1249,52 +2633,156 @@ document
 
         document
           .querySelectorAll(".style")
-          .forEach(x =>
-            x.classList.remove("active")
-          );
+          .forEach(item => {
+            item.classList.remove("active");
+          });
+
 
         button.classList.add("active");
 
+
         selectedStyle =
-          button.dataset.style;
+          button.dataset.style ||
+          "Cinematic";
+
       }
     );
 
   });
 
 
-function enhancePrompt(){
+/* =========================================================
+   PROMPT ENHANCEMENT
+========================================================= */
 
-  const box =
+async function enhancePrompt(){
+
+  const input =
     document.getElementById("prompt");
 
+  const button =
+    document.getElementById("enhanceButton");
+
+
   const text =
-    box.value.trim();
+    input.value.trim();
+
 
   if(!text){
-    box.focus();
+
+    input.focus();
+
+    showToast(
+      "Prompt required",
+      "Write your idea first.",
+      "warning"
+    );
+
     return;
   }
 
-  box.value =
-    `${text}. ` +
-    `${selectedStyle} visual style, ` +
-    `professional cinematic composition, ` +
-    `natural realistic movement, ` +
-    `detailed environment, ` +
-    `professional lighting, ` +
-    `smooth camera movement, ` +
-    `strong visual storytelling, ` +
-    `high production quality.`;
+
+  button.disabled = true;
+
+  button.textContent =
+    "✨ Enhancing...";
+
+
+  try{
+
+    const response =
+      await fetch(
+        "/api/ai/enhance",
+        {
+          method:"POST",
+          headers:{
+            "Content-Type":
+              "application/json"
+          },
+          body:JSON.stringify({
+            prompt:text,
+            style:selectedStyle
+          })
+        }
+      );
+
+
+    const data =
+      await response.json();
+
+
+    if(!response.ok){
+
+      throw new Error(
+        data.message ||
+        data.error ||
+        "Prompt enhancement failed."
+      );
+
+    }
+
+
+    if(data.enhanced){
+
+      input.value =
+        data.enhanced;
+
+      showToast(
+        "Prompt enhanced",
+        "Your production prompt has been improved.",
+        "success"
+      );
+
+    }
+
+  }catch(error){
+
+    showToast(
+      "Prompt enhancement failed",
+      friendlyError(error.message),
+      "error"
+    );
+
+  }finally{
+
+    button.disabled = false;
+
+    button.textContent =
+      "✨ AI Enhance Prompt";
+
+  }
+
 }
 
 
+function clearPrompt(){
+
+  document
+    .getElementById("prompt")
+    .value = "";
+
+}
+
+
+/* =========================================================
+   GENERATION
+========================================================= */
+
 async function startProduction(){
 
-  const button =
-    document.getElementById(
-      "generateButton"
+  if(!currentUser){
+
+    openAuthModal();
+
+    showToast(
+      "Login required",
+      "Create or login to your MAMAKI account first.",
+      "warning"
     );
+
+    return;
+  }
+
 
   const prompt =
     document
@@ -1302,9 +2790,60 @@ async function startProduction(){
       .value
       .trim();
 
+
   if(!prompt){
 
-    alert("Please enter a video prompt.");
+    showToast(
+      "Prompt required",
+      "Describe the video you want to create.",
+      "warning"
+    );
+
+    return;
+  }
+
+
+  const duration =
+    Number(
+      document
+        .getElementById("duration")
+        .value
+    );
+
+
+  const ratio =
+    document
+      .getElementById("ratio")
+      .value;
+
+
+  const quality =
+    document
+      .getElementById("quality")
+      .value;
+
+
+  const imageInput =
+    document
+      .getElementById("referenceImage");
+
+
+  const image =
+    imageInput.files[0];
+
+
+  if(
+    currentMode === "image" &&
+    !image
+  ){
+
+    showToast(
+      "Reference image required",
+      "Choose an image for Image → Video.",
+      "warning"
+    );
+
+    imageInput.focus();
 
     return;
   }
@@ -1313,49 +2852,73 @@ async function startProduction(){
   const form =
     new FormData();
 
+
   form.append(
     "prompt",
     prompt
   );
 
+
   form.append(
     "duration",
-    document
-      .getElementById("duration")
-      .value
+    String(duration)
   );
+
 
   form.append(
     "ratio",
-    document
-      .getElementById("ratio")
-      .value
+    ratio
   );
 
 
-  const image =
-    document
-      .getElementById(
-        "referenceImage"
-      )
-      .files[0];
+  form.append(
+    "style",
+    selectedStyle
+  );
 
+
+  form.append(
+    "quality",
+    quality
+  );
+
+
+  /*
+    IMPORTANT:
+    The current backend expects:
+    upload.single("image")
+  */
 
   if(image){
 
     form.append(
-      "referenceImage",
+      "image",
       image
     );
+
   }
+
+
+  const button =
+    document.getElementById(
+      "generateButton"
+    );
 
 
   button.disabled = true;
 
+  currentVideoUrl = "";
+
+  document
+    .getElementById("preview")
+    .style.display = "none";
+
+
   showStatus(
     "MAMAKI AUTOPILOT",
-    "AI Director is preparing your production.",
-    1
+    "Starting production...",
+    2,
+    ""
   );
 
 
@@ -1377,21 +2940,27 @@ async function startProduction(){
 
     if(!response.ok){
 
-      throw new Error(
-        friendlyError(
-          data.error ||
-          "Unable to start production."
-        )
-      );
+      throw makeApiError(data);
+
     }
 
 
     if(!data.jobId){
 
       throw new Error(
-        "Production job was not created."
+        "The server did not return a production job ID."
       );
+
     }
+
+
+    showStatus(
+      "Production queued",
+      data.message ||
+      "MAMAKI is preparing your production.",
+      3,
+      ""
+    );
 
 
     pollJob(
@@ -1406,76 +2975,105 @@ async function startProduction(){
       friendlyError(
         error.message
       ),
-      0
+      0,
+      ""
     );
+
 
     button.disabled = false;
+
   }
+
 }
 
 
-function friendlyError(message){
-
-  const text =
-    String(message || "");
-
-
-  if(
-    text.includes("402") ||
-    text.toLowerCase().includes("insufficient credit")
-  ){
-
-    return (
-      "AI generation is temporarily unavailable " +
-      "because the connected AI account has insufficient " +
-      "credit. Your MAMAKI project is still intact."
-    );
-  }
-
-
-  if(
-    text.includes("REPLICATE_API_TOKEN")
-  ){
-
-    return (
-      "The AI generation service is not configured."
-    );
-  }
-
-
-  return text;
-}
-
+/* =========================================================
+   JOB POLLING
+========================================================= */
 
 async function pollJob(jobId){
+
+  if(pollTimer){
+
+    clearTimeout(
+      pollTimer
+    );
+
+  }
+
 
   try{
 
     const response =
       await fetch(
-        `/api/jobs/${encodeURIComponent(jobId)}`
+        "/api/jobs/" +
+        encodeURIComponent(jobId)
       );
 
 
-    const job =
+    const data =
       await response.json();
 
 
     if(!response.ok){
 
-      throw new Error(
-        job.error ||
-        "Unable to check production status."
+      throw makeApiError(data);
+
+    }
+
+
+    /*
+      IMPORTANT FIX:
+      Current backend returns:
+
+      {
+        ok: true,
+        job: {...}
+      }
+
+      The previous HTML incorrectly read
+      progress directly from the root response.
+    */
+
+    const job =
+      data.job || {};
+
+
+    const progress =
+      Number(
+        job.progress || 0
       );
+
+
+    let sceneText = "";
+
+
+    if(
+      job.currentScene &&
+      job.totalScenes
+    ){
+
+      sceneText =
+        `Scene ${job.currentScene} of ${job.totalScenes}`;
+
     }
 
 
     showStatus(
-      job.stage ||
-      "Processing",
+      job.status === "completed"
+        ? "Production complete"
+        : (
+          job.status === "processing"
+            ? "Generating"
+            : "MAMAKI AI"
+        ),
+
       job.message ||
-      "MAMAKI is working...",
-      job.progress || 0
+      "MAMAKI is working on your production...",
+
+      progress,
+
+      sceneText
     );
 
 
@@ -1483,9 +3081,28 @@ async function pollJob(jobId){
       job.status === "completed"
     ){
 
-      showResult(
-        job.videoUrl
-      );
+      /*
+        IMPORTANT FIX:
+        Current backend returns the video as:
+
+        data.job.video
+      */
+
+      const url =
+        job.video;
+
+
+      if(!url){
+
+        throw new Error(
+          "Production completed but the server returned no video file."
+        );
+
+      }
+
+
+      showResult(url);
+
 
       document
         .getElementById(
@@ -1493,9 +3110,11 @@ async function pollJob(jobId){
         )
         .disabled = false;
 
-      loadProjects();
+
+      await loadProjects();
 
       return;
+
     }
 
 
@@ -1503,67 +3122,86 @@ async function pollJob(jobId){
       job.status === "failed"
     ){
 
-      showStatus(
-        "Production failed",
-        friendlyError(
+      const error =
+        new Error(
           job.message ||
-          "MAMAKI production failed."
-        ),
-        0
-      );
+          "AI production failed."
+        );
 
-      document
-        .getElementById(
-          "generateButton"
-        )
-        .disabled = false;
+      error.code =
+        job.error ||
+        "";
 
-      return;
+      throw error;
+
     }
 
 
-    setTimeout(
-      () => pollJob(jobId),
-      2500
-    );
+    pollTimer =
+      setTimeout(
+        () => pollJob(jobId),
+        2500
+      );
 
 
   }catch(error){
 
     showStatus(
-      "Connection error",
-      error.message,
-      0
+      "Production failed",
+      friendlyError(
+        error.message
+      ),
+      0,
+      ""
     );
+
 
     document
       .getElementById(
         "generateButton"
       )
       .disabled = false;
+
   }
+
 }
 
+
+/* =========================================================
+   STATUS
+========================================================= */
 
 function showStatus(
   stage,
   message,
-  progress
+  progress,
+  sceneText
 ){
 
-  document
-    .getElementById("status")
-    .style.display = "block";
+  const status =
+    document.getElementById(
+      "status"
+    );
+
+
+  status.style.display =
+    "block";
 
 
   document
-    .getElementById("statusStage")
-    .textContent = stage;
+    .getElementById(
+      "statusStage"
+    )
+    .textContent =
+      stage;
 
 
   document
-    .getElementById("statusMessage")
-    .textContent = message;
+    .getElementById(
+      "statusMessage"
+    )
+    .textContent =
+      message;
 
 
   const value =
@@ -1577,25 +3215,41 @@ function showStatus(
 
 
   document
-    .getElementById("progressBar")
-    .style.width =
-      `${value}%`;
+    .getElementById(
+      "statusPercent"
+    )
+    .textContent =
+      Math.round(value) +
+      "%";
 
 
   document
-    .getElementById("statusPercent")
+    .getElementById(
+      "progressBar"
+    )
+    .style.width =
+      value + "%";
+
+
+  document
+    .getElementById(
+      "sceneInfo"
+    )
     .textContent =
-      `${Math.round(value)}%`;
+      sceneText || "";
+
 }
 
 
-function showResult(videoUrl){
+/* =========================================================
+   RESULT
+========================================================= */
 
-  if(!videoUrl) return;
+function showResult(url){
 
   currentVideoUrl =
     new URL(
-      videoUrl,
+      url,
       window.location.origin
     ).href;
 
@@ -1604,6 +3258,7 @@ function showResult(videoUrl){
     document.getElementById(
       "resultVideo"
     );
+
 
   video.src =
     currentVideoUrl;
@@ -1621,15 +3276,7 @@ function showResult(videoUrl){
 
   document
     .getElementById(
-      "resultMessage"
-    )
-    .textContent =
-      "✅ Production ready. Preview or download your MAMAKI video.";
-
-
-  document
-    .getElementById(
-      "result"
+      "preview"
     )
     .style.display =
       "block";
@@ -1637,20 +3284,36 @@ function showResult(videoUrl){
 
   document
     .getElementById(
-      "result"
+      "preview"
     )
     .scrollIntoView({
-      behavior:"smooth"
+      behavior:"smooth",
+      block:"center"
     });
+
 }
 
 
+/* =========================================================
+   SAVE PROJECT
+========================================================= */
+
 async function saveCurrentProject(){
+
+  if(!currentUser){
+
+    openAuthModal();
+
+    return;
+  }
+
 
   if(!currentVideoUrl){
 
-    alert(
-      "Create or open a video first."
+    showToast(
+      "No video",
+      "Generate or create a video first.",
+      "warning"
     );
 
     return;
@@ -1658,13 +3321,17 @@ async function saveCurrentProject(){
 
 
   const title =
-    prompt(
+    window.prompt(
       "Project name:",
-      "MAMAKI Production"
+      "MAMAKI AI Production"
     );
 
 
-  if(!title) return;
+  if(!title){
+
+    return;
+
+  }
 
 
   try{
@@ -1679,12 +3346,23 @@ async function saveCurrentProject(){
               "application/json"
           },
           body:JSON.stringify({
-            title,
+            title:title.trim(),
             videoUrl:currentVideoUrl,
             mode:
-              mode === "image"
+              currentMode === "image"
                 ? "Image to Video"
-                : "Text to Video"
+                : "Text to Video",
+            style:selectedStyle,
+            duration:Number(
+              document.getElementById(
+                "duration"
+              ).value
+            ),
+            ratio:
+              document.getElementById(
+                "ratio"
+              ).value,
+            watermark:"MAMAKI ✨"
           })
         }
       );
@@ -1696,37 +3374,69 @@ async function saveCurrentProject(){
 
     if(!response.ok){
 
-      throw new Error(
-        data.error ||
-        "Unable to save project."
-      );
+      throw makeApiError(data);
+
     }
 
 
-    alert(
-      "Project saved successfully."
+    currentProjectId =
+      data.project?.id || "";
+
+
+    showToast(
+      "Project saved",
+      "Your production has been saved to My Projects.",
+      "success"
     );
 
 
-    loadProjects();
+    await loadProjects();
 
 
   }catch(error){
 
-    alert(
-      "Save failed: " +
-      error.message
+    showToast(
+      "Unable to save project",
+      friendlyError(
+        error.message
+      ),
+      "error"
     );
+
   }
+
 }
 
 
+/* =========================================================
+   PROJECTS
+========================================================= */
+
 async function loadProjects(){
 
-  const grid =
+  const container =
     document.getElementById(
-      "projectGrid"
+      "projectsList"
     );
+
+
+  if(!currentUser){
+
+    container.innerHTML = `
+      <div class="card">
+        🔐 Login to see your saved projects.
+      </div>
+    `;
+
+    return;
+  }
+
+
+  container.innerHTML = `
+    <div class="card">
+      Loading your projects...
+    </div>
+  `;
 
 
   try{
@@ -1741,162 +3451,365 @@ async function loadProjects(){
       await response.json();
 
 
+    if(!response.ok){
+
+      throw makeApiError(data);
+
+    }
+
+
     const projects =
       Array.isArray(data.projects)
         ? data.projects
         : [];
 
 
-    document
-      .getElementById(
-        "projectCount"
-      )
-      .textContent =
-        projects.length;
-
-
     if(!projects.length){
 
-      grid.innerHTML = `
-        <div class="project">
-          <div class="project-body">
-            <h3 class="project-title">
-              No projects yet
-            </h3>
-            <p class="project-meta">
-              Your finished productions will appear here.
-            </p>
-          </div>
+      container.innerHTML = `
+        <div class="card">
+          <h3>No projects yet.</h3>
+
+          <p style="color:#888">
+            Generate a video and save it here.
+          </p>
+
+          <button
+            class="secondary"
+            onclick="scrollToId('studio')">
+            🎬 Create First Project
+          </button>
         </div>
       `;
 
       return;
+
     }
 
 
-    grid.innerHTML =
+    container.innerHTML =
       projects
-        .slice(0,30)
-        .map(project => {
-
-          const url =
-            project.videoUrl || "#";
-
-          return `
-            <article class="project">
-
-              <div class="project-preview">
-
-                <video
-                  src="${escapeHtml(url)}"
-                  muted
-                  preload="metadata"
-                  style="width:100%;height:100%;object-fit:cover"
-                ></video>
-
-              </div>
-
-              <div class="project-body">
-
-                <h3 class="project-title">
-                  ${escapeHtml(
-                    project.title ||
-                    "MAMAKI Project"
-                  )}
-                </h3>
-
-                <div class="project-meta">
-                  ${escapeHtml(
-                    project.mode ||
-                    "Video"
-                  )}
-                  <br>
-                  ${escapeHtml(
-                    project.durationLabel ||
-                    ""
-                  )}
-                  ${project.music
-                    ? " • 🎵 Music"
-                    : ""}
-                  ${project.watermarkActive
-                    ? " • ✨ Watermark"
-                    : ""}
-                </div>
-
-                <div class="project-actions">
-
-                  <a
-                    href="${escapeHtml(url)}"
-                    target="_blank"
-                  >
-                    ▶ Open
-                  </a>
-
-                  <a
-                    href="${escapeHtml(url)}"
-                    download
-                  >
-                    Download
-                  </a>
-
-                </div>
-
-              </div>
-
-            </article>
-          `;
-        })
+        .map(
+          project =>
+            renderProjectCard(project)
+        )
         .join("");
 
 
   }catch(error){
 
-    grid.innerHTML = `
-      <div class="project">
-        <div class="project-body">
-          <h3 class="project-title">
-            Projects unavailable
-          </h3>
-          <p class="project-meta">
-            ${escapeHtml(
-              error.message
-            )}
-          </p>
-        </div>
+    container.innerHTML = `
+      <div class="card">
+        ${escapeHtml(
+          friendlyError(
+            error.message
+          )
+        )}
       </div>
     `;
+
   }
+
 }
 
 
-function escapeHtml(value){
+function renderProjectCard(project){
 
-  return String(value ?? "")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
+  const url =
+    project.videoUrl ||
+    project.video ||
+    project.url ||
+    "";
+
+
+  const id =
+    project.id || "";
+
+
+  const title =
+    project.title ||
+    "MAMAKI Project";
+
+
+  const mode =
+    project.mode ||
+    "AI Video";
+
+
+  const style =
+    project.style ||
+    "Standard";
+
+
+  const duration =
+    project.duration
+      ? formatSeconds(
+          project.duration
+        )
+      : "";
+
+
+  return `
+
+    <div class="project">
+
+      ${
+        url
+          ? `
+            <video
+              src="${escapeAttribute(url)}"
+              controls
+              preload="metadata"
+              playsinline>
+            </video>
+          `
+          : `
+            <div class="project-empty-preview">
+              🎬
+            </div>
+          `
+      }
+
+
+      <div class="project-info">
+
+        <strong>
+          ${escapeHtml(title)}
+        </strong>
+
+        <small>
+          ${escapeHtml(mode)}
+        </small>
+
+
+        <div class="project-meta">
+
+          <span class="chip">
+            ${escapeHtml(style)}
+          </span>
+
+          ${
+            duration
+              ? `
+                <span class="chip">
+                  ${escapeHtml(duration)}
+                </span>
+              `
+              : ""
+          }
+
+          <span class="chip">
+            MAMAKI ✨
+          </span>
+
+        </div>
+
+
+        <div class="project-actions">
+
+          ${
+            url
+              ? `
+                <a
+                  href="${escapeAttribute(url)}"
+                  target="_blank"
+                  rel="noopener">
+                  Open
+                </a>
+
+                <a
+                  href="${escapeAttribute(url)}"
+                  download="mamaki-ai-video.mp4">
+                  Download
+                </a>
+              `
+              : ""
+          }
+
+          ${
+            id
+              ? `
+                <button
+                  class="danger"
+                  onclick="deleteProject('${escapeAttribute(id)}')">
+                  Delete
+                </button>
+              `
+              : ""
+          }
+
+        </div>
+
+      </div>
+
+    </div>
+
+  `;
+
 }
 
 
-async function photoVideo(){
+async function deleteProject(id){
 
-  const photos =
-    document
-      .getElementById(
-        "photoFiles"
-      )
-      .files;
+  if(!id){
+
+    return;
+
+  }
 
 
-  if(!photos.length){
+  const confirmed =
+    window.confirm(
+      "Delete this project from your MAMAKI account?"
+    );
 
-    alert(
-      "Select at least one photo."
+
+  if(!confirmed){
+
+    return;
+
+  }
+
+
+  try{
+
+    const response =
+      await fetch(
+        "/api/projects/" +
+        encodeURIComponent(id),
+        {
+          method:"DELETE"
+        }
+      );
+
+
+    const data =
+      await response.json();
+
+
+    if(!response.ok){
+
+      throw makeApiError(data);
+
+    }
+
+
+    showToast(
+      "Project deleted",
+      "The project was removed from your account.",
+      "success"
+    );
+
+
+    await loadProjects();
+
+
+  }catch(error){
+
+    showToast(
+      "Delete failed",
+      friendlyError(
+        error.message
+      ),
+      "error"
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   PHOTO → VIDEO
+========================================================= */
+
+function openPhotoTool(){
+
+  openTool(
+    "🖼️ Photo → Video",
+    `
+
+      <p style="color:#999">
+        Create a video presentation from your photos.
+      </p>
+
+      <label>
+        Photos
+      </label>
+
+      <input
+        id="photoFiles"
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        multiple>
+
+      <label>
+        Seconds per photo
+      </label>
+
+      <input
+        id="photoDuration"
+        type="number"
+        value="5"
+        min="5"
+        max="7200">
+
+      <label>
+        Aspect Ratio
+      </label>
+
+      <select id="photoRatio">
+
+        <option value="16:9">
+          16:9 — Landscape
+        </option>
+
+        <option value="9:16">
+          9:16 — Vertical
+        </option>
+
+        <option value="1:1">
+          1:1 — Square
+        </option>
+
+      </select>
+
+      <button
+        class="primary"
+        style="width:100%;margin-top:15px"
+        onclick="createPhotoVideo()">
+        Create Photo Video
+      </button>
+
+      <div
+        id="toolResult"
+        class="tool-result">
+      </div>
+
+    `
+  );
+
+}
+
+
+async function createPhotoVideo(){
+
+  const files =
+    document.getElementById(
+      "photoFiles"
+    ).files;
+
+
+  if(!files.length){
+
+    showToast(
+      "Photos required",
+      "Select at least one photo.",
+      "warning"
     );
 
     return;
+
   }
 
 
@@ -1905,51 +3818,41 @@ async function photoVideo(){
 
 
   for(
-    const photo of photos
+    const file of files
   ){
 
     form.append(
-      "images",
-      photo
+      "photos",
+      file
     );
-  }
 
-
-  const music =
-    document
-      .getElementById(
-        "photoMusic"
-      )
-      .files[0];
-
-
-  if(music){
-
-    form.append(
-      "music",
-      music
-    );
   }
 
 
   form.append(
     "duration",
-    document
-      .getElementById(
-        "photoDuration"
-      )
-      .value
+    document.getElementById(
+      "photoDuration"
+    ).value
   );
 
 
   form.append(
     "ratio",
-    document
-      .getElementById(
-        "photoRatio"
-      )
-      .value
+    document.getElementById(
+      "photoRatio"
+    ).value
   );
+
+
+  const result =
+    document.getElementById(
+      "toolResult"
+    );
+
+
+  result.textContent =
+    "Creating your photo video...";
 
 
   try{
@@ -1970,45 +3873,165 @@ async function photoVideo(){
 
     if(!response.ok){
 
-      throw new Error(
-        data.error ||
-        "Photo → Video failed."
-      );
+      throw makeApiError(data);
+
     }
 
 
-    showResult(
-      data.videoUrl
+    /*
+      IMPORTANT FIX:
+      Backend returns data.video.
+    */
+
+    const url =
+      data.video;
+
+
+    if(!url){
+
+      throw new Error(
+        "The server completed the job but returned no video."
+      );
+
+    }
+
+
+    result.innerHTML = `
+
+      <video
+        controls
+        playsinline
+        src="${escapeAttribute(url)}">
+      </video>
+
+      <div class="actions">
+
+        <a
+          class="secondary"
+          href="${escapeAttribute(url)}"
+          download="mamaki-photo-video.mp4">
+          ⬇️ Download
+        </a>
+
+      </div>
+
+    `;
+
+
+    showToast(
+      "Photo video created",
+      "Your MAMAKI photo presentation is ready.",
+      "success"
     );
 
 
   }catch(error){
 
-    alert(
-      "Photo → Video failed: " +
-      error.message
-    );
+    result.textContent =
+      friendlyError(
+        error.message
+      );
+
   }
+
+}
+
+
+/* =========================================================
+   TRIM
+========================================================= */
+
+function openTrimTool(){
+
+  openTool(
+    "✂️ Video Trimmer",
+    `
+
+      <p style="color:#999">
+        Choose a starting point and how many seconds to keep.
+      </p>
+
+      <label>
+        Video
+      </label>
+
+      <input
+        id="trimFile"
+        type="file"
+        accept="video/mp4,video/*">
+
+      <div class="row">
+
+        <div>
+
+          <label>
+            Start — seconds
+          </label>
+
+          <input
+            id="trimStart"
+            type="number"
+            value="0"
+            min="0"
+            step="0.1">
+
+        </div>
+
+        <div>
+
+          <label>
+            Duration — seconds
+          </label>
+
+          <input
+            id="trimDuration"
+            type="number"
+            value="5"
+            min="0.1"
+            step="0.1">
+
+        </div>
+
+      </div>
+
+
+      <button
+        class="primary"
+        style="width:100%;margin-top:15px"
+        onclick="trimVideo()">
+        Trim Video
+      </button>
+
+
+      <div
+        id="toolResult"
+        class="tool-result">
+      </div>
+
+    `
+  );
+
 }
 
 
 async function trimVideo(){
 
-  const video =
-    document
-      .getElementById(
-        "trimVideo"
-      )
-      .files[0];
+  const file =
+    document.getElementById(
+      "trimFile"
+    ).files[0];
 
 
-  if(!video){
+  if(!file){
 
-    alert(
-      "Select a video."
+    showToast(
+      "Video required",
+      "Select a video first.",
+      "warning"
     );
 
     return;
+
   }
 
 
@@ -2018,28 +4041,40 @@ async function trimVideo(){
 
   form.append(
     "video",
-    video
+    file
   );
 
 
   form.append(
     "start",
-    document
-      .getElementById(
-        "trimStart"
-      )
-      .value || "0"
+    document.getElementById(
+      "trimStart"
+    ).value
   );
 
+
+  /*
+    IMPORTANT:
+    Backend expects "duration",
+    not "end".
+  */
 
   form.append(
-    "end",
-    document
-      .getElementById(
-        "trimEnd"
-      )
-      .value || ""
+    "duration",
+    document.getElementById(
+      "trimDuration"
+    ).value
   );
+
+
+  const result =
+    document.getElementById(
+      "toolResult"
+    );
+
+
+  result.textContent =
+    "Trimming video...";
 
 
   try{
@@ -2060,45 +4095,118 @@ async function trimVideo(){
 
     if(!response.ok){
 
-      throw new Error(
-        data.error ||
-        "Trim failed."
-      );
+      throw makeApiError(data);
+
     }
 
 
-    showResult(
-      data.videoUrl
-    );
+    const url =
+      data.video;
+
+
+    if(!url){
+
+      throw new Error(
+        "The server completed the trim but returned no video."
+      );
+
+    }
+
+
+    result.innerHTML = `
+
+      <video
+        controls
+        playsinline
+        src="${escapeAttribute(url)}">
+      </video>
+
+      <div class="actions">
+
+        <a
+          class="secondary"
+          href="${escapeAttribute(url)}"
+          download="mamaki-trimmed.mp4">
+          ⬇️ Download
+        </a>
+
+      </div>
+
+    `;
 
 
   }catch(error){
 
-    alert(
-      "Trim failed: " +
-      error.message
-    );
+    result.textContent =
+      friendlyError(
+        error.message
+      );
+
   }
+
+}
+
+
+/* =========================================================
+   COMBINE
+========================================================= */
+
+function openCombineTool(){
+
+  openTool(
+    "🎞️ Combine Videos",
+    `
+
+      <p style="color:#999">
+        Select two or more video clips.
+      </p>
+
+      <label>
+        Video Clips
+      </label>
+
+      <input
+        id="combineFiles"
+        type="file"
+        accept="video/*"
+        multiple>
+
+      <button
+        class="primary"
+        style="width:100%;margin-top:15px"
+        onclick="combineVideos()">
+        Combine Videos
+      </button>
+
+      <div
+        id="toolResult"
+        class="tool-result">
+      </div>
+
+    `
+  );
+
 }
 
 
 async function combineVideos(){
 
   const files =
-    document
-      .getElementById(
-        "combineVideos"
-      )
-      .files;
+    document.getElementById(
+      "combineFiles"
+    ).files;
 
 
-  if(!files.length){
+  if(files.length < 2){
 
-    alert(
-      "Select at least two videos."
+    showToast(
+      "More clips required",
+      "Select at least two videos.",
+      "warning"
     );
 
     return;
+
   }
 
 
@@ -2114,7 +4222,18 @@ async function combineVideos(){
       "videos",
       file
     );
+
   }
+
+
+  const result =
+    document.getElementById(
+      "toolResult"
+    );
+
+
+  result.textContent =
+    "Combining videos...";
 
 
   try{
@@ -2135,38 +4254,1066 @@ async function combineVideos(){
 
     if(!response.ok){
 
-      throw new Error(
-        data.error ||
-        "Combine failed."
-      );
+      throw makeApiError(data);
+
     }
 
 
-    showResult(
-      data.videoUrl
-    );
+    const url =
+      data.video;
+
+
+    if(!url){
+
+      throw new Error(
+        "The server completed the combine job but returned no video."
+      );
+
+    }
+
+
+    result.innerHTML = `
+
+      <video
+        controls
+        playsinline
+        src="${escapeAttribute(url)}">
+      </video>
+
+      <div class="actions">
+
+        <a
+          class="secondary"
+          href="${escapeAttribute(url)}"
+          download="mamaki-combined.mp4">
+          ⬇️ Download
+        </a>
+
+      </div>
+
+    `;
 
 
   }catch(error){
 
-    alert(
-      "Combine failed: " +
-      error.message
-    );
+    result.textContent =
+      friendlyError(
+        error.message
+      );
+
   }
+
 }
 
 
-function comingSoon(){
+/* =========================================================
+   NARRATION
+========================================================= */
 
-  alert(
-    "MAMAKI billing and paid AI plans are being prepared. " +
-    "The Free Studio remains available."
+function openNarrationTool(){
+
+  openTool(
+    "🎙️ AI Narration",
+    `
+
+      <p style="color:#999">
+        Turn written text into an MP3 narration track.
+      </p>
+
+      <label>
+        Narration Text
+      </label>
+
+      <textarea
+        id="narrationText"
+        placeholder="Enter the narration you want the voice to speak..."></textarea>
+
+      <label>
+        Voice
+      </label>
+
+      <select id="narrationVoice">
+
+        <option value="en-US-AriaNeural">
+          English — Aria
+        </option>
+
+        <option value="en-US-GuyNeural">
+          English — Guy
+        </option>
+
+        <option value="en-US-JennyNeural">
+          English — Jenny
+        </option>
+
+        <option value="en-US-EmmaMultilingualNeural">
+          English Multilingual — Emma
+        </option>
+
+      </select>
+
+      <button
+        class="primary"
+        style="width:100%;margin-top:15px"
+        onclick="createNarration()">
+        🎙️ Create Narration
+      </button>
+
+      <div
+        id="toolResult"
+        class="tool-result audio-result">
+      </div>
+
+    `
   );
+
 }
 
 
-loadProjects();
+async function createNarration(){
+
+  const text =
+    document.getElementById(
+      "narrationText"
+    ).value.trim();
+
+
+  const voice =
+    document.getElementById(
+      "narrationVoice"
+    ).value;
+
+
+  if(!text){
+
+    showToast(
+      "Text required",
+      "Enter narration text first.",
+      "warning"
+    );
+
+    return;
+
+  }
+
+
+  const result =
+    document.getElementById(
+      "toolResult"
+    );
+
+
+  result.textContent =
+    "Creating narration...";
+
+
+  try{
+
+    const response =
+      await fetch(
+        "/api/studio/narration",
+        {
+          method:"POST",
+          headers:{
+            "Content-Type":
+              "application/json"
+          },
+          body:JSON.stringify({
+            text,
+            voice
+          })
+        }
+      );
+
+
+    const data =
+      await response.json();
+
+
+    if(!response.ok){
+
+      throw makeApiError(data);
+
+    }
+
+
+    const audio =
+      data.audio;
+
+
+    if(!audio){
+
+      throw new Error(
+        "Narration completed but no audio file was returned."
+      );
+
+    }
+
+
+    result.innerHTML = `
+
+      <audio
+        controls
+        src="${escapeAttribute(audio)}">
+      </audio>
+
+      <div class="actions">
+
+        <a
+          class="secondary"
+          href="${escapeAttribute(audio)}"
+          download="mamaki-narration.mp3">
+          ⬇️ Download MP3
+        </a>
+
+      </div>
+
+    `;
+
+
+  }catch(error){
+
+    result.textContent =
+      friendlyError(
+        error.message
+      );
+
+  }
+
+}
+
+
+/* =========================================================
+   SUBTITLES
+========================================================= */
+
+function openSubtitleTool(){
+
+  openTool(
+    "💬 Burn Subtitles",
+    `
+
+      <p style="color:#999">
+        Upload a video and paste subtitle text in SRT format.
+      </p>
+
+      <label>
+        Video
+      </label>
+
+      <input
+        id="subtitleVideo"
+        type="file"
+        accept="video/*">
+
+      <label>
+        SRT / VTT Subtitle Text
+      </label>
+
+      <textarea
+        id="subtitleText"
+        class="code-area"
+        placeholder="1
+00:00:00,000 --> 00:00:03,000
+Welcome to MAMAKI AI.
+
+2
+00:00:03,000 --> 00:00:06,000
+Create professional videos with MAMAKI."></textarea>
+
+      <button
+        class="primary"
+        style="width:100%;margin-top:15px"
+        onclick="burnSubtitles()">
+        💬 Burn Subtitles
+      </button>
+
+      <div
+        id="toolResult"
+        class="tool-result">
+      </div>
+
+    `
+  );
+
+}
+
+
+async function burnSubtitles(){
+
+  const file =
+    document.getElementById(
+      "subtitleVideo"
+    ).files[0];
+
+
+  const subtitles =
+    document.getElementById(
+      "subtitleText"
+    ).value.trim();
+
+
+  if(!file){
+
+    showToast(
+      "Video required",
+      "Select a video first.",
+      "warning"
+    );
+
+    return;
+
+  }
+
+
+  if(!subtitles){
+
+    showToast(
+      "Subtitle text required",
+      "Paste SRT or VTT subtitle content.",
+      "warning"
+    );
+
+    return;
+
+  }
+
+
+  const form =
+    new FormData();
+
+
+  form.append(
+    "video",
+    file
+  );
+
+
+  form.append(
+    "subtitles",
+    subtitles
+  );
+
+
+  const result =
+    document.getElementById(
+      "toolResult"
+    );
+
+
+  result.textContent =
+    "Burning subtitles into the video...";
+
+
+  try{
+
+    const response =
+      await fetch(
+        "/api/studio/subtitles",
+        {
+          method:"POST",
+          body:form
+        }
+      );
+
+
+    const data =
+      await response.json();
+
+
+    if(!response.ok){
+
+      throw makeApiError(data);
+
+    }
+
+
+    const url =
+      data.video;
+
+
+    if(!url){
+
+      throw new Error(
+        "Subtitle processing completed but no video was returned."
+      );
+
+    }
+
+
+    result.innerHTML = `
+
+      <video
+        controls
+        playsinline
+        src="${escapeAttribute(url)}">
+      </video>
+
+      <div class="actions">
+
+        <a
+          class="secondary"
+          href="${escapeAttribute(url)}"
+          download="mamaki-subtitled.mp4">
+          ⬇️ Download
+        </a>
+
+      </div>
+
+    `;
+
+
+  }catch(error){
+
+    result.textContent =
+      friendlyError(
+        error.message
+      );
+
+  }
+
+}
+
+
+/* =========================================================
+   SOCIAL EXPORT
+========================================================= */
+
+function openSocialTool(existingVideo = ""){
+
+  openTool(
+    "📱 Social Media Export",
+    `
+
+      <p style="color:#999">
+        Create a platform-ready aspect ratio version of a video.
+      </p>
+
+      <label>
+        Video
+      </label>
+
+      <input
+        id="socialVideo"
+        type="file"
+        accept="video/*">
+
+      <label>
+        Output Format
+      </label>
+
+      <select id="socialRatio">
+
+        <option value="16:9">
+          YouTube / Landscape — 16:9
+        </option>
+
+        <option value="9:16">
+          TikTok / Reels / Shorts — 9:16
+        </option>
+
+        <option value="1:1">
+          Instagram Square — 1:1
+        </option>
+
+      </select>
+
+      <div class="helper" style="margin-top:8px">
+        You can also use the currently generated video below.
+      </div>
+
+      <button
+        class="primary"
+        style="width:100%;margin-top:15px"
+        onclick="socialExport('${escapeAttribute(existingVideo)}')">
+        📱 Create Social Version
+      </button>
+
+      <div
+        id="toolResult"
+        class="tool-result">
+      </div>
+
+    `
+  );
+
+}
+
+
+async function socialExport(existingVideo = ""){
+
+  const file =
+    document.getElementById(
+      "socialVideo"
+    ).files[0];
+
+
+  const ratio =
+    document.getElementById(
+      "socialRatio"
+    ).value;
+
+
+  /*
+    The backend expects upload.single("video"),
+    so a local file is required by this endpoint.
+    If an existing MAMAKI URL is supplied, the user
+    is instructed to use the download/re-upload path.
+  */
+
+  if(!file){
+
+    showToast(
+      "Video file required",
+      "Download the generated video first, then upload it here for social export.",
+      "warning"
+    );
+
+    return;
+
+  }
+
+
+  const form =
+    new FormData();
+
+
+  form.append(
+    "video",
+    file
+  );
+
+
+  form.append(
+    "ratio",
+    ratio
+  );
+
+
+  const result =
+    document.getElementById(
+      "toolResult"
+    );
+
+
+  result.textContent =
+    "Creating social version...";
+
+
+  try{
+
+    const response =
+      await fetch(
+        "/api/studio/social",
+        {
+          method:"POST",
+          body:form
+        }
+      );
+
+
+    const data =
+      await response.json();
+
+
+    if(!response.ok){
+
+      throw makeApiError(data);
+
+    }
+
+
+    const url =
+      data.video;
+
+
+    if(!url){
+
+      throw new Error(
+        "Social export completed but no video was returned."
+      );
+
+    }
+
+
+    result.innerHTML = `
+
+      <video
+        controls
+        playsinline
+        src="${escapeAttribute(url)}">
+      </video>
+
+      <div class="actions">
+
+        <a
+          class="secondary"
+          href="${escapeAttribute(url)}"
+          download="mamaki-social-export.mp4">
+          ⬇️ Download
+        </a>
+
+      </div>
+
+    `;
+
+
+  }catch(error){
+
+    result.textContent =
+      friendlyError(
+        error.message
+      );
+
+  }
+
+}
+
+
+/* =========================================================
+   TOOL MODAL
+========================================================= */
+
+function openTool(
+  title,
+  content
+){
+
+  document
+    .getElementById("toolTitle")
+    .textContent =
+      title;
+
+
+  document
+    .getElementById("toolContent")
+    .innerHTML =
+      content;
+
+
+  document
+    .getElementById("toolModal")
+    .style.display =
+      "flex";
+
+}
+
+
+function closeToolModal(){
+
+  document
+    .getElementById("toolModal")
+    .style.display =
+      "none";
+
+}
+
+
+/* =========================================================
+   API ERROR HELPERS
+========================================================= */
+
+function makeApiError(data){
+
+  const error =
+    new Error(
+      data?.message ||
+      data?.error ||
+      "The server rejected the request."
+    );
+
+
+  error.code =
+    data?.error || "";
+
+
+  return error;
+
+}
+
+
+function friendlyError(message){
+
+  const text =
+    String(
+      message || ""
+    );
+
+
+  const lower =
+    text.toLowerCase();
+
+
+  if(
+    text.includes(
+      "AUTH_REQUIRED"
+    )
+  ){
+
+    return (
+      "Please login to your MAMAKI account."
+    );
+
+  }
+
+
+  if(
+    text.includes(
+      "REPLICATE_CREDIT_REQUIRED"
+    ) ||
+    lower.includes(
+      "insufficient credit"
+    ) ||
+    lower.includes(
+      "payment required"
+    ) ||
+    lower.includes(
+      "requires available credit"
+    )
+  ){
+
+    return (
+      "AI generation is currently unavailable because the connected Replicate account needs available credit."
+    );
+
+  }
+
+
+  if(
+    text.includes(
+      "REPLICATE_API_TOKEN"
+    ) ||
+    text.includes(
+      "REPLICATE_AUTH_REQUIRED"
+    )
+  ){
+
+    return (
+      "The AI provider is not configured correctly. Check REPLICATE_API_TOKEN in Render."
+    );
+
+  }
+
+
+  if(
+    text.includes(
+      "REPLICATE_RATE_LIMIT"
+    ) ||
+    lower.includes(
+      "rate limit"
+    )
+  ){
+
+    return (
+      "The AI service is temporarily rate-limited. Please try again shortly."
+    );
+
+  }
+
+
+  if(
+    text.includes(
+      "REPLICATE_FORBIDDEN"
+    )
+  ){
+
+    return (
+      "The AI provider rejected this request. Check model access and account permissions."
+    );
+
+  }
+
+
+  if(
+    text.includes(
+      "JOB_NOT_FOUND"
+    )
+  ){
+
+    return (
+      "The production job is no longer available. Please start a new production."
+    );
+
+  }
+
+
+  if(
+    text.includes(
+      "VIDEO_REQUIRED"
+    )
+  ){
+
+    return (
+      "Please select a video file."
+    );
+
+  }
+
+
+  if(
+    text.includes(
+      "PHOTOS_REQUIRED"
+    )
+  ){
+
+    return (
+      "Please select at least one photo."
+    );
+
+  }
+
+
+  return (
+    text ||
+    "Something went wrong. Please try again."
+  );
+
+}
+
+
+/* =========================================================
+   SECURITY HELPERS
+========================================================= */
+
+function escapeHtml(value){
+
+  return String(
+    value ?? ""
+  )
+  .replaceAll(
+    "&",
+    "&amp;"
+  )
+  .replaceAll(
+    "<",
+    "&lt;"
+  )
+  .replaceAll(
+    ">",
+    "&gt;"
+  )
+  .replaceAll(
+    '"',
+    "&quot;"
+  )
+  .replaceAll(
+    "'",
+    "&#039;"
+  );
+
+}
+
+
+function escapeAttribute(value){
+
+  return escapeHtml(value);
+
+}
+
+
+/* =========================================================
+   FORMATTING
+========================================================= */
+
+function formatSeconds(seconds){
+
+  const total =
+    Math.max(
+      0,
+      Math.round(
+        Number(seconds) || 0
+      )
+    );
+
+
+  if(total < 60){
+
+    return (
+      total +
+      "s"
+    );
+
+  }
+
+
+  if(total < 3600){
+
+    const minutes =
+      Math.floor(
+        total / 60
+      );
+
+    const secondsLeft =
+      total % 60;
+
+    return (
+      minutes +
+      "m " +
+      (
+        secondsLeft
+          ? secondsLeft + "s"
+          : ""
+      )
+    ).trim();
+
+  }
+
+
+  const hours =
+    Math.floor(
+      total / 3600
+    );
+
+  const minutes =
+    Math.floor(
+      (total % 3600) / 60
+    );
+
+  return (
+    hours +
+    "h " +
+    (
+      minutes
+        ? minutes + "m"
+        : ""
+    )
+  ).trim();
+
+}
+
+
+/* =========================================================
+   TOAST
+========================================================= */
+
+let toastTimer = null;
+
+function showToast(
+  title,
+  message,
+  type = "success"
+){
+
+  const toast =
+    document.getElementById(
+      "toast"
+    );
+
+  const toastTitle =
+    document.getElementById(
+      "toastTitle"
+    );
+
+  const toastMessage =
+    document.getElementById(
+      "toastMessage"
+    );
+
+
+  toastTitle.textContent =
+    title;
+
+
+  toastMessage.textContent =
+    message;
+
+
+  toast.style.borderColor =
+    type === "error"
+      ? "rgba(255,98,98,.35)"
+      : type === "warning"
+        ? "rgba(255,200,87,.35)"
+        : "rgba(67,230,163,.25)";
+
+
+  toast.classList.add(
+    "show"
+  );
+
+
+  clearTimeout(
+    toastTimer
+  );
+
+
+  toastTimer =
+    setTimeout(
+      () => {
+        toast.classList.remove(
+          "show"
+        );
+      },
+      4500
+    );
+
+}
+
+
+/* =========================================================
+   MODAL BACKDROP CLOSE
+========================================================= */
+
+document.addEventListener(
+  "click",
+  event => {
+
+    if(
+      event.target.classList.contains(
+        "modal"
+      )
+    ){
+
+      event.target.style.display =
+        "none";
+
+    }
+
+  }
+);
+
+
+/* =========================================================
+   ESC KEY
+========================================================= */
+
+document.addEventListener(
+  "keydown",
+  event => {
+
+    if(event.key !== "Escape"){
+
+      return;
+
+    }
+
+
+    document
+      .querySelectorAll(".modal")
+      .forEach(modal => {
+
+        modal.style.display =
+          "none";
+
+      });
+
+  }
+);
+
+
+/* =========================================================
+   STARTUP
+========================================================= */
+
+document.addEventListener(
+  "DOMContentLoaded",
+  async () => {
+
+    setMode("text");
+
+    await verifySession();
+
+  }
+);
 
 </script>
 
