@@ -1419,293 +1419,1001 @@ app.get("/api/status", async (req, res) => {
     },
   });
 });
-
 /* =========================================================
-   AUTHENTICATION
+   AUTHENTICATION + SECURE PASSWORD RECOVERY
 ========================================================= */
 
-app.post("/api/auth/register", async (req, res) => {
+const PASSWORD_RESET_EXPIRY = 15 * 60 * 1000;
+const PASSWORD_RESET_MAX_ATTEMPTS = 5;
+
+function normalizeEmail(value) {
+  return cleanText(value, 200).toLowerCase();
+}
+
+function createResetCode() {
+  return String(
+    Math.floor(100000 + Math.random() * 900000)
+  );
+}
+
+function hashResetCode(code, salt = randomBytes(16).toString("hex")) {
+  const hash = scryptSync(
+    String(code),
+    salt,
+    64
+  ).toString("hex");
+
+  return {
+    salt,
+    hash,
+  };
+}
+
+function verifyResetCode(code, salt, expectedHash) {
   try {
-    const name =
-      cleanText(
-        req.body.name,
-        100
-      );
+    const actual = scryptSync(
+      String(code),
+      salt,
+      64
+    );
 
-    const email =
-      cleanText(
-        req.body.email,
-        200
-      ).toLowerCase();
+    const expected = Buffer.from(
+      expectedHash,
+      "hex"
+    );
 
-    const password =
-      String(
-        req.body.password || ""
-      );
+    if (actual.length !== expected.length) {
+      return false;
+    }
+
+    return timingSafeEqual(
+      actual,
+      expected
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function savePasswordReset(reset) {
+  const resetsFile = path.join(
+    DATA,
+    "password-resets.json"
+  );
+
+  const resets = await readJson(
+    resetsFile,
+    {}
+  );
+
+  resets[reset.id] = reset;
+
+  const now = Date.now();
+
+  for (const id of Object.keys(resets)) {
+    const item = resets[id];
 
     if (
-      !name ||
-      !email ||
-      !password
+      !item ||
+      Number(item.expiresAt || 0) < now
     ) {
-      return res.status(400).json({
-        ok: false,
-        error: "INVALID_INPUT",
-        message:
-          "Name, email and password are required.",
-      });
+      delete resets[id];
     }
-
-    if (password.length < 6) {
-      return res.status(400).json({
-        ok: false,
-        error: "WEAK_PASSWORD",
-        message:
-          "Password must contain at least 6 characters.",
-      });
-    }
-
-    const users =
-      await readJson(
-        USERS_FILE,
-        {}
-      );
-
-    const existing =
-      Object.values(users)
-        .find(
-          user =>
-            String(user.email)
-              .toLowerCase() ===
-            email
-        );
-
-    if (existing) {
-      return res.status(409).json({
-        ok: false,
-        error: "EMAIL_EXISTS",
-        message:
-          "An account with this email already exists.",
-      });
-    }
-
-    const id =
-      randomUUID();
-
-    const credentials =
-      hashPassword(
-        password
-      );
-
-    users[id] = {
-      id,
-      name,
-      email,
-      salt:
-        credentials.salt,
-      passwordHash:
-        credentials.hash,
-      role: "user",
-      disabled: false,
-      createdAt:
-        new Date().toISOString(),
-      lastLoginAt: null,
-    };
-
-    await writeJson(
-      USERS_FILE,
-      users
-    );
-
-    const token =
-      await createSession(
-        id,
-        "user"
-      );
-
-    res.status(201).json({
-      ok: true,
-      message:
-        "MAMAKI account created successfully.",
-      token,
-      user: {
-        id,
-        name,
-        email,
-        role: "user",
-      },
-    });
-  } catch (error) {
-    await recordError(
-      error,
-      {
-        route:
-          "/api/auth/register",
-      }
-    );
-
-    res.status(500).json({
-      ok: false,
-      error: "REGISTER_FAILED",
-      message:
-        "Unable to create the account.",
-    });
   }
-});
 
-app.post("/api/auth/login", async (req, res) => {
-  try {
-    const email =
-      cleanText(
-        req.body.email,
-        200
-      ).toLowerCase();
+  await writeJson(
+    resetsFile,
+    resets
+  );
+}
 
-    const password =
-      String(
-        req.body.password || ""
-      );
+async function findPasswordReset(id) {
+  const resetsFile = path.join(
+    DATA,
+    "password-resets.json"
+  );
 
-    const users =
-      await readJson(
-        USERS_FILE,
-        {}
-      );
+  const resets = await readJson(
+    resetsFile,
+    {}
+  );
 
-    const user =
-      Object.values(users)
-        .find(
-          item =>
-            String(item.email)
-              .toLowerCase() ===
-            email
-        );
+  return resets[id] || null;
+}
 
+async function deletePasswordReset(id) {
+  const resetsFile = path.join(
+    DATA,
+    "password-resets.json"
+  );
+
+  const resets = await readJson(
+    resetsFile,
+    {}
+  );
+
+  delete resets[id];
+
+  await writeJson(
+    resetsFile,
+    resets
+  );
+}
+
+async function invalidateUserSessions(userId) {
+  const sessions = await readJson(
+    SESSIONS_FILE,
+    {}
+  );
+
+  let changed = false;
+
+  for (const token of Object.keys(sessions)) {
     if (
-      !user ||
-      !verifyPassword(
-        password,
-        user.salt,
-        user.passwordHash
-      )
+      sessions[token] &&
+      sessions[token].userId === userId
     ) {
-      return res.status(401).json({
-        ok: false,
-        error: "INVALID_LOGIN",
-        message:
-          "Incorrect email or password.",
-      });
+      delete sessions[token];
+      changed = true;
     }
-
-    if (user.disabled) {
-      return res.status(403).json({
-        ok: false,
-        error: "ACCOUNT_DISABLED",
-        message:
-          "This MAMAKI account has been disabled.",
-      });
-    }
-
-    user.lastLoginAt =
-      new Date().toISOString();
-
-    users[user.id] =
-      user;
-
-    await writeJson(
-      USERS_FILE,
-      users
-    );
-
-    const token =
-      await createSession(
-        user.id,
-        user.role || "user"
-      );
-
-    res.json({
-      ok: true,
-      message:
-        "Login successful.",
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role:
-          user.role || "user",
-      },
-    });
-  } catch (error) {
-    await recordError(
-      error,
-      {
-        route:
-          "/api/auth/login",
-      }
-    );
-
-    res.status(500).json({
-      ok: false,
-      error: "LOGIN_FAILED",
-      message:
-        "Unable to complete login.",
-    });
   }
-});
 
-app.post("/api/auth/logout", async (req, res) => {
-  const token =
-    getBearerToken(req);
-
-  if (token) {
-    const sessions =
-      await readJson(
-        SESSIONS_FILE,
-        {}
-      );
-
-    delete sessions[token];
-
+  if (changed) {
     await writeJson(
       SESSIONS_FILE,
       sessions
     );
   }
+}
 
-  res.json({
-    ok: true,
-    message:
-      "Logged out successfully.",
-  });
-});
+async function sendPasswordRecoveryEmail(
+  email,
+  code,
+  name
+) {
+  const apiKey =
+    String(
+      process.env.RESEND_API_KEY || ""
+    ).trim();
 
-app.get("/api/auth/me", async (req, res) => {
-  const user =
-    await getCurrentUser(req);
+  const from =
+    String(
+      process.env.RESEND_FROM || ""
+    ).trim();
 
-  if (!user) {
-    return res.status(401).json({
-      ok: false,
-      authenticated: false,
-    });
+  if (!apiKey || !from) {
+    const error =
+      new Error(
+        "Password recovery email service is not configured."
+      );
+
+    error.code =
+      "RECOVERY_EMAIL_NOT_CONFIGURED";
+
+    throw error;
   }
 
-  res.json({
-    ok: true,
-    authenticated: true,
-    user: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      createdAt:
-        user.createdAt,
-    },
-  });
-});
+  const response = await fetch(
+    "https://api.resend.com/emails",
+    {
+      method: "POST",
+      headers: {
+        "Authorization":
+          `Bearer ${apiKey}`,
+        "Content-Type":
+          "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [email],
+        subject:
+          "Your MAMAKI AI password recovery code",
+        text:
+`Hello ${name || "MAMAKI user"},
+
+We received a request to reset your MAMAKI AI password.
+
+Your verification code is:
+
+${code}
+
+This code expires in 15 minutes and can only be used once.
+
+If you did not request this password reset, you can safely ignore this email.
+
+MAMAKI AI Security`,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const body =
+      await response.text();
+
+    const error =
+      new Error(
+        `Recovery email failed: HTTP ${response.status}`
+      );
+
+    error.code =
+      "RECOVERY_EMAIL_FAILED";
+
+    error.details =
+      body.slice(0, 1000);
+
+    throw error;
+  }
+
+  return true;
+}
+
 
 /* =========================================================
+   REGISTER
+========================================================= */
+
+app.post(
+  "/api/auth/register",
+  async (req, res) => {
+    try {
+      const name =
+        cleanText(
+          req.body.name,
+          100
+        );
+
+      const email =
+        normalizeEmail(
+          req.body.email
+        );
+
+      const password =
+        String(
+          req.body.password || ""
+        );
+
+      if (!name) {
+        return res.status(400).json({
+          ok: false,
+          error: "NAME_REQUIRED",
+          message:
+            "Please enter your name.",
+        });
+      }
+
+      if (
+        !email ||
+        !email.includes("@")
+      ) {
+        return res.status(400).json({
+          ok: false,
+          error: "INVALID_EMAIL",
+          message:
+            "Please enter a valid email address.",
+        });
+      }
+
+      if (password.length < 8) {
+        return res.status(400).json({
+          ok: false,
+          error: "WEAK_PASSWORD",
+          message:
+            "Password must contain at least 8 characters.",
+        });
+      }
+
+      const users =
+        await readJson(
+          USERS_FILE,
+          {}
+        );
+
+      const existing =
+        Object.values(users)
+          .find(
+            user =>
+              normalizeEmail(
+                user.email
+              ) === email
+          );
+
+      if (existing) {
+        return res.status(409).json({
+          ok: false,
+          error: "EMAIL_EXISTS",
+          message:
+            "An account with this email already exists.",
+        });
+      }
+
+      const id =
+        randomUUID();
+
+      const credentials =
+        hashPassword(
+          password
+        );
+
+      users[id] = {
+        id,
+        name,
+        email,
+        salt:
+          credentials.salt,
+        passwordHash:
+          credentials.hash,
+        role: "user",
+        disabled: false,
+        createdAt:
+          new Date().toISOString(),
+        lastLoginAt: null,
+        security: {
+          passwordChangedAt:
+            new Date().toISOString(),
+          recoveryRequests: 0,
+        },
+      };
+
+      await writeJson(
+        USERS_FILE,
+        users
+      );
+
+      const token =
+        await createSession(
+          id,
+          "user"
+        );
+
+      res.status(201).json({
+        ok: true,
+        message:
+          "MAMAKI account created successfully.",
+        token,
+        user: {
+          id,
+          name,
+          email,
+          role: "user",
+        },
+      });
+
+    } catch (error) {
+      await recordError(
+        error,
+        {
+          route:
+            "/api/auth/register",
+        }
+      );
+
+      res.status(500).json({
+        ok: false,
+        error:
+          "REGISTER_FAILED",
+        message:
+          "Unable to create the account.",
+      });
+    }
+  }
+);
+
+
+/* =========================================================
+   LOGIN
+========================================================= */
+
+app.post(
+  "/api/auth/login",
+  async (req, res) => {
+    try {
+      const email =
+        normalizeEmail(
+          req.body.email
+        );
+
+      const password =
+        String(
+          req.body.password || ""
+        );
+
+      const users =
+        await readJson(
+          USERS_FILE,
+          {}
+        );
+
+      const user =
+        Object.values(users)
+          .find(
+            item =>
+              normalizeEmail(
+                item.email
+              ) === email
+          );
+
+      if (
+        !user ||
+        !verifyPassword(
+          password,
+          user.salt,
+          user.passwordHash
+        )
+      ) {
+        return res.status(401).json({
+          ok: false,
+          error:
+            "INVALID_LOGIN",
+          message:
+            "Incorrect email or password.",
+        });
+      }
+
+      if (user.disabled) {
+        return res.status(403).json({
+          ok: false,
+          error:
+            "ACCOUNT_DISABLED",
+          message:
+            "This MAMAKI account has been disabled.",
+        });
+      }
+
+      user.lastLoginAt =
+        new Date().toISOString();
+
+      users[user.id] =
+        user;
+
+      await writeJson(
+        USERS_FILE,
+        users
+      );
+
+      const token =
+        await createSession(
+          user.id,
+          user.role || "user"
+        );
+
+      res.json({
+        ok: true,
+        message:
+          "Login successful.",
+        token,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role:
+            user.role || "user",
+        },
+      });
+
+    } catch (error) {
+      await recordError(
+        error,
+        {
+          route:
+            "/api/auth/login",
+        }
+      );
+
+      res.status(500).json({
+        ok: false,
+        error:
+          "LOGIN_FAILED",
+        message:
+          "Unable to complete login.",
+      });
+    }
+  }
+);
+
+
+/* =========================================================
+   REQUEST PASSWORD RESET
+========================================================= */
+
+app.post(
+  "/api/auth/forgot-password",
+  async (req, res) => {
+    try {
+      const email =
+        normalizeEmail(
+          req.body.email
+        );
+
+      /*
+       * IMPORTANT:
+       * Always return the same public message,
+       * whether the account exists or not.
+       * This prevents attackers from discovering
+       * which emails have MAMAKI accounts.
+       */
+
+      const genericMessage =
+        "If a MAMAKI account exists for that email, a verification code has been sent.";
+
+      if (
+        !email ||
+        !email.includes("@")
+      ) {
+        return res.json({
+          ok: true,
+          message:
+            genericMessage,
+        });
+      }
+
+      const users =
+        await readJson(
+          USERS_FILE,
+          {}
+        );
+
+      const user =
+        Object.values(users)
+          .find(
+            item =>
+              normalizeEmail(
+                item.email
+              ) === email
+          );
+
+      if (!user) {
+        return res.json({
+          ok: true,
+          message:
+            genericMessage,
+        });
+      }
+
+      if (user.disabled) {
+        return res.json({
+          ok: true,
+          message:
+            genericMessage,
+        });
+      }
+
+      const now =
+        Date.now();
+
+      /*
+       * Prevent excessive recovery
+       * requests for one account.
+       */
+
+      const lastRequest =
+        Number(
+          user.lastRecoveryRequestAt ||
+          0
+        );
+
+      if (
+        now - lastRequest <
+        60 * 1000
+      ) {
+        return res.json({
+          ok: true,
+          message:
+            genericMessage,
+        });
+      }
+
+      const code =
+        createResetCode();
+
+      const credentials =
+        hashResetCode(
+          code
+        );
+
+      const resetId =
+        randomUUID();
+
+      await savePasswordReset({
+        id: resetId,
+        userId: user.id,
+        salt:
+          credentials.salt,
+        codeHash:
+          credentials.hash,
+        createdAt:
+          new Date().toISOString(),
+        expiresAt:
+          now +
+          PASSWORD_RESET_EXPIRY,
+        attempts: 0,
+        maxAttempts:
+          PASSWORD_RESET_MAX_ATTEMPTS,
+        used: false,
+      });
+
+      user.lastRecoveryRequestAt =
+        now;
+
+      user.recoveryRequests =
+        Number(
+          user.recoveryRequests || 0
+        ) + 1;
+
+      users[user.id] =
+        user;
+
+      await writeJson(
+        USERS_FILE,
+        users
+      );
+
+      try {
+        await sendPasswordRecoveryEmail(
+          user.email,
+          code,
+          user.name
+        );
+      } catch (mailError) {
+
+        await deletePasswordReset(
+          resetId
+        );
+
+        await recordError(
+          mailError,
+          {
+            route:
+              "/api/auth/forgot-password",
+            userId:
+              user.id,
+          }
+        );
+
+        /*
+         * Do not expose the real
+         * mail-service failure.
+         */
+
+        return res.json({
+          ok: true,
+          message:
+            genericMessage,
+        });
+      }
+
+      res.json({
+        ok: true,
+        message:
+          genericMessage,
+      });
+
+    } catch (error) {
+
+      await recordError(
+        error,
+        {
+          route:
+            "/api/auth/forgot-password",
+        }
+      );
+
+      res.json({
+        ok: true,
+        message:
+          "If a MAMAKI account exists for that email, a verification code has been sent.",
+      });
+    }
+  }
+);
+
+
+/* =========================================================
+   VERIFY RESET CODE + CHANGE PASSWORD
+========================================================= */
+
+app.post(
+  "/api/auth/reset-password",
+  async (req, res) => {
+    try {
+      const resetId =
+        cleanText(
+          req.body.resetId,
+          100
+        );
+
+      const code =
+        cleanText(
+          req.body.code,
+          20
+        );
+
+      const newPassword =
+        String(
+          req.body.newPassword || ""
+        );
+
+      if (
+        !resetId ||
+        !code
+      ) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "RESET_DETAILS_REQUIRED",
+          message:
+            "Reset ID and verification code are required.",
+        });
+      }
+
+      if (
+        newPassword.length < 8
+      ) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "WEAK_PASSWORD",
+          message:
+            "Your new password must contain at least 8 characters.",
+        });
+      }
+
+      const reset =
+        await findPasswordReset(
+          resetId
+        );
+
+      if (!reset) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "RESET_NOT_FOUND",
+          message:
+            "This recovery request is invalid or has expired.",
+        });
+      }
+
+      if (reset.used) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "RESET_ALREADY_USED",
+          message:
+            "This recovery code has already been used.",
+        });
+      }
+
+      if (
+        Date.now() >
+        Number(
+          reset.expiresAt || 0
+        )
+      ) {
+        await deletePasswordReset(
+          resetId
+        );
+
+        return res.status(400).json({
+          ok: false,
+          error:
+            "RESET_EXPIRED",
+          message:
+            "This recovery code has expired. Please request a new one.",
+        });
+      }
+
+      if (
+        Number(reset.attempts || 0) >=
+        PASSWORD_RESET_MAX_ATTEMPTS
+      ) {
+        await deletePasswordReset(
+          resetId
+        );
+
+        return res.status(429).json({
+          ok: false,
+          error:
+            "RESET_ATTEMPTS_EXCEEDED",
+          message:
+            "Too many incorrect attempts. Please request a new recovery code.",
+        });
+      }
+
+      const valid =
+        verifyResetCode(
+          code,
+          reset.salt,
+          reset.codeHash
+        );
+
+      if (!valid) {
+
+        reset.attempts =
+          Number(
+            reset.attempts || 0
+          ) + 1;
+
+        await savePasswordReset(
+          reset
+        );
+
+        return res.status(400).json({
+          ok: false,
+          error:
+            "INVALID_RESET_CODE",
+          message:
+            "The verification code is incorrect.",
+        });
+      }
+
+      const users =
+        await readJson(
+          USERS_FILE,
+          {}
+        );
+
+      const user =
+        users[reset.userId];
+
+      if (!user) {
+        await deletePasswordReset(
+          resetId
+        );
+
+        return res.status(404).json({
+          ok: false,
+          error:
+            "USER_NOT_FOUND",
+          message:
+            "The account could not be found.",
+        });
+      }
+
+      const credentials =
+        hashPassword(
+          newPassword
+        );
+
+      user.salt =
+        credentials.salt;
+
+      user.passwordHash =
+        credentials.hash;
+
+      user.security =
+        user.security || {};
+
+      user.security.passwordChangedAt =
+        new Date().toISOString();
+
+      user.security.lastRecoveryAt =
+        new Date().toISOString();
+
+      users[user.id] =
+        user;
+
+      await writeJson(
+        USERS_FILE,
+        users
+      );
+
+      /*
+       * Security measure:
+       * changing a password immediately
+       * invalidates all existing sessions.
+       * This protects the legitimate owner
+       * if someone else was already logged in.
+       */
+
+      await invalidateUserSessions(
+        user.id
+      );
+
+      reset.used = true;
+
+      await deletePasswordReset(
+        resetId
+      );
+
+      res.json({
+        ok: true,
+        message:
+          "Password changed successfully. Please log in again.",
+      });
+
+    } catch (error) {
+
+      await recordError(
+        error,
+        {
+          route:
+            "/api/auth/reset-password",
+        }
+      );
+
+      res.status(500).json({
+        ok: false,
+        error:
+          "PASSWORD_RESET_FAILED",
+        message:
+          "Unable to reset the password right now.",
+      });
+    }
+  }
+);
+
+
+/* =========================================================
+   LOGOUT
+========================================================= */
+
+app.post(
+  "/api/auth/logout",
+  async (req, res) => {
+
+    const token =
+      getBearerToken(req);
+
+    if (token) {
+
+      const sessions =
+        await readJson(
+          SESSIONS_FILE,
+          {}
+        );
+
+      delete sessions[token];
+
+      await writeJson(
+        SESSIONS_FILE,
+        sessions
+      );
+    }
+
+    res.json({
+      ok: true,
+      message:
+        "Logged out successfully.",
+    });
+  }
+);
+
+
+/* =========================================================
+   CURRENT USER
+========================================================= */
+
+app.get(
+  "/api/auth/me",
+  async (req, res) => {
+
+    const user =
+      await getCurrentUser(
+        req
+      );
+
+    if (!user) {
+      return res.status(401).json({
+        ok: false,
+        authenticated:
+          false,
+      });
+    }
+
+    res.json({
+      ok: true,
+      authenticated:
+        true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        createdAt:
+          user.createdAt,
+      },
+    });
+  }
+);/* =========================================================
    PERSONAL ACCOUNT
 ========================================================= */
 
