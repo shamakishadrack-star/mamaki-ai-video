@@ -14,46 +14,13 @@ import {
   createHash
 } from "node:crypto";
 
-/* =========================================================
-   MAMAKI AI VIDEO
-   COMPLETE SERVER
-   VERSION 15.0.0
-
-   Includes:
-   - User registration/login
-   - Existing account authentication
-   - Admin authentication
-   - Admin dashboard
-   - Admin account repair
-   - Replicate WAN 2.2 T2V
-   - Replicate WAN 2.2 I2V
-   - 5 seconds - 2 hours duration handling
-   - 16:9 / 9:16 / 1:1
-   - Projects
-   - Video library
-   - Free Studio
-   - Trim
-   - Combine
-   - Mute
-   - Add music
-   - AI narration
-   - Password recovery
-   - Security logs
-   - Error logs
-   - Usage tracking
-   - Jobs
-   - MAMAKI watermark
-========================================================= */
-
 const app = express();
 
 const PORT = Number(process.env.PORT || 10000);
 const HOST = "0.0.0.0";
-
-const VERSION = "15.0.0";
+const VERSION = "15.1.0";
 
 const ROOT = process.cwd();
-
 const TMP = path.join(ROOT, "tmp");
 const OUTPUTS = path.join(ROOT, "outputs");
 const PROJECTS = path.join(ROOT, "projects");
@@ -69,76 +36,54 @@ const RESETS = path.join(DATA, "password-resets.json");
 const MIN_DURATION = 5;
 const MAX_DURATION = 7200;
 
-const ADMIN_EMAIL =
-  String(process.env.ADMIN_EMAIL || "")
-    .trim()
-    .toLowerCase();
+const ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || "")
+  .trim()
+  .toLowerCase();
 
-const ADMIN_PASSWORD =
-  String(process.env.ADMIN_PASSWORD || "");
+const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || "");
+const SESSION_SECRET = String(process.env.SESSION_SECRET || "");
+const REPLICATE_API_TOKEN = String(
+  process.env.REPLICATE_API_TOKEN || ""
+).trim();
 
-const SESSION_SECRET =
-  String(process.env.SESSION_SECRET || "");
+const RESEND_API_KEY = String(process.env.RESEND_API_KEY || "").trim();
+const RESEND_FROM = String(process.env.RESEND_FROM || "").trim();
 
-const REPLICATE_API_TOKEN =
-  String(process.env.REPLICATE_API_TOKEN || "")
-    .trim();
-
-const RESEND_API_KEY =
-  String(process.env.RESEND_API_KEY || "")
-    .trim();
-
-const RESEND_FROM =
-  String(process.env.RESEND_FROM || "")
-    .trim();
-
-const APP_URL =
-  String(
-    process.env.APP_URL ||
-    "https://mamaki-ai-video.onrender.com"
-  ).replace(/\/$/, "");
+const APP_URL = String(
+  process.env.APP_URL || "https://mamaki-ai-video.onrender.com"
+).replace(/\/$/, "");
 
 const T2V_MODEL =
-  process.env.T2V_MODEL ||
-  "wan-video/wan-2.2-t2v-fast";
+  process.env.T2V_MODEL || "wan-video/wan-2.2-t2v-fast";
 
 const I2V_MODEL =
-  process.env.I2V_MODEL ||
-  "wan-video/wan-2.2-i2v-fast";
+  process.env.I2V_MODEL || "wan-video/wan-2.2-i2v-fast";
 
 const replicate = REPLICATE_API_TOKEN
-  ? new Replicate({
-      auth: REPLICATE_API_TOKEN
-    })
+  ? new Replicate({ auth: REPLICATE_API_TOKEN })
   : null;
-
-const jobs = new Map();
 
 const upload = multer({
   dest: TMP,
   limits: {
-    fileSize: 100 * 1024 * 1024
+    fileSize: 200 * 1024 * 1024
   }
 });
 
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true }));
+const jobs = new Map();
 
-app.use(
-  "/outputs",
-  express.static(OUTPUTS, {
-    maxAge: "1h"
-  })
-);
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+app.use("/outputs", express.static(OUTPUTS));
+app.use("/projects", express.static(PROJECTS));
 
 /* =========================================================
    BASIC HELPERS
 ========================================================= */
 
 async function ensureDir(dir) {
-  await fs.mkdir(dir, {
-    recursive: true
-  });
+  await fs.mkdir(dir, { recursive: true });
 }
 
 async function exists(file) {
@@ -150,513 +95,260 @@ async function exists(file) {
   }
 }
 
-async function readJSON(file, fallback = {}) {
+async function readJSON(file, fallback) {
   try {
     const text = await fs.readFile(file, "utf8");
-
-    if (!text.trim()) {
-      return fallback;
-    }
-
     return JSON.parse(text);
   } catch {
     return fallback;
   }
 }
 
-async function writeJSON(file, data) {
-  const temp =
-    `${file}.${process.pid}.${Date.now()}.tmp`;
+async function writeJSON(file, value) {
+  await ensureDir(path.dirname(file));
+  const temp = `${file}.${randomUUID()}.tmp`;
 
   await fs.writeFile(
     temp,
-    JSON.stringify(data, null, 2),
+    JSON.stringify(value, null, 2),
     "utf8"
   );
 
   await fs.rename(temp, file);
 }
 
-async function ensureJSON(file) {
-  if (!(await exists(file))) {
-    await writeJSON(file, {});
-  }
+function cleanEmail(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
-async function ensureStorage() {
-  await Promise.all([
-    ensureDir(TMP),
-    ensureDir(OUTPUTS),
-    ensureDir(PROJECTS),
-    ensureDir(DATA)
-  ]);
-
-  await Promise.all([
-    ensureJSON(USERS),
-    ensureJSON(SESSIONS),
-    ensureJSON(USAGE),
-    ensureJSON(ERRORS),
-    ensureJSON(SECURITY),
-    ensureJSON(RESETS)
-  ]);
+function cleanName(value) {
+  return String(value || "").trim().slice(0, 100);
 }
 
-function email(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase();
-}
-
-function safeName(value) {
-  return String(value || "")
-    .replace(/[^a-zA-Z0-9._-]/g, "_")
-    .slice(0, 120);
+function clampNumber(value, min, max, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
 }
 
 function normalizeDuration(value) {
-  if (
-    value === undefined ||
-    value === null ||
-    value === ""
-  ) {
-    return 5;
-  }
-
   if (typeof value === "number") {
-    return Math.max(
+    return clampNumber(value, MIN_DURATION, MAX_DURATION, 5);
+  }
+
+  const text = String(value || "5").trim().toLowerCase();
+
+  if (/^\d+(\.\d+)?s$/.test(text)) {
+    return clampNumber(parseFloat(text), MIN_DURATION, MAX_DURATION, 5);
+  }
+
+  if (/^\d+(\.\d+)?m$/.test(text)) {
+    return clampNumber(
+      parseFloat(text) * 60,
       MIN_DURATION,
-      Math.min(MAX_DURATION, Math.round(value))
+      MAX_DURATION,
+      5
     );
   }
 
-  const text =
-    String(value)
-      .trim()
-      .toLowerCase();
-
-  if (text.endsWith("h")) {
-    const n =
-      Number(text.slice(0, -1));
-
-    return Math.max(
+  if (/^\d+(\.\d+)?h$/.test(text)) {
+    return clampNumber(
+      parseFloat(text) * 3600,
       MIN_DURATION,
-      Math.min(MAX_DURATION, Math.round(n * 3600))
+      MAX_DURATION,
+      5
     );
   }
 
-  if (text.endsWith("m")) {
-    const n =
-      Number(text.slice(0, -1));
-
-    return Math.max(
-      MIN_DURATION,
-      Math.min(MAX_DURATION, Math.round(n * 60))
-    );
-  }
-
-  if (text.endsWith("s")) {
-    const n =
-      Number(text.slice(0, -1));
-
-    return Math.max(
-      MIN_DURATION,
-      Math.min(MAX_DURATION, Math.round(n))
-    );
-  }
-
-  const n = Number(text);
-
-  if (!Number.isFinite(n)) {
-    return 5;
-  }
-
-  return Math.max(
-    MIN_DURATION,
-    Math.min(MAX_DURATION, Math.round(n))
-  );
+  return clampNumber(text, MIN_DURATION, MAX_DURATION, 5);
 }
 
-function publicUser(user) {
-  if (!user) {
-    return null;
-  }
+function safeFileName(name) {
+  return String(name || "file")
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .slice(0, 180);
+}
 
-  return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.role || "user",
-    disabled: Boolean(user.disabled),
-    createdAt: user.createdAt,
-    lastLoginAt: user.lastLoginAt || null
-  };
+function publicUrl(fileName) {
+  return `${APP_URL}/outputs/${encodeURIComponent(fileName)}`;
+}
+
+function projectUrl(fileName) {
+  return `${APP_URL}/projects/${encodeURIComponent(fileName)}`;
 }
 
 /* =========================================================
-   PASSWORDS
+   PASSWORD / AUTH
 ========================================================= */
 
 function hashPassword(password) {
-  const salt =
-    randomBytes(16).toString("hex");
+  const salt = randomBytes(16).toString("hex");
 
-  const hash =
-    scryptSync(
-      String(password),
-      salt,
-      64
-    ).toString("hex");
-
-  return {
+  const hash = scryptSync(
+    String(password),
     salt,
-    hash
-  };
+    64
+  ).toString("hex");
+
+  return { salt, hash };
 }
 
-function verifyPassword(
-  password,
-  salt,
-  storedHash
-) {
+function verifyPassword(password, salt, storedHash) {
   try {
-    if (!salt || !storedHash) {
-      return false;
-    }
+    if (!salt || !storedHash) return false;
 
-    const hash =
-      scryptSync(
-        String(password),
-        salt,
-        64
-      );
-
-    const stored =
-      Buffer.from(
-        storedHash,
-        "hex"
-      );
-
-    return (
-      stored.length === hash.length &&
-      timingSafeEqual(
-        stored,
-        hash
-      )
+    const a = Buffer.from(
+      scryptSync(String(password), salt, 64)
     );
+
+    const b = Buffer.from(storedHash, "hex");
+
+    if (a.length !== b.length) return false;
+
+    return timingSafeEqual(a, b);
   } catch {
     return false;
   }
 }
 
-/* =========================================================
-   LOGGING
-========================================================= */
-
-async function appendJSONLog(
-  file,
-  item,
-  maxItems = 2000
-) {
-  const data =
-    await readJSON(file, []);
-
-  const list =
-    Array.isArray(data)
-      ? data
-      : [];
-
-  list.unshift({
-    id: randomUUID(),
-    timestamp:
-      new Date().toISOString(),
-    ...item
-  });
-
-  await writeJSON(
-    file,
-    list.slice(0, maxItems)
-  );
-}
-
-async function security(action, details = {}) {
-  try {
-    await appendJSONLog(
-      SECURITY,
-      {
-        action,
-        ...details
-      }
-    );
-  } catch {}
-}
-
-async function errorLog(error, details = {}) {
-  try {
-    await appendJSONLog(
-      ERRORS,
-      {
-        message:
-          error?.message ||
-          String(error),
-        stack:
-          error?.stack ||
-          null,
-        ...details
-      }
-    );
-  } catch {}
-
-  console.error(
-    "[MAMAKI ERROR]",
-    error
-  );
-}
-
-/* =========================================================
-   SESSIONS
-========================================================= */
-
-const SESSION_DAYS = 30;
-
 function sessionHash(token) {
   return createHash("sha256")
-    .update(
-      `${SESSION_SECRET}:${token}`
-    )
+    .update(`${SESSION_SECRET}:${token}`)
     .digest("hex");
 }
 
-async function createSession(
-  userId,
-  role = "user"
-) {
-  const token =
-    randomBytes(48).toString("hex");
+async function createSession(userId, kind = "user") {
+  const sessions = await readJSON(SESSIONS, {});
+  const token = randomBytes(48).toString("hex");
+  const id = randomUUID();
 
-  const sessions =
-    await readJSON(
-      SESSIONS,
-      {}
-    );
-
-  const now =
-    Date.now();
-
-  sessions[sessionHash(token)] = {
-    id: randomUUID(),
+  sessions[id] = {
+    id,
     userId,
-    role,
-    createdAt:
-      new Date(now).toISOString(),
-    expiresAt:
-      new Date(
-        now +
-        SESSION_DAYS *
-          24 *
-          60 *
-          60 *
-          1000
-      ).toISOString()
+    kind,
+    tokenHash: sessionHash(token),
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(
+      Date.now() + 30 * 24 * 60 * 60 * 1000
+    ).toISOString()
   };
 
-  await writeJSON(
-    SESSIONS,
-    sessions
-  );
+  await writeJSON(SESSIONS, sessions);
 
   return token;
 }
 
-async function destroySession(token) {
-  if (!token) {
-    return;
-  }
+async function destroyUserSessions(userId) {
+  const sessions = await readJSON(SESSIONS, {});
+  let changed = false;
 
-  const sessions =
-    await readJSON(
-      SESSIONS,
-      {}
-    );
-
-  delete sessions[
-    sessionHash(token)
-  ];
-
-  await writeJSON(
-    SESSIONS,
-    sessions
-  );
-}
-
-async function destroyUserSessions(
-  userId
-) {
-  const sessions =
-    await readJSON(
-      SESSIONS,
-      {}
-    );
-
-  const now =
-    Date.now();
-
-  for (const [key, session] of
-    Object.entries(sessions)) {
-
-    if (
-      !session ||
-      session.userId === userId ||
-      Date.parse(
-        session.expiresAt || ""
-      ) <= now
-    ) {
-      delete sessions[key];
+  for (const id of Object.keys(sessions)) {
+    if (sessions[id]?.userId === userId) {
+      delete sessions[id];
+      changed = true;
     }
   }
 
-  await writeJSON(
-    SESSIONS,
-    sessions
+  if (changed) {
+    await writeJSON(SESSIONS, sessions);
+  }
+}
+
+async function getSession(token) {
+  if (!token) return null;
+
+  const sessions = await readJSON(SESSIONS, {});
+  const wanted = sessionHash(token);
+
+  for (const session of Object.values(sessions)) {
+    if (!session) continue;
+
+    if (
+      session.tokenHash === wanted &&
+      new Date(session.expiresAt).getTime() > Date.now()
+    ) {
+      return session;
+    }
+  }
+
+  return null;
+}
+
+function bearerToken(req) {
+  const header = String(
+    req.headers.authorization || ""
   );
+
+  if (!header.startsWith("Bearer ")) return "";
+
+  return header.slice(7).trim();
 }
 
 async function currentUser(req) {
-  const auth =
-    String(
-      req.headers.authorization ||
-      ""
-    );
+  const token = bearerToken(req);
 
-  if (
-    !auth.startsWith(
-      "Bearer "
-    )
-  ) {
-    return null;
-  }
+  if (!token) return null;
 
-  const token =
-    auth.slice(7).trim();
+  const session = await getSession(token);
 
-  if (!token) {
-    return null;
-  }
+  if (!session) return null;
 
-  const sessions =
-    await readJSON(
-      SESSIONS,
-      {}
-    );
+  const users = await readJSON(USERS, {});
+  const user = users[session.userId];
 
-  const session =
-    sessions[
-      sessionHash(token)
-    ];
-
-  if (!session) {
-    return null;
-  }
-
-  if (
-    Date.parse(
-      session.expiresAt || ""
-    ) <= Date.now()
-  ) {
-    delete sessions[
-      sessionHash(token)
-    ];
-
-    await writeJSON(
-      SESSIONS,
-      sessions
-    );
-
-    return null;
-  }
-
-  const users =
-    await readJSON(
-      USERS,
-      {}
-    );
-
-  const user =
-    users[session.userId];
-
-  if (!user) {
-    return null;
-  }
-
-  if (user.disabled) {
-    return null;
-  }
+  if (!user || user.disabled) return null;
 
   return user;
 }
 
-async function requireUser(
-  req,
-  res,
-  next
-) {
+async function requireUser(req, res, next) {
   try {
-    const user =
-      await currentUser(req);
+    const user = await currentUser(req);
 
     if (!user) {
       return res.status(401).json({
         ok: false,
         error: "UNAUTHORIZED",
-        message:
-          "Please log in."
+        message: "Please log in."
       });
     }
 
     req.user = user;
-
     next();
-  } catch (e) {
-    await errorLog(e, {
-      route: req.path
-    });
+  } catch (error) {
+    await errorLog(error, { route: req.path });
 
-    return res.status(500).json({
+    res.status(500).json({
       ok: false,
       error: "AUTH_ERROR"
     });
   }
 }
 
-async function requireAdmin(
-  req,
-  res,
-  next
-) {
+async function requireAdmin(req, res, next) {
   try {
-    const user =
-      await currentUser(req);
+    const user = await currentUser(req);
 
-    if (
-      !user ||
-      user.role !== "admin"
-    ) {
+    if (!user) {
+      return res.status(401).json({
+        ok: false,
+        error: "UNAUTHORIZED"
+      });
+    }
+
+    if (user.role !== "admin") {
       return res.status(403).json({
         ok: false,
-        error: "ADMIN_REQUIRED",
-        message:
-          "Administrator access required."
+        error: "ADMIN_ONLY"
       });
     }
 
     req.user = user;
-
     next();
-  } catch (e) {
-    await errorLog(e, {
-      route: req.path
-    });
+  } catch (error) {
+    await errorLog(error, { route: req.path });
 
-    return res.status(500).json({
+    res.status(500).json({
       ok: false,
       error: "ADMIN_AUTH_ERROR"
     });
@@ -664,571 +356,361 @@ async function requireAdmin(
 }
 
 /* =========================================================
-   USAGE
+   LOGGING
 ========================================================= */
 
-async function recordUsage(
-  userId,
-  type,
-  extra = {}
-) {
-  const usage =
-    await readJSON(
-      USAGE,
-      {}
+async function errorLog(error, meta = {}) {
+  try {
+    const errors = await readJSON(ERRORS, []);
+
+    errors.unshift({
+      id: randomUUID(),
+      message: String(error?.message || error),
+      stack: String(error?.stack || ""),
+      meta,
+      createdAt: new Date().toISOString()
+    });
+
+    await writeJSON(
+      ERRORS,
+      errors.slice(0, 500)
     );
+  } catch {}
+}
 
-  if (!usage[userId]) {
-    usage[userId] = {
-      totalGenerations: 0,
-      totalSeconds: 0,
-      t2v: 0,
-      i2v: 0,
-      narration: 0,
-      studio: 0,
-      history: []
-    };
-  }
+async function security(event, meta = {}) {
+  try {
+    const events = await readJSON(SECURITY, []);
 
-  const u =
-    usage[userId];
+    events.unshift({
+      id: randomUUID(),
+      event,
+      meta,
+      createdAt: new Date().toISOString()
+    });
 
-  u.totalGenerations += 1;
-
-  if (
-    Number.isFinite(
-      Number(extra.duration)
-    )
-  ) {
-    u.totalSeconds +=
-      Number(extra.duration);
-  }
-
-  if (type === "t2v") {
-    u.t2v += 1;
-  }
-
-  if (type === "i2v") {
-    u.i2v += 1;
-  }
-
-  if (type === "narration") {
-    u.narration += 1;
-  }
-
-  if (type === "studio") {
-    u.studio += 1;
-  }
-
-  u.history.unshift({
-    id: randomUUID(),
-    type,
-    duration:
-      Number(extra.duration) || 0,
-    createdAt:
-      new Date().toISOString()
-  });
-
-  u.history =
-    u.history.slice(0, 500);
-
-  await writeJSON(
-    USAGE,
-    usage
-  );
+    await writeJSON(
+      SECURITY,
+      events.slice(0, 1000)
+    );
+  } catch {}
 }
 
 /* =========================================================
-   USERS
+   USAGE
 ========================================================= */
 
-app.post(
-  "/api/auth/register",
-  async (req, res) => {
-    try {
-      const name =
-        String(
-          req.body.name || ""
-        ).trim();
+async function addUsage(userId, type, amount = 1) {
+  const usage = await readJSON(USAGE, {});
+  const day = new Date().toISOString().slice(0, 10);
 
-      const mail =
-        email(
-          req.body.email
-        );
+  if (!usage[userId]) {
+    usage[userId] = {};
+  }
 
-      const password =
-        String(
-          req.body.password || ""
-        );
+  if (!usage[userId][day]) {
+    usage[userId][day] = {};
+  }
 
-      if (!name) {
-        return res.status(400).json({
-          ok: false,
-          error: "INVALID_NAME",
-          message:
-            "Name is required."
-        });
-      }
+  usage[userId][day][type] =
+    Number(usage[userId][day][type] || 0) + amount;
 
-      if (
-        !mail ||
-        !mail.includes("@")
-      ) {
-        return res.status(400).json({
-          ok: false,
-          error: "INVALID_EMAIL",
-          message:
-            "Enter a valid email address."
-        });
-      }
+  await writeJSON(USAGE, usage);
+}
 
-      if (password.length < 6) {
-        return res.status(400).json({
-          ok: false,
-          error: "WEAK_PASSWORD",
-          message:
-            "Password must be at least 6 characters."
-        });
-      }
+/* =========================================================
+   AUTH API
+========================================================= */
 
-      const users =
-        await readJSON(
-          USERS,
-          {}
-        );
+app.post("/api/auth/register", async (req, res) => {
+  try {
+    const name = cleanName(req.body.name);
+    const mail = cleanEmail(req.body.email);
+    const password = String(req.body.password || "");
 
-      const existing =
-        Object.values(users).find(
-          u =>
-            email(u.email) === mail
-        );
+    if (!name || !mail || password.length < 6) {
+      return res.status(400).json({
+        ok: false,
+        error: "INVALID_REGISTRATION",
+        message:
+          "Name, valid email and password of at least 6 characters are required."
+      });
+    }
 
-      if (existing) {
-        return res.status(409).json({
-          ok: false,
-          error: "EMAIL_EXISTS",
-          message:
-            "An account with this email already exists."
-        });
-      }
+    const users = await readJSON(USERS, {});
 
-      const hp =
-        hashPassword(password);
+    const existsUser = Object.values(users).find(
+      u => cleanEmail(u.email) === mail
+    );
 
-      const id =
-        randomUUID();
+    if (existsUser) {
+      return res.status(409).json({
+        ok: false,
+        error: "EMAIL_EXISTS",
+        message: "An account with this email already exists."
+      });
+    }
 
-      const user = {
+    const hp = hashPassword(password);
+    const id = randomUUID();
+
+    users[id] = {
+      id,
+      name,
+      email: mail,
+      ...hp,
+      role: mail === ADMIN_EMAIL ? "admin" : "user",
+      disabled: false,
+      createdAt: new Date().toISOString(),
+      lastLoginAt: null
+    };
+
+    await writeJSON(USERS, users);
+
+    const token = await createSession(
+      id,
+      users[id].role === "admin" ? "admin" : "user"
+    );
+
+    await security("REGISTER", {
+      userId: id,
+      email: mail
+    });
+
+    res.json({
+      ok: true,
+      token,
+      user: {
         id,
         name,
         email: mail,
-        ...hp,
-        role: "user",
-        disabled: false,
-        createdAt:
-          new Date().toISOString(),
-        lastLoginAt: null
-      };
-
-      users[id] = user;
-
-      await writeJSON(
-        USERS,
-        users
-      );
-
-      await security(
-        "ACCOUNT_CREATED",
-        {
-          userId: id,
-          email: mail
-        }
-      );
-
-      const token =
-        await createSession(
-          id,
-          "user"
-        );
-
-      return res.json({
-        ok: true,
-        token,
-        user:
-          publicUser(user)
-      });
-    } catch (e) {
-      await errorLog(e, {
-        route:
-          "/api/auth/register"
-      });
-
-      return res.status(500).json({
-        ok: false,
-        error:
-          "REGISTRATION_ERROR"
-      });
-    }
-  }
-);
-
-app.post(
-  "/api/auth/login",
-  async (req, res) => {
-    try {
-      const mail =
-        email(
-          req.body.email
-        );
-
-      const password =
-        String(
-          req.body.password || ""
-        );
-
-      if (!mail || !password) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "MISSING_CREDENTIALS"
-        });
+        role: users[id].role
       }
+    });
+  } catch (error) {
+    await errorLog(error, {
+      route: "/api/auth/register"
+    });
 
-      const users =
-        await readJSON(
-          USERS,
-          {}
-        );
-
-      const user =
-        Object.values(users).find(
-          u =>
-            email(u.email) === mail
-        );
-
-      if (!user) {
-        return res.status(401).json({
-          ok: false,
-          error:
-            "INVALID_CREDENTIALS",
-          message:
-            "Invalid email or password."
-        });
-      }
-
-      if (user.disabled) {
-        return res.status(403).json({
-          ok: false,
-          error: "ACCOUNT_DISABLED",
-          message:
-            "This account has been disabled."
-        });
-      }
-
-      if (
-        !verifyPassword(
-          password,
-          user.salt,
-          user.hash
-        )
-      ) {
-        await security(
-          "LOGIN_FAILED",
-          {
-            email: mail
-          }
-        );
-
-        return res.status(401).json({
-          ok: false,
-          error:
-            "INVALID_CREDENTIALS",
-          message:
-            "Invalid email or password."
-        });
-      }
-
-      user.lastLoginAt =
-        new Date().toISOString();
-
-      users[user.id] =
-        user;
-
-      await writeJSON(
-        USERS,
-        users
-      );
-
-      const token =
-        await createSession(
-          user.id,
-          user.role || "user"
-        );
-
-      await security(
-        "LOGIN_SUCCESS",
-        {
-          userId:
-            user.id,
-          email:
-            user.email
-        }
-      );
-
-      return res.json({
-        ok: true,
-        token,
-        user:
-          publicUser(user)
-      });
-    } catch (e) {
-      await errorLog(e, {
-        route:
-          "/api/auth/login"
-      });
-
-      return res.status(500).json({
-        ok: false,
-        error:
-          "LOGIN_ERROR"
-      });
-    }
-  }
-);
-
-app.post(
-  "/api/auth/logout",
-  async (req, res) => {
-    try {
-      const auth =
-        String(
-          req.headers.authorization ||
-          ""
-        );
-
-      if (
-        auth.startsWith(
-          "Bearer "
-        )
-      ) {
-        await destroySession(
-          auth.slice(7).trim()
-        );
-      }
-
-      return res.json({
-        ok: true
-      });
-    } catch {
-      return res.json({
-        ok: true
-      });
-    }
-  }
-);
-
-app.get(
-  "/api/auth/me",
-  requireUser,
-  async (req, res) => {
-    return res.json({
-      ok: true,
-      user:
-        publicUser(req.user)
+    res.status(500).json({
+      ok: false,
+      error: "REGISTER_ERROR"
     });
   }
-);
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const mail = cleanEmail(req.body.email);
+    const password = String(req.body.password || "");
+
+    const users = await readJSON(USERS, {});
+
+    const user = Object.values(users).find(
+      u => cleanEmail(u.email) === mail
+    );
+
+    if (
+      !user ||
+      user.disabled ||
+      !verifyPassword(password, user.salt, user.hash)
+    ) {
+      await security("LOGIN_FAILED", {
+        email: mail
+      });
+
+      return res.status(401).json({
+        ok: false,
+        error: "INVALID_CREDENTIALS",
+        message: "Invalid email or password."
+      });
+    }
+
+    user.lastLoginAt = new Date().toISOString();
+    users[user.id] = user;
+
+    await writeJSON(USERS, users);
+
+    const token = await createSession(
+      user.id,
+      user.role === "admin" ? "admin" : "user"
+    );
+
+    await security("LOGIN_SUCCESS", {
+      userId: user.id,
+      email: user.email
+    });
+
+    res.json({
+      ok: true,
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    await errorLog(error, {
+      route: "/api/auth/login"
+    });
+
+    res.status(500).json({
+      ok: false,
+      error: "LOGIN_ERROR"
+    });
+  }
+});
+
+app.post("/api/auth/logout", async (req, res) => {
+  try {
+    const token = bearerToken(req);
+
+    if (token) {
+      const sessions = await readJSON(SESSIONS, {});
+      const wanted = sessionHash(token);
+
+      for (const id of Object.keys(sessions)) {
+        if (sessions[id]?.tokenHash === wanted) {
+          delete sessions[id];
+        }
+      }
+
+      await writeJSON(SESSIONS, sessions);
+    }
+
+    res.json({ ok: true });
+  } catch {
+    res.json({ ok: true });
+  }
+});
+
+app.get("/api/auth/me", requireUser, async (req, res) => {
+  res.json({
+    ok: true,
+    user: {
+      id: req.user.id,
+      name: req.user.name,
+      email: req.user.email,
+      role: req.user.role
+    }
+  });
+});
 
 /* =========================================================
-   PROFILE
+   ACCOUNT
 ========================================================= */
 
-app.get(
-  "/api/account",
-  requireUser,
-  async (req, res) => {
-    const usage =
-      await readJSON(
-        USAGE,
-        {}
-      );
+app.get("/api/account", requireUser, async (req, res) => {
+  res.json({
+    ok: true,
+    user: {
+      id: req.user.id,
+      name: req.user.name,
+      email: req.user.email,
+      role: req.user.role,
+      createdAt: req.user.createdAt,
+      lastLoginAt: req.user.lastLoginAt
+    }
+  });
+});
 
-    return res.json({
+app.post("/api/account/profile", requireUser, async (req, res) => {
+  try {
+    const users = await readJSON(USERS, {});
+    const user = users[req.user.id];
+
+    user.name = cleanName(req.body.name) || user.name;
+
+    users[user.id] = user;
+
+    await writeJSON(USERS, users);
+
+    res.json({
       ok: true,
-      user:
-        publicUser(req.user),
-      usage:
-        usage[req.user.id] || {
-          totalGenerations: 0,
-          totalSeconds: 0,
-          t2v: 0,
-          i2v: 0,
-          narration: 0
-        }
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    await errorLog(error, {
+      route: "/api/account/profile"
+    });
+
+    res.status(500).json({
+      ok: false,
+      error: "PROFILE_ERROR"
     });
   }
-);
-
-app.post(
-  "/api/account/profile",
-  requireUser,
-  async (req, res) => {
-    try {
-      const name =
-        String(
-          req.body.name || ""
-        ).trim();
-
-      if (!name) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "NAME_REQUIRED"
-        });
-      }
-
-      const users =
-        await readJSON(
-          USERS,
-          {}
-        );
-
-      const user =
-        users[req.user.id];
-
-      if (!user) {
-        return res.status(404).json({
-          ok: false,
-          error:
-            "USER_NOT_FOUND"
-        });
-      }
-
-      user.name =
-        name.slice(0, 100);
-
-      users[user.id] =
-        user;
-
-      await writeJSON(
-        USERS,
-        users
-      );
-
-      return res.json({
-        ok: true,
-        user:
-          publicUser(user)
-      });
-    } catch (e) {
-      await errorLog(e);
-
-      return res.status(500).json({
-        ok: false,
-        error:
-          "PROFILE_UPDATE_ERROR"
-      });
-    }
-  }
-);
+});
 
 app.post(
   "/api/account/change-password",
   requireUser,
   async (req, res) => {
     try {
-      const currentPassword =
-        String(
-          req.body.currentPassword ||
-          ""
-        );
+      const oldPassword = String(
+        req.body.oldPassword || ""
+      );
 
-      const newPassword =
-        String(
-          req.body.newPassword ||
-          ""
-        );
+      const newPassword = String(
+        req.body.newPassword || ""
+      );
 
-      if (
-        newPassword.length < 6
-      ) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "WEAK_PASSWORD",
-          message:
-            "New password must be at least 6 characters."
-        });
-      }
+      const users = await readJSON(USERS, {});
+      const user = users[req.user.id];
 
       if (
         !verifyPassword(
-          currentPassword,
-          req.user.salt,
-          req.user.hash
+          oldPassword,
+          user.salt,
+          user.hash
         )
       ) {
         return res.status(401).json({
           ok: false,
-          error:
-            "CURRENT_PASSWORD_INVALID"
+          error: "WRONG_PASSWORD"
         });
       }
 
-      const users =
-        await readJSON(
-          USERS,
-          {}
-        );
+      if (newPassword.length < 6) {
+        return res.status(400).json({
+          ok: false,
+          error: "PASSWORD_TOO_SHORT"
+        });
+      }
 
-      const user =
-        users[req.user.id];
+      const hp = hashPassword(newPassword);
 
-      const hp =
-        hashPassword(
-          newPassword
-        );
+      user.salt = hp.salt;
+      user.hash = hp.hash;
 
-      user.salt =
-        hp.salt;
+      users[user.id] = user;
 
-      user.hash =
-        hp.hash;
+      await writeJSON(USERS, users);
+      await destroyUserSessions(user.id);
 
-      users[user.id] =
-        user;
-
-      await writeJSON(
-        USERS,
-        users
+      const token = await createSession(
+        user.id,
+        user.role === "admin" ? "admin" : "user"
       );
 
-      await destroyUserSessions(
-        user.id
-      );
-
-      await security(
-        "PASSWORD_CHANGED",
-        {
-          userId:
-            user.id,
-          email:
-            user.email
-        }
-      );
-
-      return res.json({
+      res.json({
         ok: true,
-        message:
-          "Password changed successfully. Please log in again."
+        token
       });
-    } catch (e) {
-      await errorLog(e);
+    } catch (error) {
+      await errorLog(error, {
+        route: "/api/account/change-password"
+      });
 
-      return res.status(500).json({
+      res.status(500).json({
         ok: false,
-        error:
-          "PASSWORD_CHANGE_ERROR"
+        error: "PASSWORD_CHANGE_ERROR"
       });
     }
   }
@@ -1238,147 +720,73 @@ app.post(
    PASSWORD RECOVERY
 ========================================================= */
 
-async function sendRecoveryEmail(
-  to,
-  resetUrl
-) {
-  if (
-    !RESEND_API_KEY ||
-    !RESEND_FROM
-  ) {
-    return false;
-  }
-
-  try {
-    const response =
-      await fetch(
-        "https://api.resend.com/emails",
-        {
-          method: "POST",
-          headers: {
-            "Authorization":
-              `Bearer ${RESEND_API_KEY}`,
-            "Content-Type":
-              "application/json"
-          },
-          body:
-            JSON.stringify({
-              from:
-                RESEND_FROM,
-              to: [to],
-              subject:
-                "MAMAKI AI password reset",
-              html: `
-                <div style="font-family:Arial,sans-serif">
-                  <h2>MAMAKI AI</h2>
-                  <p>You requested a password reset.</p>
-                  <p>
-                    <a href="${resetUrl}">
-                      Reset your password
-                    </a>
-                  </p>
-                  <p>This link expires in 30 minutes.</p>
-                </div>
-              `
-            })
-        }
-      );
-
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
 app.post(
   "/api/auth/forgot-password",
   async (req, res) => {
     try {
-      const mail =
-        email(
-          req.body.email
-        );
+      const mail = cleanEmail(req.body.email);
+      const users = await readJSON(USERS, {});
 
-      const users =
-        await readJSON(
-          USERS,
-          {}
-        );
+      const user = Object.values(users).find(
+        u => cleanEmail(u.email) === mail
+      );
 
-      const user =
-        Object.values(users).find(
-          u =>
-            email(u.email) === mail
-        );
-
-      if (user) {
-        const resets =
-          await readJSON(
-            RESETS,
-            {}
-          );
-
-        const token =
-          randomBytes(32)
-            .toString("hex");
-
-        resets[
-          createHash("sha256")
-            .update(token)
-            .digest("hex")
-        ] = {
-          userId:
-            user.id,
-          expiresAt:
-            new Date(
-              Date.now() +
-              30 * 60 * 1000
-            ).toISOString()
-        };
-
-        await writeJSON(
-          RESETS,
-          resets
-        );
-
-        const resetUrl =
-          `${APP_URL}/reset-password?token=${token}`;
-
-        const sent =
-          await sendRecoveryEmail(
-            user.email,
-            resetUrl
-          );
-
-        if (!sent) {
-          console.log(
-            "[MAMAKI] Recovery email is not configured."
-          );
-        }
-
-        await security(
-          "PASSWORD_RESET_REQUESTED",
-          {
-            userId:
-              user.id,
-            email:
-              user.email
-          }
-        );
+      if (!user) {
+        return res.json({
+          ok: true,
+          message:
+            "If that account exists, recovery instructions will be sent."
+        });
       }
 
-      return res.json({
+      const token = randomBytes(32).toString("hex");
+      const resets = await readJSON(RESETS, {});
+
+      resets[token] = {
+        userId: user.id,
+        expiresAt: new Date(
+          Date.now() + 30 * 60 * 1000
+        ).toISOString()
+      };
+
+      await writeJSON(RESETS, resets);
+
+      if (RESEND_API_KEY && RESEND_FROM) {
+        await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${RESEND_API_KEY}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            from: RESEND_FROM,
+            to: [user.email],
+            subject: "MAMAKI AI Password Reset",
+            html:
+              `<p>Hello ${user.name || "there"},</p>` +
+              `<p>Your password reset link is:</p>` +
+              `<p><a href="${APP_URL}/reset-password?token=${token}">Reset Password</a></p>` +
+              `<p>This link expires in 30 minutes.</p>`
+          })
+        });
+      }
+
+      res.json({
         ok: true,
         message:
-          "If the email exists, password recovery instructions have been sent."
+          "If that account exists, recovery instructions will be sent.",
+        recoveryConfigured: Boolean(
+          RESEND_API_KEY && RESEND_FROM
+        )
       });
-    } catch (e) {
-      await errorLog(e);
+    } catch (error) {
+      await errorLog(error, {
+        route: "/api/auth/forgot-password"
+      });
 
-      return res.status(500).json({
+      res.status(500).json({
         ok: false,
-        error:
-          "RECOVERY_ERROR"
+        error: "RECOVERY_ERROR"
       });
     }
   }
@@ -1388,238 +796,170 @@ app.post(
   "/api/auth/reset-password",
   async (req, res) => {
     try {
-      const token =
-        String(
-          req.body.token || ""
-        );
+      const token = String(req.body.token || "");
+      const password = String(req.body.password || "");
 
-      const password =
-        String(
-          req.body.password || ""
-        );
-
-      if (
-        password.length < 6
-      ) {
+      if (!token || password.length < 6) {
         return res.status(400).json({
           ok: false,
-          error:
-            "WEAK_PASSWORD"
+          error: "INVALID_RESET"
         });
       }
 
-      const resets =
-        await readJSON(
-          RESETS,
-          {}
-        );
-
-      const key =
-        createHash("sha256")
-          .update(token)
-          .digest("hex");
-
-      const record =
-        resets[key];
+      const resets = await readJSON(RESETS, {});
+      const item = resets[token];
 
       if (
-        !record ||
-        Date.parse(
-          record.expiresAt
-        ) <= Date.now()
+        !item ||
+        new Date(item.expiresAt).getTime() < Date.now()
       ) {
         return res.status(400).json({
           ok: false,
-          error:
-            "RESET_TOKEN_INVALID",
-          message:
-            "This reset link is invalid or expired."
+          error: "RESET_EXPIRED"
         });
       }
 
-      const users =
-        await readJSON(
-          USERS,
-          {}
-        );
-
-      const user =
-        users[record.userId];
+      const users = await readJSON(USERS, {});
+      const user = users[item.userId];
 
       if (!user) {
-        return res.status(404).json({
+        return res.status(400).json({
           ok: false,
-          error:
-            "USER_NOT_FOUND"
+          error: "USER_NOT_FOUND"
         });
       }
 
-      const hp =
-        hashPassword(password);
+      const hp = hashPassword(password);
 
-      user.salt =
-        hp.salt;
+      user.salt = hp.salt;
+      user.hash = hp.hash;
 
-      user.hash =
-        hp.hash;
+      users[user.id] = user;
 
-      users[user.id] =
-        user;
+      await writeJSON(USERS, users);
 
-      await writeJSON(
-        USERS,
-        users
-      );
+      delete resets[token];
+      await writeJSON(RESETS, resets);
 
-      delete resets[key];
+      await destroyUserSessions(user.id);
 
-      await writeJSON(
-        RESETS,
-        resets
-      );
-
-      await destroyUserSessions(
-        user.id
-      );
-
-      await security(
-        "PASSWORD_RESET_COMPLETED",
-        {
-          userId:
-            user.id,
-          email:
-            user.email
-        }
-      );
-
-      return res.json({
-        ok: true,
-        message:
-          "Password reset successfully."
+      res.json({
+        ok: true
       });
-    } catch (e) {
-      await errorLog(e);
+    } catch (error) {
+      await errorLog(error, {
+        route: "/api/auth/reset-password"
+      });
 
-      return res.status(500).json({
+      res.status(500).json({
         ok: false,
-        error:
-          "RESET_ERROR"
+        error: "RESET_ERROR"
       });
     }
   }
 );
 
 /* =========================================================
-   FFMPEG
+   VIDEO HELPERS
 ========================================================= */
 
-function runFFmpeg(args) {
-  return new Promise(
-    (resolve, reject) => {
-      const child =
-        spawn(
-          ffmpegPath,
-          args,
-          {
-            windowsHide: true
-          }
-        );
+function dimensions(format) {
+  if (format === "9:16") {
+    return { width: 480, height: 832 };
+  }
 
-      let stderr = "";
+  if (format === "1:1") {
+    return { width: 704, height: 704 };
+  }
 
-      child.stderr.on(
-        "data",
-        chunk => {
-          stderr +=
-            chunk.toString();
-        }
-      );
-
-      child.on(
-        "error",
-        reject
-      );
-
-      child.on(
-        "close",
-        code => {
-          if (code === 0) {
-            resolve({
-              ok: true,
-              stderr
-            });
-          } else {
-            const error =
-              new Error(
-                `FFmpeg exited with code ${code}`
-              );
-
-            error.stderr =
-              stderr;
-
-            reject(error);
-          }
-        }
-      );
-    }
-  );
+  return { width: 832, height: 480 };
 }
 
-async function getVideoDuration(
-  file
-) {
-  return new Promise(
-    (resolve, reject) => {
-      const child =
-        spawn(
-          ffmpegPath,
-          [
-            "-i",
-            file
-          ],
-          {
-            windowsHide: true
-          }
+function sceneCount(duration) {
+  if (duration <= 10) return 1;
+  return Math.max(1, Math.ceil(duration / 5));
+}
+
+async function runFFmpeg(args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(ffmpegPath, args, {
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", d => {
+      stdout += d.toString();
+    });
+
+    child.stderr.on("data", d => {
+      stderr += d.toString();
+    });
+
+    child.on("error", reject);
+
+    child.on("close", code => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+      } else {
+        reject(
+          new Error(
+            `FFmpeg exited with code ${code}: ${stderr.slice(-3000)}`
+          )
         );
+      }
+    });
+  });
+}
 
-      let text = "";
+async function downloadToFile(url, destination) {
+  const response = await fetch(url);
 
-      child.stderr.on(
-        "data",
-        chunk => {
-          text +=
-            chunk.toString();
-        }
-      );
+  if (!response.ok) {
+    throw new Error(
+      `Download failed with status ${response.status}`
+    );
+  }
 
-      child.on(
-        "error",
-        reject
-      );
-
-      child.on(
-        "close",
-        () => {
-          const match =
-            text.match(
-              /Duration:\s*(\d+):(\d+):([\d.]+)/
-            );
-
-          if (!match) {
-            return resolve(0);
-          }
-
-          resolve(
-            Number(match[1]) *
-              3600 +
-            Number(match[2]) *
-              60 +
-            Number(match[3])
-          );
-        }
-      );
-    }
+  const buffer = Buffer.from(
+    await response.arrayBuffer()
   );
+
+  await fs.writeFile(destination, buffer);
+
+  return destination;
+}
+
+async function makeExactDuration(
+  input,
+  output,
+  duration,
+  format = "16:9"
+) {
+  const { width, height } = dimensions(format);
+
+  await runFFmpeg([
+    "-y",
+    "-i",
+    input,
+    "-t",
+    String(duration),
+    "-vf",
+    `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`,
+    "-r",
+    "16",
+    "-c:v",
+    "libx264",
+    "-preset",
+    "veryfast",
+    "-pix_fmt",
+    "yuv420p",
+    "-an",
+    output
+  ]);
+
+  return output;
 }
 
 async function addMamakiWatermark(
@@ -1631,455 +971,302 @@ async function addMamakiWatermark(
     "-i",
     input,
     "-vf",
-    "drawtext=text='MAMAKI':x=20:y=20:fontsize=26:fontcolor=white@0.75:box=1:boxcolor=black@0.25:boxborderw=8",
+    "drawtext=text='MAMAKI AI':fontcolor=white@0.75:fontsize=22:x=18:y=18:box=1:boxcolor=black@0.25:boxborderw=8",
     "-c:a",
     "copy",
     output
   ]);
+
+  return output;
 }
 
-async function makeExactDuration(
+async function addSoftMusic(
   input,
   output,
   duration
 ) {
-  await runFFmpeg([
-    "-y",
-    "-i",
-    input,
-    "-t",
-    String(duration),
-    "-c:v",
-    "libx264",
-    "-preset",
-    "veryfast",
-    "-pix_fmt",
-    "yuv420p",
-    "-c:a",
-    "aac",
-    "-movflags",
-    "+faststart",
-    output
-  ]);
+  const music = path.join(
+    TMP,
+    `music-${randomUUID()}.wav`
+  );
+
+  try {
+    await runFFmpeg([
+      "-y",
+      "-f",
+      "lavfi",
+      "-i",
+      "sine=frequency=220:sample_rate=44100",
+      "-t",
+      String(duration),
+      "-c:a",
+      "pcm_s16le",
+      music
+    ]);
+
+    await runFFmpeg([
+      "-y",
+      "-i",
+      input,
+      "-i",
+      music,
+      "-filter_complex",
+      "[1:a]volume=0.12[m];[0:a][m]amix=inputs=2:duration=first:dropout_transition=2[a]",
+      "-map",
+      "0:v",
+      "-map",
+      "[a]",
+      "-c:v",
+      "copy",
+      "-c:a",
+      "aac",
+      "-shortest",
+      output
+    ]);
+  } catch {
+    await fs.copyFile(input, output);
+  }
+
+  await fs.rm(music, {
+    force: true
+  });
+
+  return output;
 }
 
-/* =========================================================
-   REPLICATE VIDEO
-========================================================= */
+async function replicateVideo(input) {
+  if (!replicate) {
+    throw new Error(
+      "Replicate is not configured. Add REPLICATE_API_TOKEN in Render."
+    );
+  }
 
-async function downloadReplicateOutput(
-  output,
-  target
-) {
+  const result = await replicate.run(
+    T2V_MODEL,
+    { input }
+  );
+
+  if (!result) {
+    throw new Error(
+      "Replicate returned an empty result."
+    );
+  }
+
   let url = null;
 
-  if (
-    typeof output === "string"
-  ) {
-    url = output;
-  } else if (
-    output &&
-    typeof output.url === "function"
-  ) {
-    url =
-      String(
-        await output.url()
-      );
-  } else if (
-    output &&
-    output.url
-  ) {
-    url =
-      String(output.url);
-  } else if (
-    output &&
-    Array.isArray(output)
-  ) {
-    const first =
-      output[0];
+  if (typeof result === "string") {
+    url = result;
+  } else if (result?.url) {
+    url = String(result.url);
+  } else if (Array.isArray(result)) {
+    for (const item of result) {
+      if (typeof item === "string") {
+        url = item;
+        break;
+      }
 
-    if (first) {
-      if (
-        typeof first ===
-        "string"
-      ) {
-        url = first;
-      } else if (
-        typeof first.url ===
-        "function"
-      ) {
-        url =
-          String(
-            await first.url()
-          );
-      } else if (
-        first.url
-      ) {
-        url =
-          String(first.url);
+      if (item?.url) {
+        url = String(item.url);
+        break;
       }
     }
   }
 
   if (!url) {
     throw new Error(
-      "Replicate returned no video URL."
+      "Replicate completed but no video URL was returned."
     );
   }
 
-  const response =
-    await fetch(url);
+  return url;
+}
 
-  if (!response.ok) {
-    throw new Error(
-      `Video download failed: ${response.status}`
-    );
-  }
+function progressJob(id, value, message) {
+  const job = jobs.get(id);
 
-  const buffer =
-    Buffer.from(
-      await response.arrayBuffer()
-    );
+  if (!job) return;
 
-  await fs.writeFile(
-    target,
-    buffer
+  job.progress = Math.max(
+    0,
+    Math.min(100, Number(value))
   );
 
-  return target;
+  job.message = message || job.message;
+  job.updatedAt = new Date().toISOString();
 }
 
-function videoDimensions(
-  ratio
-) {
-  if (ratio === "9:16") {
-    return {
-      width: 480,
-      height: 832
-    };
-  }
+async function generateVideo({
+  prompt,
+  duration,
+  format,
+  imageUrl,
+  jobId
+}) {
+  const safeDuration = normalizeDuration(duration);
+  const dims = dimensions(format);
 
-  if (ratio === "1:1") {
-    return {
-      width: 704,
-      height: 704
-    };
-  }
-
-  return {
-    width: 832,
-    height: 480
-  };
-}
-
-async function generateVideo(
-  {
-    prompt,
-    imageUrl,
-    duration,
-    ratio,
-    job
-  }
-) {
-  if (!replicate) {
-    throw new Error(
-      "Replicate is not configured."
-    );
-  }
-
-  const seconds =
-    normalizeDuration(
-      duration
-    );
+  progressJob(
+    jobId,
+    5,
+    "Planning your video..."
+  );
 
   const frames =
-    seconds <= 5
-      ? 81
-      : 121;
+    safeDuration <= 5 ? 81 : 121;
 
-  const {
-    width,
-    height
-  } =
-    videoDimensions(
-      ratio
-    );
+  let input = {
+    prompt: String(prompt || "").slice(0, 5000),
+    num_frames: frames,
+    width: dims.width,
+    height: dims.height,
+    sample_shift: 12,
+    go_fast: true,
+    fps: 16
+  };
 
-  if (job) {
-    job.status =
-      "generating";
-    job.progress = 30;
-    job.message =
-      "MAMAKI AI is generating your video...";
-  }
-
-  let output;
+  let model = T2V_MODEL;
 
   if (imageUrl) {
-    output =
-      await replicate.run(
-        I2V_MODEL,
-        {
-          input: {
-            image:
-              imageUrl,
-            prompt:
-              prompt,
-            num_frames:
-              frames,
-            width,
-            height,
-            fps: 16,
-            go_fast:
-              true,
-            sample_shift:
-              12
-          }
-        }
-      );
-  } else {
-    output =
-      await replicate.run(
-        T2V_MODEL,
-        {
-          input: {
-            prompt:
-              prompt,
-            num_frames:
-              frames,
-            width,
-            height,
-            fps: 16,
-            go_fast:
-              true,
-            sample_shift:
-              12
-          }
-        }
-      );
+    model = I2V_MODEL;
+
+    input = {
+      prompt: String(prompt || "").slice(0, 5000),
+      image: imageUrl,
+      num_frames: frames,
+      width: dims.width,
+      height: dims.height,
+      sample_shift: 12,
+      go_fast: true,
+      fps: 16
+    };
   }
 
-  if (job) {
-    job.status =
-      "processing";
-    job.progress = 65;
-    job.message =
-      "Finishing video...";
+  progressJob(
+    jobId,
+    15,
+    "Sending request to WAN AI..."
+  );
+
+  if (!replicate) {
+    throw new Error(
+      "REPLICATE_API_TOKEN is missing."
+    );
   }
 
-  const id =
-    randomUUID();
+  const result = await replicate.run(
+    model,
+    { input }
+  );
 
-  const raw =
-    path.join(
-      TMP,
-      `${id}-raw.mp4`
+  progressJob(
+    jobId,
+    60,
+    "Downloading generated video..."
+  );
+
+  let url = null;
+
+  if (typeof result === "string") {
+    url = result;
+  } else if (result?.url) {
+    url = String(result.url);
+  } else if (Array.isArray(result)) {
+    for (const item of result) {
+      if (typeof item === "string") {
+        url = item;
+        break;
+      }
+
+      if (item?.url) {
+        url = String(item.url);
+        break;
+      }
+    }
+  }
+
+  if (!url) {
+    throw new Error(
+      "AI completed but no video file was returned."
     );
+  }
 
-  const exact =
-    path.join(
-      TMP,
-      `${id}-exact.mp4`
-    );
+  const raw = path.join(
+    TMP,
+    `${jobId}-raw.mp4`
+  );
 
-  const finalFile =
-    path.join(
-      OUTPUTS,
-      `${id}.mp4`
-    );
+  const exact = path.join(
+    TMP,
+    `${jobId}-exact.mp4`
+  );
 
-  await downloadReplicateOutput(
-    output,
-    raw
+  const music = path.join(
+    TMP,
+    `${jobId}-music.mp4`
+  );
+
+  const finalName =
+    `${jobId}-${Date.now()}.mp4`;
+
+  const finalFile = path.join(
+    OUTPUTS,
+    finalName
+  );
+
+  await downloadToFile(url, raw);
+
+  progressJob(
+    jobId,
+    75,
+    "Preparing exact duration..."
   );
 
   await makeExactDuration(
     raw,
     exact,
-    seconds
+    safeDuration,
+    format
+  );
+
+  progressJob(
+    jobId,
+    84,
+    "Adding audio..."
+  );
+
+  await addSoftMusic(
+    exact,
+    music,
+    safeDuration
+  );
+
+  progressJob(
+    jobId,
+    92,
+    "Applying MAMAKI watermark..."
   );
 
   await addMamakiWatermark(
-    exact,
+    music,
     finalFile
   );
 
-  const finalDuration =
-    await getVideoDuration(
-      finalFile
-    );
+  await fs.rm(raw, { force: true });
+  await fs.rm(exact, { force: true });
+  await fs.rm(music, { force: true });
 
-  await fs.rm(
-    raw,
-    {
-      force: true
-    }
-  );
-
-  await fs.rm(
-    exact,
-    {
-      force: true
-    }
+  progressJob(
+    jobId,
+    100,
+    "Video ready."
   );
 
   return {
-    id,
-    url:
-      `/outputs/${path.basename(finalFile)}`,
-    absolutePath:
-      finalFile,
-    duration:
-      finalDuration ||
-      seconds
+    url: publicUrl(finalName),
+    file: finalName,
+    duration: safeDuration,
+    format
   };
-}
-
-/* =========================================================
-   JOB CREATION
-========================================================= */
-
-function createJob(
-  userId,
-  type,
-  payload
-) {
-  const id =
-    randomUUID();
-
-  const job = {
-    id,
-    userId,
-    type,
-    status:
-      "queued",
-    progress: 5,
-    message:
-      "Job queued...",
-    createdAt:
-      new Date().toISOString(),
-    updatedAt:
-      new Date().toISOString(),
-    payload,
-    result: null,
-    error: null
-  };
-
-  jobs.set(
-    id,
-    job
-  );
-
-  return job;
-}
-
-function updateJob(
-  job,
-  values
-) {
-  Object.assign(
-    job,
-    values,
-    {
-      updatedAt:
-        new Date().toISOString()
-    }
-  );
-}
-
-async function runGenerationJob(
-  job
-) {
-  try {
-    updateJob(
-      job,
-      {
-        status:
-          "generating",
-        progress:
-          10,
-        message:
-          "Preparing AI generation..."
-      }
-    );
-
-    const result =
-      await generateVideo({
-        prompt:
-          job.payload.prompt,
-        imageUrl:
-          job.payload.imageUrl,
-        duration:
-          job.payload.duration,
-        ratio:
-          job.payload.ratio,
-        job
-      });
-
-    updateJob(
-      job,
-      {
-        status:
-          "completed",
-        progress:
-          100,
-        message:
-          "Video ready.",
-        result
-      }
-    );
-
-    await recordUsage(
-      job.userId,
-      job.type,
-      {
-        duration:
-          result.duration
-      }
-    );
-
-    await security(
-      "VIDEO_GENERATED",
-      {
-        userId:
-          job.userId,
-        jobId:
-          job.id,
-        type:
-          job.type,
-        duration:
-          result.duration
-      }
-    );
-  } catch (e) {
-    updateJob(
-      job,
-      {
-        status:
-          "failed",
-        progress:
-          100,
-        message:
-          e.message ||
-          "Video generation failed.",
-        error:
-          e.message ||
-          String(e)
-      }
-    );
-
-    await errorLog(
-      e,
-      {
-        route:
-          "video-generation",
-        userId:
-          job.userId,
-        jobId:
-          job.id
-      }
-    );
-  }
 }
 
 /* =========================================================
@@ -2089,299 +1276,140 @@ async function runGenerationJob(
 app.post(
   "/api/generate",
   requireUser,
+  upload.single("image"),
   async (req, res) => {
+    const jobId = randomUUID();
+
     try {
-      const prompt =
-        String(
-          req.body.prompt || ""
-        ).trim();
+      const prompt = String(
+        req.body.prompt || ""
+      ).trim();
 
-      const imageUrl =
-        String(
-          req.body.imageUrl || ""
-        ).trim();
+      const duration = normalizeDuration(
+        req.body.duration
+      );
 
-      const duration =
-        normalizeDuration(
-          req.body.duration
-        );
-
-      const ratio =
-        ["16:9", "9:16", "1:1"]
-          .includes(
-            String(req.body.ratio)
-          )
-          ? String(req.body.ratio)
-          : "16:9";
+      const format =
+        req.body.format === "9:16"
+          ? "9:16"
+          : req.body.format === "1:1"
+            ? "1:1"
+            : "16:9";
 
       if (!prompt) {
         return res.status(400).json({
           ok: false,
-          error:
-            "PROMPT_REQUIRED",
-          message:
-            "Enter a prompt."
+          error: "PROMPT_REQUIRED"
         });
       }
 
-      const type =
-        imageUrl
-          ? "i2v"
-          : "t2v";
-
-      const job =
-        createJob(
-          req.user.id,
-          type,
-          {
-            prompt,
-            imageUrl,
-            duration,
-            ratio
-          }
-        );
-
-      runGenerationJob(
-        job
-      );
-
-      return res.json({
-        ok: true,
-        jobId:
-          job.id,
-        status:
-          job.status
-      });
-    } catch (e) {
-      await errorLog(e, {
-        route:
-          "/api/generate"
+      jobs.set(jobId, {
+        id: jobId,
+        userId: req.user.id,
+        type: req.file
+          ? "image-to-video"
+          : "text-to-video",
+        status: "processing",
+        progress: 0,
+        message: "Starting...",
+        createdAt: new Date().toISOString()
       });
 
-      return res.status(500).json({
-        ok: false,
-        error:
-          "GENERATION_ERROR"
-      });
-    }
-  }
-);
+      let imageUrl = null;
 
-app.post(
-  "/api/generate/text",
-  requireUser,
-  async (req, res) => {
-    req.body.imageUrl =
-      "";
+      if (req.file) {
+        const destinationName =
+          `${jobId}-${safeFileName(req.file.originalname)}`;
 
-    return app._router
-      ? (() => {
-          const prompt =
-            String(
-              req.body.prompt || ""
-            ).trim();
-
-          const duration =
-            normalizeDuration(
-              req.body.duration
-            );
-
-          const ratio =
-            ["16:9", "9:16", "1:1"]
-              .includes(
-                String(
-                  req.body.ratio
-                )
-              )
-              ? String(
-                  req.body.ratio
-                )
-              : "16:9";
-
-          if (!prompt) {
-            return res.status(400).json({
-              ok: false,
-              error:
-                "PROMPT_REQUIRED"
-            });
-          }
-
-          const job =
-            createJob(
-              req.user.id,
-              "t2v",
-              {
-                prompt,
-                imageUrl: "",
-                duration,
-                ratio
-              }
-            );
-
-          runGenerationJob(
-            job
-          );
-
-          return res.json({
-            ok: true,
-            jobId:
-              job.id
-          });
-        })()
-      : null;
-  }
-);
-
-/* =========================================================
-   IMAGE UPLOAD / IMAGE TO VIDEO
-========================================================= */
-
-app.post(
-  "/api/generate/image",
-  requireUser,
-  upload.single("image"),
-  async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "IMAGE_REQUIRED"
-        });
-      }
-
-      /*
-       * Replicate's I2V endpoint requires an image URL.
-       * For this free deployment we expose the uploaded image
-       * through the output server after moving it there.
-       */
-
-      const id =
-        randomUUID();
-
-      const extension =
-        path.extname(
-          req.file.originalname ||
-          ""
-        ) || ".jpg";
-
-      const destination =
-        path.join(
+        const destination = path.join(
           OUTPUTS,
-          `source-${id}${extension}`
+          destinationName
         );
 
-      await fs.rename(
-        req.file.path,
-        destination
-      );
-
-      const publicUrl =
-        `${APP_URL}/outputs/${path.basename(destination)}`;
-
-      const prompt =
-        String(
-          req.body.prompt ||
-          "Create a cinematic video from this image."
-        ).trim();
-
-      const duration =
-        normalizeDuration(
-          req.body.duration
-        );
-
-      const ratio =
-        ["16:9", "9:16", "1:1"]
-          .includes(
-            String(req.body.ratio)
-          )
-          ? String(req.body.ratio)
-          : "16:9";
-
-      const job =
-        createJob(
-          req.user.id,
-          "i2v",
-          {
-            prompt,
-            imageUrl:
-              publicUrl,
-            duration,
-            ratio
-          }
-        );
-
-      runGenerationJob(
-        job
-      );
-
-      return res.json({
-        ok: true,
-        jobId:
-          job.id,
-        imageUrl:
-          publicUrl
-      });
-    } catch (e) {
-      await errorLog(e, {
-        route:
-          "/api/generate/image"
-      });
-
-      if (req.file?.path) {
-        await fs.rm(
+        await fs.rename(
           req.file.path,
-          {
-            force: true
-          }
-        ).catch(() => {});
+          destination
+        );
+
+        imageUrl = publicUrl(destinationName);
       }
 
-      return res.status(500).json({
+      res.json({
+        ok: true,
+        jobId,
+        status: "processing"
+      });
+
+      generateVideo({
+        prompt,
+        duration,
+        format,
+        imageUrl,
+        jobId
+      })
+        .then(async result => {
+          const job = jobs.get(jobId);
+
+          if (job) {
+            job.status = "completed";
+            job.progress = 100;
+            job.result = result;
+            job.completedAt =
+              new Date().toISOString();
+          }
+
+          await addUsage(
+            req.user.id,
+            "videoGeneration",
+            1
+          );
+        })
+        .catch(async error => {
+          const job = jobs.get(jobId);
+
+          if (job) {
+            job.status = "failed";
+            job.progress = 100;
+            job.message =
+              error.message || "Generation failed.";
+            job.error =
+              error.message || "Generation failed.";
+          }
+
+          await errorLog(error, {
+            route: "/api/generate",
+            userId: req.user.id,
+            jobId
+          });
+        });
+    } catch (error) {
+      await errorLog(error, {
+        route: "/api/generate"
+      });
+
+      res.status(500).json({
         ok: false,
-        error:
-          "IMAGE_GENERATION_ERROR",
-        message:
-          e.message
+        error: "GENERATION_ERROR",
+        message: error.message
       });
     }
   }
 );
-
-/* =========================================================
-   JOB STATUS
-========================================================= */
 
 app.get(
   "/api/jobs/:id",
   requireUser,
   async (req, res) => {
-    const job =
-      jobs.get(
-        req.params.id
-      );
+    const job = jobs.get(req.params.id);
 
-    if (!job) {
+    if (!job || job.userId !== req.user.id) {
       return res.status(404).json({
         ok: false,
-        error:
-          "JOB_NOT_FOUND"
+        error: "JOB_NOT_FOUND"
       });
     }
 
-    if (
-      job.userId !==
-      req.user.id &&
-      req.user.role !== "admin"
-    ) {
-      return res.status(403).json({
-        ok: false,
-        error:
-          "FORBIDDEN"
-      });
-    }
-
-    return res.json({
+    res.json({
       ok: true,
       job
     });
@@ -2392,302 +1420,81 @@ app.get(
   "/api/jobs",
   requireUser,
   async (req, res) => {
-    const list =
-      [...jobs.values()]
-        .filter(
-          job =>
-            job.userId ===
-              req.user.id ||
-            req.user.role ===
-              "admin"
-        )
-        .sort(
-          (a, b) =>
-            Date.parse(
-              b.createdAt
-            ) -
-            Date.parse(
-              a.createdAt
-            )
-        );
+    const result = [...jobs.values()]
+      .filter(j => j.userId === req.user.id)
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt) -
+          new Date(a.createdAt)
+      );
 
-    return res.json({
+    res.json({
       ok: true,
-      jobs: list
+      jobs: result.slice(0, 100)
     });
   }
 );
 
 /* =========================================================
-   PROJECTS
+   NARRATION
 ========================================================= */
 
-async function projectFile(
-  id
-) {
-  return path.join(
-    PROJECTS,
-    `${safeName(id)}.json`
-  );
-}
-
-app.get(
-  "/api/projects",
-  requireUser,
-  async (req, res) => {
-    try {
-      const files =
-        await fs.readdir(
-          PROJECTS
-        );
-
-      const projects = [];
-
-      for (const file of files) {
-        if (
-          !file.endsWith(".json")
-        ) {
-          continue;
-        }
-
-        const project =
-          await readJSON(
-            path.join(
-              PROJECTS,
-              file
-            ),
-            null
-          );
-
-        if (
-          project &&
-          project.userId ===
-            req.user.id
-        ) {
-          projects.push(
-            project
-          );
-        }
-      }
-
-      projects.sort(
-        (a, b) =>
-          Date.parse(
-            b.updatedAt ||
-              b.createdAt ||
-              0
-          ) -
-          Date.parse(
-            a.updatedAt ||
-              a.createdAt ||
-              0
-          )
-      );
-
-      return res.json({
-        ok: true,
-        projects
-      });
-    } catch (e) {
-      await errorLog(e);
-
-      return res.status(500).json({
-        ok: false,
-        error:
-          "PROJECT_LIST_ERROR"
-      });
-    }
-  }
-);
-
 app.post(
-  "/api/projects",
+  "/api/narration",
   requireUser,
   async (req, res) => {
-    try {
-      const id =
-        randomUUID();
+    const text = String(
+      req.body.text || ""
+    ).trim();
 
-      const now =
-        new Date().toISOString();
-
-      const project = {
-        id,
-        userId:
-          req.user.id,
-        name:
-          String(
-            req.body.name ||
-            "Untitled MAMAKI Project"
-          ).slice(0, 150),
-        data:
-          req.body.data ||
-          {},
-        createdAt:
-          now,
-        updatedAt:
-          now
-      };
-
-      await writeJSON(
-        await projectFile(id),
-        project
-      );
-
-      return res.json({
-        ok: true,
-        project
-      });
-    } catch (e) {
-      await errorLog(e);
-
-      return res.status(500).json({
+    if (!text) {
+      return res.status(400).json({
         ok: false,
-        error:
-          "PROJECT_CREATE_ERROR"
-      });
-    }
-  }
-);
-
-app.get(
-  "/api/projects/:id",
-  requireUser,
-  async (req, res) => {
-    const project =
-      await readJSON(
-        await projectFile(
-          req.params.id
-        ),
-        null
-      );
-
-    if (
-      !project ||
-      project.userId !==
-        req.user.id
-    ) {
-      return res.status(404).json({
-        ok: false,
-        error:
-          "PROJECT_NOT_FOUND"
+        error: "TEXT_REQUIRED"
       });
     }
 
-    return res.json({
-      ok: true,
-      project
-    });
-  }
-);
+    const id = randomUUID();
 
-app.put(
-  "/api/projects/:id",
-  requireUser,
-  async (req, res) => {
-    try {
-      const file =
-        await projectFile(
-          req.params.id
-        );
-
-      const project =
-        await readJSON(
-          file,
-          null
-        );
-
-      if (
-        !project ||
-        project.userId !==
-          req.user.id
-      ) {
-        return res.status(404).json({
-          ok: false,
-          error:
-            "PROJECT_NOT_FOUND"
-        });
-      }
-
-      if (
-        req.body.name !==
-        undefined
-      ) {
-        project.name =
-          String(
-            req.body.name
-          ).slice(0, 150);
-      }
-
-      if (
-        req.body.data !==
-        undefined
-      ) {
-        project.data =
-          req.body.data;
-      }
-
-      project.updatedAt =
-        new Date().toISOString();
-
-      await writeJSON(
-        file,
-        project
-      );
-
-      return res.json({
-        ok: true,
-        project
-      });
-    } catch (e) {
-      await errorLog(e);
-
-      return res.status(500).json({
-        ok: false,
-        error:
-          "PROJECT_UPDATE_ERROR"
-      });
-    }
-  }
-);
-
-app.delete(
-  "/api/projects/:id",
-  requireUser,
-  async (req, res) => {
-    const file =
-      await projectFile(
-        req.params.id
-      );
-
-    const project =
-      await readJSON(
-        file,
-        null
-      );
-
-    if (
-      !project ||
-      project.userId !==
-        req.user.id
-    ) {
-      return res.status(404).json({
-        ok: false,
-        error:
-          "PROJECT_NOT_FOUND"
-      });
-    }
-
-    await fs.rm(
-      file,
-      {
-        force: true
-      }
+    const output = path.join(
+      OUTPUTS,
+      `${id}.mp3`
     );
 
-    return res.json({
-      ok: true
-    });
+    try {
+      const tts = new EdgeTTS();
+
+      await tts.synthesize(
+        text,
+        "en-US-EmmaMultilingualNeural",
+        {
+          rate: "+0%",
+          pitch: "+0Hz"
+        },
+        output
+      );
+
+      await addUsage(
+        req.user.id,
+        "narration",
+        1
+      );
+
+      res.json({
+        ok: true,
+        url: publicUrl(`${id}.mp3`)
+      });
+    } catch (error) {
+      await errorLog(error, {
+        route: "/api/narration"
+      });
+
+      res.status(500).json({
+        ok: false,
+        error: "NARRATION_ERROR",
+        message: error.message
+      });
+    }
   }
 );
 
@@ -2700,104 +1507,61 @@ app.post(
   requireUser,
   upload.single("video"),
   async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({
+        ok: false,
+        error: "VIDEO_REQUIRED"
+      });
+    }
+
+    const start = Math.max(
+      0,
+      Number(req.body.start || 0)
+    );
+
+    const duration = Math.max(
+      0.1,
+      Number(req.body.duration || 5)
+    );
+
+    const id = randomUUID();
+    const outputName = `${id}-trim.mp4`;
+
     try {
-      if (!req.file) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "VIDEO_REQUIRED"
-        });
-      }
-
-      const start =
-        Math.max(
-          0,
-          Number(
-            req.body.start || 0
-          )
-        );
-
-      const end =
-        Number(
-          req.body.end || 0
-        );
-
-      const id =
-        randomUUID();
-
-      const output =
-        path.join(
-          OUTPUTS,
-          `${id}-trim.mp4`
-        );
-
-      const args = [
+      await runFFmpeg([
         "-y",
         "-ss",
         String(start),
         "-i",
-        req.file.path
-      ];
-
-      if (
-        Number.isFinite(end) &&
-        end > start
-      ) {
-        args.push(
-          "-t",
-          String(end - start)
-        );
-      }
-
-      args.push(
+        req.file.path,
+        "-t",
+        String(duration),
         "-c:v",
         "libx264",
         "-preset",
         "veryfast",
         "-c:a",
         "aac",
-        "-movflags",
-        "+faststart",
-        output
-      );
+        path.join(OUTPUTS, outputName)
+      ]);
 
-      await runFFmpeg(args);
-
-      await fs.rm(
-        req.file.path,
-        {
-          force: true
-        }
-      );
-
-      await recordUsage(
-        req.user.id,
-        "studio"
-      );
-
-      return res.json({
-        ok: true,
-        url:
-          `/outputs/${path.basename(output)}`
+      await fs.rm(req.file.path, {
+        force: true
       });
-    } catch (e) {
-      await errorLog(e);
 
-      if (req.file?.path) {
-        await fs.rm(
-          req.file.path,
-          {
-            force: true
-          }
-        ).catch(() => {});
-      }
+      res.json({
+        ok: true,
+        url: publicUrl(outputName)
+      });
+    } catch (error) {
+      await errorLog(error, {
+        route: "/api/studio/trim"
+      });
 
-      return res.status(500).json({
+      res.status(500).json({
         ok: false,
-        error:
-          "TRIM_ERROR",
-        message:
-          e.message
+        error: "TRIM_ERROR",
+        message: error.message
       });
     }
   }
@@ -2808,24 +1572,17 @@ app.post(
   requireUser,
   upload.single("video"),
   async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({
+        ok: false,
+        error: "VIDEO_REQUIRED"
+      });
+    }
+
+    const id = randomUUID();
+    const outputName = `${id}-mute.mp4`;
+
     try {
-      if (!req.file) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "VIDEO_REQUIRED"
-        });
-      }
-
-      const id =
-        randomUUID();
-
-      const output =
-        path.join(
-          OUTPUTS,
-          `${id}-mute.mp4`
-        );
-
       await runFFmpeg([
         "-y",
         "-i",
@@ -2833,35 +1590,26 @@ app.post(
         "-c:v",
         "copy",
         "-an",
-        output
+        path.join(OUTPUTS, outputName)
       ]);
 
-      await fs.rm(
-        req.file.path,
-        {
-          force: true
-        }
-      );
-
-      await recordUsage(
-        req.user.id,
-        "studio"
-      );
-
-      return res.json({
-        ok: true,
-        url:
-          `/outputs/${path.basename(output)}`
+      await fs.rm(req.file.path, {
+        force: true
       });
-    } catch (e) {
-      await errorLog(e);
 
-      return res.status(500).json({
+      res.json({
+        ok: true,
+        url: publicUrl(outputName)
+      });
+    } catch (error) {
+      await errorLog(error, {
+        route: "/api/studio/mute"
+      });
+
+      res.status(500).json({
         ok: false,
-        error:
-          "MUTE_ERROR",
-        message:
-          e.message
+        error: "MUTE_ERROR",
+        message: error.message
       });
     }
   }
@@ -2870,43 +1618,29 @@ app.post(
 app.post(
   "/api/studio/combine",
   requireUser,
-  upload.array(
-    "videos",
-    20
-  ),
+  upload.array("videos", 20),
   async (req, res) => {
+    if (!req.files || req.files.length < 2) {
+      return res.status(400).json({
+        ok: false,
+        error: "TWO_VIDEOS_REQUIRED"
+      });
+    }
+
+    const id = randomUUID();
+    const listFile = path.join(
+      TMP,
+      `${id}-concat.txt`
+    );
+
+    const outputName =
+      `${id}-combined.mp4`;
+
     try {
-      const files =
-        req.files || [];
-
-      if (files.length < 2) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "TWO_VIDEOS_REQUIRED"
-        });
-      }
-
-      const id =
-        randomUUID();
-
-      const listFile =
-        path.join(
-          TMP,
-          `${id}-concat.txt`
-        );
-
-      const output =
-        path.join(
-          OUTPUTS,
-          `${id}-combined.mp4`
-        );
-
-      const lines =
-        files.map(
-          file =>
-            `file '${file.path.replace(/'/g, "'\\''")}'`
-        );
+      const lines = req.files.map(
+        file =>
+          `file '${file.path.replace(/'/g, "'\\''")}'`
+      );
 
       await fs.writeFile(
         listFile,
@@ -2928,93 +1662,60 @@ app.post(
         "veryfast",
         "-c:a",
         "aac",
-        "-movflags",
-        "+faststart",
-        output
+        path.join(OUTPUTS, outputName)
       ]);
 
-      for (const file of files) {
-        await fs.rm(
-          file.path,
-          {
-            force: true
-          }
-        );
+      for (const file of req.files) {
+        await fs.rm(file.path, {
+          force: true
+        });
       }
 
-      await fs.rm(
-        listFile,
-        {
-          force: true
-        }
-      );
-
-      await recordUsage(
-        req.user.id,
-        "studio"
-      );
-
-      return res.json({
-        ok: true,
-        url:
-          `/outputs/${path.basename(output)}`
+      await fs.rm(listFile, {
+        force: true
       });
-    } catch (e) {
-      await errorLog(e);
 
-      return res.status(500).json({
+      res.json({
+        ok: true,
+        url: publicUrl(outputName)
+      });
+    } catch (error) {
+      await errorLog(error, {
+        route: "/api/studio/combine"
+      });
+
+      res.status(500).json({
         ok: false,
-        error:
-          "COMBINE_ERROR",
-        message:
-          e.message
+        error: "COMBINE_ERROR",
+        message: error.message
       });
     }
   }
 );
 
-/* =========================================================
-   MUSIC
-========================================================= */
-
 app.post(
   "/api/studio/add-music",
   requireUser,
   upload.fields([
-    {
-      name: "video",
-      maxCount: 1
-    },
-    {
-      name: "music",
-      maxCount: 1
-    }
+    { name: "video", maxCount: 1 },
+    { name: "music", maxCount: 1 }
   ]),
   async (req, res) => {
+    const video = req.files?.video?.[0];
+    const music = req.files?.music?.[0];
+
+    if (!video || !music) {
+      return res.status(400).json({
+        ok: false,
+        error: "VIDEO_AND_MUSIC_REQUIRED"
+      });
+    }
+
+    const id = randomUUID();
+    const outputName =
+      `${id}-music.mp4`;
+
     try {
-      const video =
-        req.files?.video?.[0];
-
-      const music =
-        req.files?.music?.[0];
-
-      if (!video || !music) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "VIDEO_AND_MUSIC_REQUIRED"
-        });
-      }
-
-      const id =
-        randomUUID();
-
-      const output =
-        path.join(
-          OUTPUTS,
-          `${id}-music.mp4`
-        );
-
       await runFFmpeg([
         "-y",
         "-i",
@@ -3024,203 +1725,279 @@ app.post(
         "-i",
         music.path,
         "-map",
-        "0:v:0",
+        "0:v",
         "-map",
-        "1:a:0",
-        "-shortest",
+        "1:a",
         "-c:v",
         "copy",
         "-c:a",
         "aac",
-        "-movflags",
-        "+faststart",
-        output
+        "-shortest",
+        path.join(OUTPUTS, outputName)
       ]);
 
-      await fs.rm(
-        video.path,
-        {
-          force: true
-        }
-      );
-
-      await fs.rm(
-        music.path,
-        {
-          force: true
-        }
-      );
-
-      await recordUsage(
-        req.user.id,
-        "studio"
-      );
-
-      return res.json({
-        ok: true,
-        url:
-          `/outputs/${path.basename(output)}`
+      await fs.rm(video.path, {
+        force: true
       });
-    } catch (e) {
-      await errorLog(e);
 
-      return res.status(500).json({
+      await fs.rm(music.path, {
+        force: true
+      });
+
+      res.json({
+        ok: true,
+        url: publicUrl(outputName)
+      });
+    } catch (error) {
+      await errorLog(error, {
+        route: "/api/studio/add-music"
+      });
+
+      res.status(500).json({
         ok: false,
-        error:
-          "MUSIC_ERROR",
-        message:
-          e.message
+        error: "MUSIC_ERROR",
+        message: error.message
       });
     }
   }
 );
 
 /* =========================================================
-   NARRATION
+   PROJECTS
 ========================================================= */
 
-app.post(
-  "/api/narration",
+app.get(
+  "/api/projects",
   requireUser,
   async (req, res) => {
-    try {
-      const text =
-        String(
-          req.body.text || ""
-        ).trim();
+    const list = [];
 
-      if (!text) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "TEXT_REQUIRED"
-        });
+    if (await exists(PROJECTS)) {
+      const files = await fs.readdir(
+        PROJECTS
+      );
+
+      for (const file of files) {
+        if (!file.endsWith(".json")) continue;
+
+        const data = await readJSON(
+          path.join(PROJECTS, file),
+          null
+        );
+
+        if (
+          data &&
+          data.userId === req.user.id
+        ) {
+          list.push(data);
+        }
       }
+    }
 
-      const id =
-        randomUUID();
+    list.sort(
+      (a, b) =>
+        new Date(b.updatedAt || b.createdAt) -
+        new Date(a.updatedAt || a.createdAt)
+    );
 
-      const output =
-        path.join(
-          OUTPUTS,
-          `${id}-narration.mp3`
-        );
+    res.json({
+      ok: true,
+      projects: list
+    });
+  }
+);
 
-      const voice =
-        String(
-          req.body.voice ||
-          "en-US-EmmaMultilingualNeural"
-        );
+app.post(
+  "/api/projects",
+  requireUser,
+  async (req, res) => {
+    const id = randomUUID();
 
-      const tts =
-        new EdgeTTS({
-          voice
-        });
+    const project = {
+      id,
+      userId: req.user.id,
+      name:
+        String(req.body.name || "Untitled Project")
+          .trim()
+          .slice(0, 150),
+      data: req.body.data || {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
 
-      await tts.synthesizeToFile(
-        text,
-        output
-      );
+    await writeJSON(
+      path.join(PROJECTS, `${id}.json`),
+      project
+    );
 
-      await recordUsage(
-        req.user.id,
-        "narration"
-      );
+    res.json({
+      ok: true,
+      project
+    });
+  }
+);
 
-      return res.json({
-        ok: true,
-        url:
-          `/outputs/${path.basename(output)}`
-      });
-    } catch (e) {
-      await errorLog(e);
+app.get(
+  "/api/projects/:id",
+  requireUser,
+  async (req, res) => {
+    const file = path.join(
+      PROJECTS,
+      `${req.params.id}.json`
+    );
 
-      return res.status(500).json({
+    const project = await readJSON(
+      file,
+      null
+    );
+
+    if (
+      !project ||
+      project.userId !== req.user.id
+    ) {
+      return res.status(404).json({
         ok: false,
-        error:
-          "NARRATION_ERROR",
-        message:
-          e.message
+        error: "PROJECT_NOT_FOUND"
       });
     }
+
+    res.json({
+      ok: true,
+      project
+    });
+  }
+);
+
+app.put(
+  "/api/projects/:id",
+  requireUser,
+  async (req, res) => {
+    const file = path.join(
+      PROJECTS,
+      `${req.params.id}.json`
+    );
+
+    const project = await readJSON(
+      file,
+      null
+    );
+
+    if (
+      !project ||
+      project.userId !== req.user.id
+    ) {
+      return res.status(404).json({
+        ok: false,
+        error: "PROJECT_NOT_FOUND"
+      });
+    }
+
+    project.name =
+      String(
+        req.body.name ||
+          project.name ||
+          "Untitled Project"
+      ).slice(0, 150);
+
+    project.data =
+      req.body.data ?? project.data;
+
+    project.updatedAt =
+      new Date().toISOString();
+
+    await writeJSON(file, project);
+
+    res.json({
+      ok: true,
+      project
+    });
+  }
+);
+
+app.delete(
+  "/api/projects/:id",
+  requireUser,
+  async (req, res) => {
+    const file = path.join(
+      PROJECTS,
+      `${req.params.id}.json`
+    );
+
+    const project = await readJSON(
+      file,
+      null
+    );
+
+    if (
+      !project ||
+      project.userId !== req.user.id
+    ) {
+      return res.status(404).json({
+        ok: false,
+        error: "PROJECT_NOT_FOUND"
+      });
+    }
+
+    await fs.rm(file, {
+      force: true
+    });
+
+    res.json({
+      ok: true
+    });
   }
 );
 
 /* =========================================================
    ADMIN LOGIN
-   THIS IS THE IMPORTANT FIX
-
-   Allows:
-   1. ADMIN_EMAIL + ADMIN_PASSWORD from Render
-   2. Existing account credentials AFTER that account
-      has administrator role
-   3. Master credentials repair/promote the existing account
-   4. Old admin sessions are removed
+   IMPORTANT: THIS FIXES THE ADMIN ACCOUNT PROBLEM
 ========================================================= */
 
 app.post(
   "/api/admin/login",
   async (req, res) => {
     try {
-      const mail =
-        email(
-          req.body.email
-        );
+      const mail = cleanEmail(
+        req.body.email
+      );
 
-      const password =
-        String(
-          req.body.password || ""
-        );
+      const password = String(
+        req.body.password || ""
+      );
 
       if (!mail || !password) {
         return res.status(400).json({
           ok: false,
-          error:
-            "MISSING_CREDENTIALS",
-          message:
-            "Administrator email and password are required."
+          error: "EMAIL_AND_PASSWORD_REQUIRED"
         });
       }
 
-      if (
-        !ADMIN_EMAIL ||
-        !ADMIN_PASSWORD
-      ) {
+      if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
         return res.status(503).json({
           ok: false,
-          error:
-            "ADMIN_NOT_CONFIGURED",
+          error: "ADMIN_NOT_CONFIGURED",
           message:
-            "Admin environment variables are not configured in Render."
+            "ADMIN_EMAIL and ADMIN_PASSWORD are not configured in Render."
         });
       }
 
-      const users =
-        await readJSON(
-          USERS,
-          {}
-        );
+      const users = await readJSON(
+        USERS,
+        {}
+      );
 
-      let admin =
-        Object.values(
-          users
-        ).find(
-          u =>
-            email(u.email) ===
-            mail
-        );
+      let admin = Object.values(users).find(
+        u => cleanEmail(u.email) === mail
+      );
 
       const masterCredentialsValid =
-        mail ===
-          ADMIN_EMAIL &&
-        password ===
-          ADMIN_PASSWORD;
+        mail === ADMIN_EMAIL &&
+        password === ADMIN_PASSWORD;
 
       const existingAdminValid =
         Boolean(
           admin &&
-          admin.role ===
-            "admin" &&
+          admin.role === "admin" &&
           !admin.disabled &&
           verifyPassword(
             password,
@@ -3236,74 +2013,54 @@ app.post(
         await security(
           "ADMIN_LOGIN_FAILED",
           {
-            email:
-              mail,
-            reason:
-              "INVALID_ADMIN_CREDENTIALS"
+            email: mail,
+            reason: "INVALID_ADMIN_CREDENTIALS"
           }
         );
 
         return res.status(401).json({
           ok: false,
-          error:
-            "INVALID_ADMIN_CREDENTIALS",
+          error: "INVALID_ADMIN_CREDENTIALS",
           message:
             "Invalid administrator credentials."
         });
       }
 
       /*
-       * MASTER LOGIN
+       * MASTER ADMIN LOGIN
        *
-       * If the administrator email already belongs to an
-       * account, repair/promote that account.
+       * If the Render master account already exists,
+       * repair it and make sure it is really an admin.
        *
-       * The Render ADMIN_PASSWORD becomes the password for
-       * the repaired administrator account.
+       * If it does not exist, create it.
        */
 
-      if (
-        masterCredentialsValid
-      ) {
+      if (masterCredentialsValid) {
         if (admin) {
           const hp =
             hashPassword(
               ADMIN_PASSWORD
             );
 
-          admin.email =
-            ADMIN_EMAIL;
-
-          admin.role =
-            "admin";
-
-          admin.disabled =
-            false;
-
-          admin.salt =
-            hp.salt;
-
-          admin.hash =
-            hp.hash;
-
+          admin.email = ADMIN_EMAIL;
+          admin.role = "admin";
+          admin.disabled = false;
+          admin.salt = hp.salt;
+          admin.hash = hp.hash;
           admin.lastLoginAt =
             new Date().toISOString();
 
-          users[admin.id] =
-            admin;
+          users[admin.id] = admin;
 
           await security(
             "ADMIN_ACCOUNT_REPAIRED",
             {
-              userId:
-                admin.id,
-              email:
-                admin.email
+              userId: admin.id,
+              email: admin.email
             }
           );
         } else {
-          const id =
-            randomUUID();
+          const id = randomUUID();
 
           const hp =
             hashPassword(
@@ -3312,60 +2069,46 @@ app.post(
 
           admin = {
             id,
-            name:
-              "MAMAKI Administrator",
-            email:
-              ADMIN_EMAIL,
+            name: "MAMAKI Administrator",
+            email: ADMIN_EMAIL,
             ...hp,
-            role:
-              "admin",
-            disabled:
-              false,
+            role: "admin",
+            disabled: false,
             createdAt:
               new Date().toISOString(),
             lastLoginAt:
               new Date().toISOString()
           };
 
-          users[id] =
-            admin;
+          users[id] = admin;
 
           await security(
             "ADMIN_ACCOUNT_RESTORED",
             {
-              userId:
-                admin.id,
-              email:
-                admin.email
+              userId: admin.id,
+              email: admin.email
             }
           );
         }
       }
 
-      /*
-       * Existing administrator login.
-       *
-       * Do NOT replace its password when the stored admin
-       * password was used.
-       */
-
-      admin.role =
-        "admin";
-
-      admin.disabled =
-        false;
-
+      admin.role = "admin";
+      admin.disabled = false;
       admin.lastLoginAt =
         new Date().toISOString();
 
-      users[admin.id] =
-        admin;
+      users[admin.id] = admin;
 
       await writeJSON(
         USERS,
         users
       );
 
+      /*
+       * Remove old/stale admin sessions.
+       * This prevents an old broken token from
+       * interfering with the new dashboard login.
+       */
       await destroyUserSessions(
         admin.id
       );
@@ -3379,10 +2122,8 @@ app.post(
       await security(
         "ADMIN_LOGIN_SUCCESS",
         {
-          userId:
-            admin.id,
-          email:
-            admin.email,
+          userId: admin.id,
+          email: admin.email,
           method:
             masterCredentialsValid
               ? "MASTER_CREDENTIALS"
@@ -3390,33 +2131,24 @@ app.post(
         }
       );
 
-      return res.json({
+      res.json({
         ok: true,
         token,
         user: {
-          id:
-            admin.id,
-          name:
-            admin.name,
-          email:
-            admin.email,
-          role:
-            "admin"
+          id: admin.id,
+          name: admin.name,
+          email: admin.email,
+          role: "admin"
         }
       });
-    } catch (e) {
-      await errorLog(
-        e,
-        {
-          route:
-            "/api/admin/login"
-        }
-      );
+    } catch (error) {
+      await errorLog(error, {
+        route: "/api/admin/login"
+      });
 
-      return res.status(500).json({
+      res.status(500).json({
         ok: false,
-        error:
-          "ADMIN_LOGIN_ERROR",
+        error: "ADMIN_LOGIN_ERROR",
         message:
           "Administrator login failed."
       });
@@ -3424,172 +2156,146 @@ app.post(
   }
 );
 
+app.post(
+  "/api/admin/logout",
+  requireAdmin,
+  async (req, res) => {
+    await destroyUserSessions(
+      req.user.id
+    );
+
+    res.json({
+      ok: true
+    });
+  }
+);
+
 /* =========================================================
-   ADMIN STATS
+   ADMIN API
 ========================================================= */
 
 app.get(
   "/api/admin/stats",
   requireAdmin,
   async (req, res) => {
-    try {
-      const users =
-        await readJSON(
-          USERS,
-          {}
-        );
+    const users = await readJSON(
+      USERS,
+      {}
+    );
 
-      const usage =
-        await readJSON(
-          USAGE,
-          {}
-        );
+    const usage = await readJSON(
+      USAGE,
+      {}
+    );
 
-      const errors =
-        await readJSON(
-          ERRORS,
-          []
-        );
+    const userList =
+      Object.values(users);
 
-      const securityLogs =
-        await readJSON(
-          SECURITY,
-          []
-        );
+    let generatedVideos = 0;
+    let narrations = 0;
 
-      const userList =
-        Object.values(users);
-
-      let totalGenerations =
-        0;
-
-      let totalSeconds =
-        0;
-
-      for (const value of
-        Object.values(usage)) {
-        totalGenerations +=
+    for (const user of Object.values(
+      usage
+    )) {
+      for (const day of Object.values(
+        user || {}
+      )) {
+        generatedVideos +=
           Number(
-            value.totalGenerations ||
-              0
+            day?.videoGeneration || 0
           );
 
-        totalSeconds +=
+        narrations +=
           Number(
-            value.totalSeconds ||
-              0
+            day?.narration || 0
           );
       }
-
-      return res.json({
-        ok: true,
-        stats: {
-          version:
-            VERSION,
-          users:
-            userList.length,
-          activeUsers:
-            userList.filter(
-              u =>
-                !u.disabled
-            ).length,
-          admins:
-            userList.filter(
-              u =>
-                u.role === "admin"
-            ).length,
-          totalGenerations,
-          totalSeconds,
-          totalHours:
-            totalSeconds / 3600,
-          jobs:
-            jobs.size,
-          errors:
-            errors.length,
-          securityEvents:
-            securityLogs.length,
-          replicate:
-            Boolean(
-              REPLICATE_API_TOKEN
-            ),
-          recovery:
-            Boolean(
-              RESEND_API_KEY &&
-              RESEND_FROM
-            ),
-          admin:
-            Boolean(
-              ADMIN_EMAIL &&
-              ADMIN_PASSWORD
-            )
-        }
-      });
-    } catch (e) {
-      await errorLog(e);
-
-      return res.status(500).json({
-        ok: false,
-        error:
-          "ADMIN_STATS_ERROR"
-      });
     }
+
+    let completed = 0;
+    let processing = 0;
+    let failed = 0;
+
+    for (const job of jobs.values()) {
+      if (job.status === "completed")
+        completed++;
+
+      if (job.status === "processing")
+        processing++;
+
+      if (job.status === "failed")
+        failed++;
+    }
+
+    res.json({
+      ok: true,
+      stats: {
+        version: VERSION,
+        users: userList.length,
+        admins: userList.filter(
+          u => u.role === "admin"
+        ).length,
+        disabledUsers:
+          userList.filter(
+            u => u.disabled
+          ).length,
+        generatedVideos,
+        narrations,
+        jobs: jobs.size,
+        completed,
+        processing,
+        failed,
+        replicateConfigured:
+          Boolean(REPLICATE_API_TOKEN),
+        recoveryConfigured:
+          Boolean(
+            RESEND_API_KEY &&
+            RESEND_FROM
+          ),
+        adminConfigured:
+          Boolean(
+            ADMIN_EMAIL &&
+            ADMIN_PASSWORD
+          )
+      }
+    });
   }
 );
-
-/* =========================================================
-   ADMIN USERS
-========================================================= */
 
 app.get(
   "/api/admin/users",
   requireAdmin,
   async (req, res) => {
-    const users =
-      await readJSON(
-        USERS,
-        {}
-      );
-
-    const usage =
-      await readJSON(
-        USAGE,
-        {}
-      );
+    const users = await readJSON(
+      USERS,
+      {}
+    );
 
     const list =
       Object.values(users)
-        .map(
-          user => ({
-            ...publicUser(user),
-            usage:
-              usage[user.id] ||
-              {
-                totalGenerations:
-                  0,
-                totalSeconds:
-                  0,
-                t2v:
-                  0,
-                i2v:
-                  0,
-                narration:
-                  0,
-                studio:
-                  0
-              }
-          })
-        )
+        .map(user => ({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          disabled: Boolean(
+            user.disabled
+          ),
+          createdAt: user.createdAt,
+          lastLoginAt:
+            user.lastLoginAt
+        }))
         .sort(
           (a, b) =>
-            Date.parse(
-              b.createdAt || 0
+            new Date(
+              b.createdAt
             ) -
-            Date.parse(
-              a.createdAt || 0
+            new Date(
+              a.createdAt
             )
         );
 
-    return res.json({
+    res.json({
       ok: true,
       users: list
     });
@@ -3600,148 +2306,109 @@ app.get(
   "/api/admin/users/:id",
   requireAdmin,
   async (req, res) => {
-    const users =
-      await readJSON(
-        USERS,
-        {}
-      );
-
-    const usage =
-      await readJSON(
-        USAGE,
-        {}
-      );
+    const users = await readJSON(
+      USERS,
+      {}
+    );
 
     const user =
-      users[
-        req.params.id
-      ];
+      users[req.params.id];
 
     if (!user) {
       return res.status(404).json({
         ok: false,
-        error:
-          "USER_NOT_FOUND"
+        error: "USER_NOT_FOUND"
       });
     }
 
-    return res.json({
+    res.json({
       ok: true,
-      user:
-        publicUser(user),
-      usage:
-        usage[user.id] || {}
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        disabled: Boolean(
+          user.disabled
+        ),
+        createdAt: user.createdAt,
+        lastLoginAt:
+          user.lastLoginAt
+      }
     });
   }
 );
-
-/* =========================================================
-   ADMIN DISABLE / ENABLE USER
-========================================================= */
 
 app.post(
   "/api/admin/users/:id/disable",
   requireAdmin,
   async (req, res) => {
-    try {
-      const users =
-        await readJSON(
-          USERS,
-          {}
-        );
+    const users = await readJSON(
+      USERS,
+      {}
+    );
 
-      const user =
-        users[
-          req.params.id
-        ];
+    const user =
+      users[req.params.id];
 
-      if (!user) {
-        return res.status(404).json({
-          ok: false,
-          error:
-            "USER_NOT_FOUND"
-        });
-      }
-
-      if (
-        user.id ===
-        req.user.id
-      ) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "CANNOT_DISABLE_SELF"
-        });
-      }
-
-      if (
-        user.email ===
-        ADMIN_EMAIL
-      ) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "CANNOT_DISABLE_MAIN_ADMIN"
-        });
-      }
-
-      const disabled =
-        req.body.disabled !==
-        undefined
-          ? Boolean(
-              req.body.disabled
-            )
-          : !user.disabled;
-
-      user.disabled =
-        disabled;
-
-      users[user.id] =
-        user;
-
-      await writeJSON(
-        USERS,
-        users
-      );
-
-      if (disabled) {
-        await destroyUserSessions(
-          user.id
-        );
-      }
-
-      await security(
-        disabled
-          ? "USER_DISABLED"
-          : "USER_ENABLED",
-        {
-          adminId:
-            req.user.id,
-          userId:
-            user.id
-        }
-      );
-
-      return res.json({
-        ok: true,
-        user:
-          publicUser(user)
-      });
-    } catch (e) {
-      await errorLog(e);
-
-      return res.status(500).json({
+    if (!user) {
+      return res.status(404).json({
         ok: false,
-        error:
-          "USER_STATUS_ERROR"
+        error: "USER_NOT_FOUND"
       });
     }
+
+    /*
+     * Never allow the main configured
+     * administrator to be disabled.
+     */
+    if (
+      cleanEmail(user.email) ===
+      ADMIN_EMAIL
+    ) {
+      return res.status(400).json({
+        ok: false,
+        error: "MAIN_ADMIN_PROTECTED",
+        message:
+          "The main administrator cannot be disabled."
+      });
+    }
+
+    user.disabled =
+      Boolean(
+        req.body.disabled
+      );
+
+    users[user.id] = user;
+
+    await writeJSON(
+      USERS,
+      users
+    );
+
+    if (user.disabled) {
+      await destroyUserSessions(
+        user.id
+      );
+    }
+
+    await security(
+      user.disabled
+        ? "USER_DISABLED"
+        : "USER_ENABLED",
+      {
+        targetUserId: user.id,
+        adminId: req.user.id
+      }
+    );
+
+    res.json({
+      ok: true,
+      disabled:
+        user.disabled
+    });
   }
 );
-
-/* =========================================================
-   ADMIN JOBS
-========================================================= */
 
 app.get(
   "/api/admin/jobs",
@@ -3751,560 +2418,384 @@ app.get(
       [...jobs.values()]
         .sort(
           (a, b) =>
-            Date.parse(
-              b.createdAt
-            ) -
-            Date.parse(
-              a.createdAt
-            )
-        );
+            new Date(b.createdAt) -
+            new Date(a.createdAt)
+        )
+        .slice(0, 200);
 
-    return res.json({
+    res.json({
       ok: true,
       jobs: list
     });
   }
 );
 
-/* =========================================================
-   ADMIN ERRORS
-========================================================= */
-
 app.get(
   "/api/admin/errors",
   requireAdmin,
   async (req, res) => {
-    const errors =
-      await readJSON(
-        ERRORS,
-        []
-      );
+    const errors = await readJSON(
+      ERRORS,
+      []
+    );
 
-    return res.json({
+    res.json({
       ok: true,
-      errors:
-        Array.isArray(errors)
-          ? errors.slice(0, 500)
-          : []
+      errors: errors.slice(0, 200)
     });
   }
 );
-
-/* =========================================================
-   ADMIN SECURITY
-========================================================= */
 
 app.get(
   "/api/admin/security",
   requireAdmin,
   async (req, res) => {
-    const logs =
-      await readJSON(
-        SECURITY,
-        []
-      );
+    const events = await readJSON(
+      SECURITY,
+      []
+    );
 
-    return res.json({
+    res.json({
       ok: true,
-      security:
-        Array.isArray(logs)
-          ? logs.slice(0, 500)
-          : []
+      events: events.slice(0, 300)
     });
   }
 );
 
 /* =========================================================
-   ADMIN LOGOUT
+   ADMIN DASHBOARD
+   IMPORTANT:
+   NO NESTED BACKTICKS ARE USED HERE.
+   This prevents the previous SyntaxError.
 ========================================================= */
 
-app.post(
-  "/api/admin/logout",
-  async (req, res) => {
-    try {
-      const auth =
-        String(
-          req.headers.authorization ||
-          ""
-        );
+app.get("/admin", async (req, res) => {
+  const adminEmailForBrowser =
+    JSON.stringify(
+      ADMIN_EMAIL || ""
+    );
 
-      if (
-        auth.startsWith(
-          "Bearer "
-        )
-      ) {
-        await destroySession(
-          auth.slice(7).trim()
-        );
-      }
-
-      return res.json({
-        ok: true
-      });
-    } catch {
-      return res.json({
-        ok: true
-      });
-    }
-  }
-);
-
-/* =========================================================
-   HEALTH
-========================================================= */
-
-app.get(
-  "/api/health",
-  async (req, res) => {
-    return res.json({
-      ok: true,
-      app:
-        "MAMAKI AI",
-      version:
-        VERSION,
-      replicate:
-        Boolean(
-          REPLICATE_API_TOKEN
-        ),
-      recovery:
-        Boolean(
-          RESEND_API_KEY &&
-          RESEND_FROM
-        ),
-      admin:
-        Boolean(
-          ADMIN_EMAIL &&
-          ADMIN_PASSWORD
-        ),
-      uptime:
-        process.uptime(),
-      timestamp:
-        new Date().toISOString()
-    });
-  }
-);
-
-app.get(
-  "/api/status",
-  async (req, res) => {
-    return res.json({
-      ok: true,
-      app:
-        "MAMAKI AI",
-      version:
-        VERSION,
-      models: {
-        t2v:
-          T2V_MODEL,
-        i2v:
-          I2V_MODEL
-      },
-      duration: {
-        min:
-          MIN_DURATION,
-        max:
-          MAX_DURATION
-      },
-      features: {
-        textToVideo:
-          Boolean(
-            REPLICATE_API_TOKEN
-          ),
-        imageToVideo:
-          Boolean(
-            REPLICATE_API_TOKEN
-          ),
-        freeStudio:
-          true,
-        narration:
-          true,
-        projects:
-          true,
-        admin:
-          Boolean(
-            ADMIN_EMAIL &&
-            ADMIN_PASSWORD
-          )
-      }
-    });
-  }
-);
-
-/* =========================================================
-   ROOT
-========================================================= */
-
-app.get(
-  "/",
-  async (req, res) => {
-    const index =
-      path.join(
-        ROOT,
-        "index.html"
-      );
-
-    if (await exists(index)) {
-      return res.sendFile(
-        index
-      );
-    }
-
-    return res.send(`
-      <!doctype html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>MAMAKI AI</title>
-        <meta name="viewport" content="width=device-width,initial-scale=1">
-        <style>
-          body{
-            margin:0;
-            background:#080b12;
-            color:white;
-            font-family:Arial,sans-serif;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            min-height:100vh;
-          }
-          .box{
-            text-align:center;
-            padding:40px;
-          }
-          h1{
-            font-size:42px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="box">
-          <h1>✨ MAMAKI AI</h1>
-          <p>AI Video Creative Studio</p>
-          <p>Server is running successfully.</p>
-        </div>
-      </body>
-      </html>
-    `);
-  }
-);
-
-/* =========================================================
-   ADMIN PAGE
-========================================================= */
-
-app.get(
-  "/admin",
-  async (req, res) => {
-    res.send(`
-<!doctype html>
-<html>
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>MAMAKI AI Admin</title>
 <style>
 *{box-sizing:border-box}
 body{
-  margin:0;
-  background:#080b12;
-  color:#fff;
-  font-family:Arial,sans-serif;
+margin:0;
+font-family:Arial,Helvetica,sans-serif;
+background:#0b0d12;
+color:#fff;
+}
+button,input{
+font:inherit;
 }
 .wrap{
-  max-width:1200px;
-  margin:auto;
-  padding:24px;
+max-width:1250px;
+margin:auto;
+padding:20px;
 }
 .card{
-  background:#111722;
-  border:1px solid #263044;
-  border-radius:18px;
-  padding:20px;
-  margin-bottom:18px;
+background:#151923;
+border:1px solid #272d3a;
+border-radius:16px;
+padding:20px;
+margin-bottom:18px;
+box-shadow:0 10px 35px rgba(0,0,0,.18);
 }
-h1,h2{margin-top:0}
-input,button{
-  width:100%;
-  padding:13px;
-  border-radius:10px;
-  border:1px solid #303a50;
-  margin-top:8px;
+.login{
+max-width:460px;
+margin:8vh auto;
+}
+h1,h2,h3{
+margin-top:0;
 }
 input{
-  background:#080b12;
-  color:#fff;
+width:100%;
+padding:13px;
+border-radius:10px;
+border:1px solid #353b49;
+background:#0d1017;
+color:#fff;
+margin:7px 0 12px;
+outline:none;
 }
 button{
-  background:#fff;
-  color:#000;
-  font-weight:700;
-  cursor:pointer;
+border:0;
+border-radius:10px;
+padding:11px 15px;
+cursor:pointer;
+background:#6d5dfc;
+color:#fff;
+font-weight:700;
 }
-.grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-  gap:14px;
+button.secondary{
+background:#292f3c;
 }
-.stat{
-  background:#171e2b;
-  border-radius:14px;
-  padding:18px;
-}
-.num{
-  font-size:28px;
-  font-weight:800;
-}
-.small{
-  color:#9ca8bd;
-  font-size:13px;
+button.danger{
+background:#c93b4b;
 }
 .hidden{
-  display:none;
+display:none!important;
 }
-.error{
-  color:#ff8585;
-  margin-top:10px;
+.grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+gap:14px;
+}
+.stat{
+background:#10131b;
+border:1px solid #282e3a;
+border-radius:13px;
+padding:18px;
+}
+.stat strong{
+font-size:28px;
+display:block;
+margin-top:7px;
+}
+.muted{
+color:#9aa2b1;
+}
+.table-wrap{
+overflow:auto;
 }
 table{
-  width:100%;
-  border-collapse:collapse;
+width:100%;
+border-collapse:collapse;
 }
-td,th{
-  text-align:left;
-  padding:10px;
-  border-bottom:1px solid #263044;
+th,td{
+padding:12px;
+border-bottom:1px solid #282e3a;
+text-align:left;
+font-size:14px;
 }
-.scroll{
-  overflow:auto;
+.badge{
+display:inline-block;
+padding:5px 9px;
+border-radius:20px;
+background:#292f3c;
+font-size:12px;
+}
+.badge.admin{
+background:#4d3ba8;
+}
+.badge.disabled{
+background:#7d2935;
+}
+.top{
+display:flex;
+align-items:center;
+justify-content:space-between;
+gap:15px;
+margin-bottom:20px;
+}
+pre{
+white-space:pre-wrap;
+word-break:break-word;
+background:#090b10;
+padding:12px;
+border-radius:10px;
+overflow:auto;
+}
+.error{
+color:#ff7785;
+margin-top:10px;
+}
+.success{
+color:#65d391;
+margin-top:10px;
+}
+small{
+color:#8d95a5;
 }
 </style>
 </head>
-
 <body>
 
-<div class="wrap">
+<div id="loginPage" class="wrap">
+<div class="card login">
+<h1>✨ MAMAKI AI</h1>
+<h2>Administrator Login</h2>
+<p class="muted">
+Sign in with your administrator account.
+</p>
 
-  <div id="loginBox" class="card">
-    <h1>✨ MAMAKI AI</h1>
-    <h2>Administrator Login</h2>
+<form id="loginForm">
+<label>Email</label>
+<input
+id="email"
+type="email"
+autocomplete="username"
+placeholder="Administrator email"
+required
+>
 
-    <input
-      id="adminEmail"
-      type="email"
-      placeholder="Administrator email"
-    >
+<label>Password</label>
+<input
+id="password"
+type="password"
+autocomplete="current-password"
+placeholder="Administrator password"
+required
+>
 
-    <input
-      id="adminPassword"
-      type="password"
-      placeholder="Administrator password"
-    >
+<button type="submit">Sign in to Admin</button>
+</form>
 
-    <button onclick="login()">
-      Login to Admin Dashboard
-    </button>
+<div id="loginMessage"></div>
 
-    <div id="loginError"
-         class="error"></div>
-  </div>
+<p>
+<small>
+Your normal MAMAKI user password will work here
+if that account has administrator privileges.
+The Render ADMIN_EMAIL / ADMIN_PASSWORD credentials
+can also repair the main administrator account.
+</small>
+</p>
+</div>
+</div>
 
-  <div id="dashboard"
-       class="hidden">
+<div id="dashboard" class="wrap hidden">
 
-    <div class="card">
-      <h1>✨ MAMAKI AI Admin Dashboard</h1>
-      <p class="small">
-        Administrator control center
-      </p>
+<div class="top">
+<div>
+<h1>✨ MAMAKI AI Admin</h1>
+<div class="muted">
+Administrator Control Center
+</div>
+</div>
 
-      <button onclick="logout()">
-        Logout
-      </button>
-    </div>
+<button
+id="logoutButton"
+class="secondary"
+>
+Logout
+</button>
+</div>
 
-    <div id="stats"
-         class="grid"></div>
+<div class="grid" id="stats"></div>
 
-    <div class="card">
-      <h2>Users</h2>
-      <div class="scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Role</th>
-              <th>Status</th>
-              <th>Generations</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody id="users"></tbody>
-        </table>
-      </div>
-    </div>
+<div class="card">
+<h2>Users</h2>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Email</th>
+<th>Role</th>
+<th>Status</th>
+<th>Created</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody id="usersBody"></tbody>
+</table>
+</div>
+</div>
 
-    <div class="card">
-      <h2>Jobs</h2>
-      <div id="jobs"></div>
-    </div>
+<div class="card">
+<h2>Jobs</h2>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>User</th>
+<th>Type</th>
+<th>Status</th>
+<th>Progress</th>
+<th>Message</th>
+</tr>
+</thead>
+<tbody id="jobsBody"></tbody>
+</table>
+</div>
+</div>
 
-    <div class="card">
-      <h2>Security Events</h2>
-      <div id="security"></div>
-    </div>
+<div class="card">
+<h2>Security Activity</h2>
+<pre id="securityBox">Loading...</pre>
+</div>
 
-    <div class="card">
-      <h2>Errors</h2>
-      <div id="errors"></div>
-    </div>
-
-  </div>
+<div class="card">
+<h2>Errors</h2>
+<pre id="errorsBox">Loading...</pre>
+</div>
 
 </div>
 
 <script>
+var ADMIN_EMAIL = ${adminEmailForBrowser};
+var TOKEN_KEY = "mamaki_admin_token";
 
-let adminToken =
-  localStorage.getItem(
-    "mamaki_admin_token"
+function byId(id){
+  return document.getElementById(id);
+}
+
+function escapeHtml(value){
+  return String(value == null ? "" : value)
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#039;");
+}
+
+function token(){
+  return localStorage.getItem(TOKEN_KEY) || "";
+}
+
+function showLogin(){
+  byId("loginPage").classList.remove("hidden");
+  byId("dashboard").classList.add("hidden");
+}
+
+function showDashboard(){
+  byId("loginPage").classList.add("hidden");
+  byId("dashboard").classList.remove("hidden");
+  loadDashboard();
+}
+
+async function api(url, options){
+  options = options || {};
+  options.headers = options.headers || {};
+
+  options.headers["Content-Type"] =
+    "application/json";
+
+  if(token()){
+    options.headers["Authorization"] =
+      "Bearer " + token();
+  }
+
+  var response = await fetch(
+    url,
+    options
   );
 
-function esc(value){
-  return String(value ?? "")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-}
-
-async function login(){
-
-  const email =
-    document.getElementById(
-      "adminEmail"
-    ).value.trim();
-
-  const password =
-    document.getElementById(
-      "adminPassword"
-    ).value;
-
-  const error =
-    document.getElementById(
-      "loginError"
-    );
-
-  error.textContent = "";
+  var data = {};
 
   try{
-
-    const response =
-      await fetch(
-        "/api/admin/login",
-        {
-          method:"POST",
-          headers:{
-            "Content-Type":
-              "application/json"
-          },
-          body:JSON.stringify({
-            email,
-            password
-          })
-        }
-      );
-
-    const data =
-      await response.json();
-
-    if(!response.ok || !data.ok){
-      throw new Error(
-        data.message ||
-        data.error ||
-        "Login failed."
-      );
-    }
-
-    adminToken =
-      data.token;
-
-    localStorage.setItem(
-      "mamaki_admin_token",
-      adminToken
-    );
-
-    document
-      .getElementById(
-        "loginBox"
-      )
-      .classList.add(
-        "hidden"
-      );
-
-    document
-      .getElementById(
-        "dashboard"
-      )
-      .classList.remove(
-        "hidden"
-      );
-
-    await loadDashboard();
-
-  }catch(e){
-
-    error.textContent =
-      e.message;
-  }
-}
-
-async function api(url){
-
-  const response =
-    await fetch(
-      url,
-      {
-        headers:{
-          "Authorization":
-            "Bearer " +
-            adminToken
-        }
-      }
-    );
-
-  const data =
-    await response.json();
+    data = await response.json();
+  }catch(e){}
 
   if(
     response.status === 401 ||
     response.status === 403
   ){
-    localStorage.removeItem(
-      "mamaki_admin_token"
+    localStorage.removeItem(TOKEN_KEY);
+    showLogin();
+    throw new Error(
+      "Administrator session expired."
     );
-
-    adminToken = null;
-
-    document
-      .getElementById(
-        "dashboard"
-      )
-      .classList.add(
-        "hidden"
-      );
-
-    document
-      .getElementById(
-        "loginBox"
-      )
-      .classList.remove(
-        "hidden"
-      );
   }
 
-  if(!response.ok || !data.ok){
+  if(!response.ok){
     throw new Error(
       data.message ||
       data.error ||
@@ -4315,506 +2806,552 @@ async function api(url){
   return data;
 }
 
-async function loadDashboard(){
+byId("loginForm").addEventListener(
+  "submit",
+  async function(event){
+    event.preventDefault();
 
-  const stats =
-    await api(
-      "/api/admin/stats"
+    var message = byId("loginMessage");
+
+    message.className = "muted";
+    message.textContent =
+      "Signing in...";
+
+    try{
+      var result = await fetch(
+        "/api/admin/login",
+        {
+          method:"POST",
+          headers:{
+            "Content-Type":
+              "application/json"
+          },
+          body:JSON.stringify({
+            email:byId("email").value,
+            password:byId("password").value
+          })
+        }
+      );
+
+      var data = await result.json();
+
+      if(!result.ok){
+        throw new Error(
+          data.message ||
+          data.error ||
+          "Invalid administrator credentials."
+        );
+      }
+
+      localStorage.setItem(
+        TOKEN_KEY,
+        data.token
+      );
+
+      message.className = "success";
+      message.textContent =
+        "Login successful.";
+
+      showDashboard();
+
+    }catch(error){
+      message.className = "error";
+      message.textContent =
+        error.message;
+    }
+  }
+);
+
+byId("logoutButton").addEventListener(
+  "click",
+  async function(){
+    try{
+      await api(
+        "/api/admin/logout",
+        {
+          method:"POST"
+        }
+      );
+    }catch(e){}
+
+    localStorage.removeItem(
+      TOKEN_KEY
     );
 
-  const s =
-    stats.stats;
+    showLogin();
+  }
+);
 
-  document.getElementById(
-    "stats"
-  ).innerHTML = `
+async function loadStats(){
+  var data =
+    await api("/api/admin/stats");
 
-    <div class="stat">
-      <div class="small">
-        Users
-      </div>
-      <div class="num">
-        ${s.users}
-      </div>
-    </div>
+  var s = data.stats;
 
-    <div class="stat">
-      <div class="small">
-        Active Users
-      </div>
-      <div class="num">
-        ${s.activeUsers}
-      </div>
-    </div>
+  byId("stats").innerHTML =
+    '<div class="stat"><span class="muted">Users</span><strong>' +
+    escapeHtml(s.users) +
+    '</strong></div>' +
 
-    <div class="stat">
-      <div class="small">
-        Administrators
-      </div>
-      <div class="num">
-        ${s.admins}
-      </div>
-    </div>
+    '<div class="stat"><span class="muted">Admins</span><strong>' +
+    escapeHtml(s.admins) +
+    '</strong></div>' +
 
-    <div class="stat">
-      <div class="small">
-        Generations
-      </div>
-      <div class="num">
-        ${s.totalGenerations}
-      </div>
-    </div>
+    '<div class="stat"><span class="muted">Videos Generated</span><strong>' +
+    escapeHtml(s.generatedVideos) +
+    '</strong></div>' +
 
-    <div class="stat">
-      <div class="small">
-        Video Seconds
-      </div>
-      <div class="num">
-        ${Math.round(s.totalSeconds)}
-      </div>
-    </div>
+    '<div class="stat"><span class="muted">Narrations</span><strong>' +
+    escapeHtml(s.narrations) +
+    '</strong></div>' +
 
-    <div class="stat">
-      <div class="small">
-        Jobs
-      </div>
-      <div class="num">
-        ${s.jobs}
-      </div>
-    </div>
+    '<div class="stat"><span class="muted">Completed Jobs</span><strong>' +
+    escapeHtml(s.completed) +
+    '</strong></div>' +
 
-    <div class="stat">
-      <div class="small">
-        Replicate
-      </div>
-      <div class="num">
-        ${s.replicate ? "ON" : "OFF"}
-      </div>
-    </div>
+    '<div class="stat"><span class="muted">Processing</span><strong>' +
+    escapeHtml(s.processing) +
+    '</strong></div>' +
 
-    <div class="stat">
-      <div class="small">
-        Version
-      </div>
-      <div class="num">
-        ${esc(s.version)}
-      </div>
-    </div>
-  `;
+    '<div class="stat"><span class="muted">Failed Jobs</span><strong>' +
+    escapeHtml(s.failed) +
+    '</strong></div>' +
 
-  const users =
-    await api(
-      "/api/admin/users"
-    );
-
-  document.getElementById(
-    "users"
-  ).innerHTML =
-    users.users.map(
-      u => `
-        <tr>
-          <td>
-            ${esc(u.name)}
-          </td>
-
-          <td>
-            ${esc(u.email)}
-          </td>
-
-          <td>
-            ${esc(u.role)}
-          </td>
-
-          <td>
-            ${
-              u.disabled
-                ? "Disabled"
-                : "Active"
-            }
-          </td>
-
-          <td>
-            ${
-              u.usage?.totalGenerations ||
-              0
-            }
-          </td>
-
-          <td>
-            ${
-              u.email ===
-              "${ADMIN_EMAIL}"
-                ? "Main Admin"
-                : `
-                  <button
-                    onclick="toggleUser(
-                      '${esc(u.id)}',
-                      ${!u.disabled}
-                    )">
-                    ${
-                      u.disabled
-                        ? "Enable"
-                        : "Disable"
-                    }
-                  </button>
-                `
-            }
-          </td>
-        </tr>
-      `
-    ).join("");
-
-  const jobs =
-    await api(
-      "/api/admin/jobs"
-    );
-
-  document.getElementById(
-    "jobs"
-  ).innerHTML =
-    jobs.jobs
-      .slice(0,50)
-      .map(
-        j => `
-          <div class="stat">
-            <b>
-              ${esc(j.type)}
-            </b>
-            <div class="small">
-              ${esc(j.status)}
-              —
-              ${esc(j.progress)}%
-            </div>
-            <div class="small">
-              ${esc(j.message)}
-            </div>
-          </div>
-        `
-      )
-      .join("");
-
-  const security =
-    await api(
-      "/api/admin/security"
-    );
-
-  document.getElementById(
-    "security"
-  ).innerHTML =
-    security.security
-      .slice(0,50)
-      .map(
-        item => `
-          <div class="stat">
-            <b>
-              ${esc(item.action)}
-            </b>
-            <div class="small">
-              ${esc(item.timestamp)}
-            </div>
-            <div class="small">
-              ${esc(
-                JSON.stringify(item)
-              )}
-            </div>
-          </div>
-        `
-      )
-      .join("");
-
-  const errors =
-    await api(
-      "/api/admin/errors"
-    );
-
-  document.getElementById(
-    "errors"
-  ).innerHTML =
-    errors.errors
-      .slice(0,50)
-      .map(
-        item => `
-          <div class="stat">
-            <b>
-              ${esc(item.message)}
-            </b>
-            <div class="small">
-              ${esc(item.timestamp)}
-            </div>
-          </div>
-        `
-      )
-      .join("");
+    '<div class="stat"><span class="muted">Replicate</span><strong>' +
+    (s.replicateConfigured ? "ON" : "OFF") +
+    '</strong></div>';
 }
 
-async function toggleUser(
-  id,
-  disabled
-){
+async function loadUsers(){
+  var data =
+    await api("/api/admin/users");
 
+  var body =
+    byId("usersBody");
+
+  body.innerHTML =
+    data.users.map(
+      function(user){
+        var roleClass =
+          user.role === "admin"
+            ? "badge admin"
+            : "badge";
+
+        var status =
+          user.disabled
+            ? '<span class="badge disabled">Disabled</span>'
+            : '<span class="badge">Active</span>';
+
+        var mainAdmin =
+          String(user.email).toLowerCase() ===
+          String(ADMIN_EMAIL).toLowerCase();
+
+        var action = mainAdmin
+          ? '<span class="muted">Protected</span>'
+          : (
+            '<button class="' +
+            (user.disabled ? "" : "danger") +
+            '" onclick="toggleUser(\\'' +
+            escapeHtml(user.id) +
+            '\\',' +
+            (!user.disabled) +
+            ')">' +
+            (user.disabled ? "Enable" : "Disable") +
+            '</button>'
+          );
+
+        return (
+          "<tr>" +
+          "<td>" +
+          escapeHtml(user.name) +
+          "</td>" +
+
+          "<td>" +
+          escapeHtml(user.email) +
+          "</td>" +
+
+          "<td>" +
+          '<span class="' +
+          roleClass +
+          '">' +
+          escapeHtml(user.role) +
+          "</span>" +
+          "</td>" +
+
+          "<td>" +
+          status +
+          "</td>" +
+
+          "<td>" +
+          escapeHtml(
+            user.createdAt || ""
+          ) +
+          "</td>" +
+
+          "<td>" +
+          action +
+          "</td>" +
+
+          "</tr>"
+        );
+      }
+    ).join("");
+}
+
+async function toggleUser(id, disabled){
   try{
-
-    await fetch(
+    await api(
       "/api/admin/users/" +
       encodeURIComponent(id) +
       "/disable",
       {
         method:"POST",
-        headers:{
-          "Content-Type":
-            "application/json",
-          "Authorization":
-            "Bearer " +
-            adminToken
-        },
         body:JSON.stringify({
-          disabled
+          disabled:disabled
         })
       }
     );
 
-    await loadDashboard();
+    await loadUsers();
+    await loadStats();
 
-  }catch(e){
-    alert(e.message);
+  }catch(error){
+    alert(error.message);
   }
 }
 
-async function logout(){
+async function loadJobs(){
+  var data =
+    await api("/api/admin/jobs");
 
-  try{
-    await fetch(
-      "/api/admin/logout",
-      {
-        method:"POST",
-        headers:{
-          "Authorization":
-            "Bearer " +
-            adminToken
-        }
+  byId("jobsBody").innerHTML =
+    data.jobs.map(
+      function(job){
+        return (
+          "<tr>" +
+
+          "<td>" +
+          escapeHtml(
+            String(job.id).slice(0,12)
+          ) +
+          "</td>" +
+
+          "<td>" +
+          escapeHtml(job.userId) +
+          "</td>" +
+
+          "<td>" +
+          escapeHtml(job.type) +
+          "</td>" +
+
+          "<td>" +
+          escapeHtml(job.status) +
+          "</td>" +
+
+          "<td>" +
+          escapeHtml(job.progress) +
+          "%</td>" +
+
+          "<td>" +
+          escapeHtml(job.message) +
+          "</td>" +
+
+          "</tr>"
+        );
       }
-    );
-  }catch{}
-
-  localStorage.removeItem(
-    "mamaki_admin_token"
-  );
-
-  adminToken = null;
-
-  location.reload();
+    ).join("");
 }
 
-if(adminToken){
-
-  document
-    .getElementById(
-      "loginBox"
-    )
-    .classList.add(
-      "hidden"
+async function loadSecurity(){
+  var data =
+    await api(
+      "/api/admin/security"
     );
 
-  document
-    .getElementById(
-      "dashboard"
-    )
-    .classList.remove(
-      "hidden"
+  byId("securityBox").textContent =
+    JSON.stringify(
+      data.events,
+      null,
+      2
     );
-
-  loadDashboard()
-    .catch(() => {
-      localStorage.removeItem(
-        "mamaki_admin_token"
-      );
-
-      location.reload();
-    });
 }
 
+async function loadErrors(){
+  var data =
+    await api(
+      "/api/admin/errors"
+    );
+
+  byId("errorsBox").textContent =
+    JSON.stringify(
+      data.errors,
+      null,
+      2
+    );
+}
+
+async function loadDashboard(){
+  try{
+    await loadStats();
+    await loadUsers();
+    await loadJobs();
+    await loadSecurity();
+    await loadErrors();
+  }catch(error){
+    console.error(error);
+  }
+}
+
+if(token()){
+  showDashboard();
+}else{
+  showLogin();
+}
 </script>
 
 </body>
 </html>
-`);
+`;
+
+  res.type("html").send(html);
+});
+
+/* =========================================================
+   HEALTH
+========================================================= */
+
+app.get(
+  "/api/health",
+  async (req, res) => {
+    res.json({
+      ok: true,
+      app: "MAMAKI AI",
+      version: VERSION,
+      replicate:
+        Boolean(REPLICATE_API_TOKEN),
+      recovery:
+        Boolean(
+          RESEND_API_KEY &&
+          RESEND_FROM
+        ),
+      admin:
+        Boolean(
+          ADMIN_EMAIL &&
+          ADMIN_PASSWORD
+        ),
+      uptime: process.uptime(),
+      timestamp:
+        new Date().toISOString()
+    });
   }
 );
+
+app.get(
+  "/api/status",
+  async (req, res) => {
+    res.json({
+      ok: true,
+      app: "MAMAKI AI",
+      version: VERSION,
+      models: {
+        t2v: T2V_MODEL,
+        i2v: I2V_MODEL
+      },
+      duration: {
+        min: MIN_DURATION,
+        max: MAX_DURATION
+      },
+      features: {
+        textToVideo: true,
+        imageToVideo: true,
+        freeStudio: true,
+        narration: true,
+        projects: true,
+        admin: Boolean(
+          ADMIN_EMAIL &&
+          ADMIN_PASSWORD
+        )
+      }
+    });
+  }
+);
+
+/* =========================================================
+   ROOT
+========================================================= */
+
+app.get("/", async (req, res) => {
+  res.sendFile(
+    path.join(ROOT, "index.html")
+  );
+});
 
 /* =========================================================
    404
 ========================================================= */
 
-app.use(
-  (req, res) => {
-    if (
-      req.path.startsWith(
-        "/api/"
-      )
-    ) {
-      return res.status(404).json({
-        ok: false,
-        error:
-          "NOT_FOUND",
-        path:
-          req.path
-      });
-    }
-
-    return res.status(404).send(
-      `
-      <h1>MAMAKI AI</h1>
-      <p>Page not found.</p>
-      `
-    );
-  }
-);
-
-/* =========================================================
-   GLOBAL ERROR HANDLER
-========================================================= */
-
-app.use(
-  async (err, req, res, next) => {
-    await errorLog(
-      err,
-      {
-        route:
-          req.path,
-        method:
-          req.method
-      }
-    );
-
-    if (
-      res.headersSent
-    ) {
-      return next(err);
-    }
-
-    return res.status(500).json({
+app.use((req, res) => {
+  if (
+    req.path.startsWith("/api/")
+  ) {
+    return res.status(404).json({
       ok: false,
-      error:
-        "SERVER_ERROR",
-      message:
-        err.message ||
-        "Internal server error."
+      error: "NOT_FOUND"
     });
   }
-);
+
+  res.status(404).send(
+    "MAMAKI AI: Page not found."
+  );
+});
 
 /* =========================================================
-   CLEANUP
+   ERROR HANDLER
+========================================================= */
+
+app.use(async (error, req, res, next) => {
+  await errorLog(error, {
+    route: req.path,
+    method: req.method
+  });
+
+  if (res.headersSent) {
+    return next(error);
+  }
+
+  res.status(500).json({
+    ok: false,
+    error: "SERVER_ERROR",
+    message:
+      error.message ||
+      "Internal server error."
+  });
+});
+
+/* =========================================================
+   STARTUP
 ========================================================= */
 
 async function cleanupOldFiles() {
-  try {
-    const now =
-      Date.now();
+  await ensureDir(TMP);
+  await ensureDir(OUTPUTS);
+  await ensureDir(PROJECTS);
+  await ensureDir(DATA);
 
-    const files =
-      await fs.readdir(
-        TMP
-      );
+  const files = await fs.readdir(TMP);
 
-    for (const file of files) {
-      const full =
-        path.join(
-          TMP,
-          file
-        );
+  const cutoff =
+    Date.now() -
+    24 * 60 * 60 * 1000;
 
-      try {
-        const stat =
-          await fs.stat(
-            full
-          );
+  for (const file of files) {
+    const full =
+      path.join(TMP, file);
 
-        if (
-          now -
-            stat.mtimeMs >
-          6 * 60 * 60 * 1000
-        ) {
-          await fs.rm(
-            full,
-            {
-              force: true,
-              recursive: true
-            }
-          );
-        }
-      } catch {}
-    }
-  } catch {}
+    try {
+      const stat =
+        await fs.stat(full);
+
+      if (
+        stat.mtimeMs < cutoff
+      ) {
+        await fs.rm(full, {
+          force: true,
+          recursive: true
+        });
+      }
+    } catch {}
+  }
 }
 
-setInterval(
-  cleanupOldFiles,
-  30 * 60 * 1000
-);
+async function init() {
+  await ensureDir(TMP);
+  await ensureDir(OUTPUTS);
+  await ensureDir(PROJECTS);
+  await ensureDir(DATA);
 
-/* =========================================================
-   START
-========================================================= */
-
-await ensureStorage();
-
-await cleanupOldFiles();
-
-app.listen(
-  PORT,
-  HOST,
-  () => {
-    console.log(
-      "================================================="
-    );
-
-    console.log(
-      `✨ MAMAKI AI ${VERSION}`
-    );
-
-    console.log(
-      `Server listening on ${HOST}:${PORT}`
-    );
-
-    console.log(
-      `App URL: ${APP_URL}`
-    );
-
-    console.log(
-      `Replicate configured: ${Boolean(
-        REPLICATE_API_TOKEN
-      )}`
-    );
-
-    console.log(
-      `Password recovery configured: ${Boolean(
-        RESEND_API_KEY &&
-        RESEND_FROM
-      )}`
-    );
-
-    console.log(
-      `Admin configured: ${Boolean(
-        ADMIN_EMAIL &&
-        ADMIN_PASSWORD
-      )}`
-    );
-
-    console.log(
-      `T2V model: ${T2V_MODEL}`
-    );
-
-    console.log(
-      `I2V model: ${I2V_MODEL}`
-    );
-
-    console.log(
-      `Duration range: ${MIN_DURATION}s - ${MAX_DURATION}s`
-    );
-
-    console.log(
-      "================================================="
-    );
+  if (!(await exists(USERS))) {
+    await writeJSON(USERS, {});
   }
-);
+
+  if (!(await exists(SESSIONS))) {
+    await writeJSON(SESSIONS, {});
+  }
+
+  if (!(await exists(USAGE))) {
+    await writeJSON(USAGE, {});
+  }
+
+  if (!(await exists(ERRORS))) {
+    await writeJSON(ERRORS, []);
+  }
+
+  if (!(await exists(SECURITY))) {
+    await writeJSON(SECURITY, []);
+  }
+
+  if (!(await exists(RESETS))) {
+    await writeJSON(RESETS, {});
+  }
+
+  await cleanupOldFiles();
+
+  app.listen(
+    PORT,
+    HOST,
+    () => {
+      console.log(
+        `✨ MAMAKI AI ${VERSION}`
+      );
+
+      console.log(
+        `Server listening on ${HOST}:${PORT}`
+      );
+
+      console.log(
+        `App URL: ${APP_URL}`
+      );
+
+      console.log(
+        `Replicate configured: ${Boolean(
+          REPLICATE_API_TOKEN
+        )}`
+      );
+
+      console.log(
+        `Password recovery configured: ${Boolean(
+          RESEND_API_KEY &&
+          RESEND_FROM
+        )}`
+      );
+
+      console.log(
+        `Admin configured: ${Boolean(
+          ADMIN_EMAIL &&
+          ADMIN_PASSWORD
+        )}`
+      );
+
+      console.log(
+        `T2V model: ${T2V_MODEL}`
+      );
+
+      console.log(
+        `I2V model: ${I2V_MODEL}`
+      );
+
+      console.log(
+        `Duration range: ${MIN_DURATION}s - ${MAX_DURATION}s`
+      );
+    }
+  );
+}
+
+init().catch(error => {
+  console.error(
+    "MAMAKI startup failed:",
+    error
+  );
+
+  process.exit(1);
+});
