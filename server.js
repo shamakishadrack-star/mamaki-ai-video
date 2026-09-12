@@ -4422,14 +4422,410 @@ app.get(
   (req, res) => {
     res.json({
       ok: true,
-      app:
-        "MAMAKI AI",
-      version:
-        VERSION,
+      app: "MAMAKI AI",
+      version: VERSION,
+
       replicate:
         Boolean(
           REPLICATE_API_TOKEN
         ),
+
       recovery:
         Boolean(
-          RESEND_API
+          RESEND_API_KEY &&
+          RESEND_FROM
+        ),
+
+      admin:
+        Boolean(
+          ADMIN_EMAIL &&
+          ADMIN_PASSWORD
+        ),
+
+      uptime:
+        process.uptime(),
+
+      timestamp:
+        new Date().toISOString()
+    });
+  }
+);
+
+/* =========================================================
+   BASIC HEALTH
+========================================================= */
+
+app.get(
+  "/health",
+  (req, res) => {
+    res.json({
+      ok: true,
+      app: "MAMAKI AI",
+      version: VERSION,
+      uptime:
+        process.uptime(),
+      timestamp:
+        new Date().toISOString()
+    });
+  }
+);
+
+/* =========================================================
+   STATUS
+========================================================= */
+
+app.get(
+  "/api/status",
+  (req, res) => {
+    res.json({
+      ok: true,
+      app: "MAMAKI AI",
+      version: VERSION,
+
+      replicate:
+        Boolean(
+          REPLICATE_API_TOKEN
+        ),
+
+      recovery:
+        Boolean(
+          RESEND_API_KEY &&
+          RESEND_FROM
+        ),
+
+      admin:
+        Boolean(
+          ADMIN_EMAIL &&
+          ADMIN_PASSWORD
+        ),
+
+      models: {
+        textToVideo:
+          T2V_MODEL,
+
+        imageToVideo:
+          I2V_MODEL
+      },
+
+      duration: {
+        minimum:
+          MIN_DURATION,
+
+        maximum:
+          MAX_DURATION
+      }
+    });
+  }
+);
+
+/* =========================================================
+   ROOT
+========================================================= */
+
+app.get(
+  "/",
+  async (req, res) => {
+    try {
+      const file =
+        path.join(
+          ROOT,
+          "index.html"
+        );
+
+      await fs.access(
+        file
+      );
+
+      return res.sendFile(
+        file
+      );
+    } catch {
+      return res
+        .status(404)
+        .send(
+          "MAMAKI AI interface is not available."
+        );
+    }
+  }
+);
+
+/* =========================================================
+   404 HANDLER
+========================================================= */
+
+app.use(
+  (req, res) => {
+    if (
+      req.path.startsWith(
+        "/api/"
+      )
+    ) {
+      return res
+        .status(404)
+        .json({
+          ok: false,
+          error:
+            "NOT_FOUND",
+          message:
+            "API endpoint not found."
+        });
+    }
+
+    return res
+      .status(404)
+      .send(
+        "MAMAKI AI — Page not found."
+      );
+  }
+);
+
+/* =========================================================
+   GLOBAL ERROR HANDLER
+========================================================= */
+
+app.use(
+  async (
+    err,
+    req,
+    res,
+    next
+  ) => {
+    await errorLog(
+      err,
+      {
+        route:
+          req.originalUrl,
+        method:
+          req.method
+      }
+    );
+
+    if (
+      res.headersSent
+    ) {
+      return next(err);
+    }
+
+    const status =
+      Number(
+        err?.status ||
+        err?.statusCode ||
+        500
+      );
+
+    return res
+      .status(
+        status >= 400 &&
+        status < 600
+          ? status
+          : 500
+      )
+      .json({
+        ok: false,
+        message:
+          "MAMAKI AI encountered an unexpected server error."
+      });
+  }
+);
+
+/* =========================================================
+   CLEANUP
+========================================================= */
+
+async function cleanupTemporaryFiles() {
+  try {
+    const files =
+      await fs.readdir(
+        TMP
+      );
+
+    const now =
+      Date.now();
+
+    for (
+      const file of files
+    ) {
+      const full =
+        path.join(
+          TMP,
+          file
+        );
+
+      try {
+        const stat =
+          await fs.stat(
+            full
+          );
+
+        const age =
+          now -
+          stat.mtimeMs;
+
+        /*
+         * Remove temporary files older
+         * than 2 hours.
+         */
+        if (
+          age >
+          2 *
+            60 *
+            60 *
+            1000
+        ) {
+          await fs.rm(
+            full,
+            {
+              force: true,
+              recursive: true
+            }
+          );
+        }
+      } catch {}
+    }
+  } catch {}
+}
+
+/* =========================================================
+   JOB CLEANUP
+========================================================= */
+
+function cleanupJobs() {
+  const cutoff =
+    Date.now() -
+    60 *
+      60 *
+      1000;
+
+  for (
+    const [
+      id,
+      job
+    ] of jobs.entries()
+  ) {
+    const created =
+      Date.parse(
+        job.createdAt ||
+        ""
+      );
+
+    if (
+      Number.isFinite(
+        created
+      ) &&
+      created <
+        cutoff
+    ) {
+      jobs.delete(id);
+    }
+  }
+}
+
+/* =========================================================
+   STARTUP
+========================================================= */
+
+async function startServer() {
+  try {
+    await ensureStorage();
+
+    await cleanupTemporaryFiles();
+
+    cleanupJobs();
+
+    setInterval(
+      () => {
+        cleanupJobs();
+      },
+      10 *
+        60 *
+        1000
+    );
+
+    setInterval(
+      () => {
+        cleanupTemporaryFiles()
+          .catch(
+            () => {}
+          );
+      },
+      30 *
+        60 *
+        1000
+    );
+
+    app.listen(
+      PORT,
+      HOST,
+      () => {
+        console.log(
+          "================================================="
+        );
+
+        console.log(
+          `✨ MAMAKI AI ${VERSION}`
+        );
+
+        console.log(
+          `Server listening on ${HOST}:${PORT}`
+        );
+
+        console.log(
+          `App URL: ${APP_URL}`
+        );
+
+        console.log(
+          `Replicate configured: ${Boolean(
+            REPLICATE_API_TOKEN
+          )}`
+        );
+
+        console.log(
+          `Password recovery configured: ${Boolean(
+            RESEND_API_KEY &&
+            RESEND_FROM
+          )}`
+        );
+
+        console.log(
+          `Admin configured: ${Boolean(
+            ADMIN_EMAIL &&
+            ADMIN_PASSWORD
+          )}`
+        );
+
+        console.log(
+          `T2V model: ${T2V_MODEL}`
+        );
+
+        console.log(
+          `I2V model: ${I2V_MODEL}`
+        );
+
+        console.log(
+          `Duration range: ${MIN_DURATION}s - ${MAX_DURATION}s`
+        );
+
+        console.log(
+          "================================================="
+        );
+      }
+    );
+  } catch (e) {
+    console.error(
+      "MAMAKI AI startup failed:",
+      e
+    );
+
+    await errorLog(
+      e,
+      {
+        action:
+          "SERVER_STARTUP"
+      }
+    );
+
+    process.exit(1);
+  }
+}
+
+startServer();
