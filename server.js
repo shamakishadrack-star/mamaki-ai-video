@@ -21,6 +21,7 @@ const HOST = "0.0.0.0";
 const VERSION = "14.0.0";
 
 const ROOT = process.cwd();
+
 const TMP = path.join(ROOT, "tmp");
 const OUTPUTS = path.join(ROOT, "outputs");
 const PROJECTS = path.join(ROOT, "projects");
@@ -37,7 +38,9 @@ const MIN_DURATION = 5;
 const MAX_DURATION = 7200;
 
 const ADMIN_EMAIL =
-  String(process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+  String(process.env.ADMIN_EMAIL || "")
+    .trim()
+    .toLowerCase();
 
 const ADMIN_PASSWORD =
   String(process.env.ADMIN_PASSWORD || "");
@@ -46,19 +49,21 @@ const SESSION_SECRET =
   String(process.env.SESSION_SECRET || "");
 
 const REPLICATE_API_TOKEN =
-  String(process.env.REPLICATE_API_TOKEN || "").trim();
+  String(process.env.REPLICATE_API_TOKEN || "")
+    .trim();
 
 const RESEND_API_KEY =
-  String(process.env.RESEND_API_KEY || "").trim();
+  String(process.env.RESEND_API_KEY || "")
+    .trim();
 
 const RESEND_FROM =
-  String(process.env.RESEND_FROM || "").trim();
+  String(process.env.RESEND_FROM || "")
+    .trim();
 
-const APP_URL =
-  String(
-    process.env.APP_URL ||
-    "https://mamaki-ai-video.onrender.com"
-  ).replace(/\/$/, "");
+const APP_URL = String(
+  process.env.APP_URL ||
+  "https://mamaki-ai-video.onrender.com"
+).replace(/\/$/, "");
 
 const T2V_MODEL =
   process.env.T2V_MODEL ||
@@ -69,7 +74,9 @@ const I2V_MODEL =
   "wan-video/wan-2.2-i2v-fast";
 
 const replicate = REPLICATE_API_TOKEN
-  ? new Replicate({ auth: REPLICATE_API_TOKEN })
+  ? new Replicate({
+      auth: REPLICATE_API_TOKEN
+    })
   : null;
 
 const jobs = new Map();
@@ -83,7 +90,11 @@ const upload = multer({
 
 app.disable("x-powered-by");
 
-app.use(express.json({ limit: "30mb" }));
+app.use(
+  express.json({
+    limit: "30mb"
+  })
+);
 
 app.use(
   express.urlencoded({
@@ -93,45 +104,83 @@ app.use(
 );
 
 app.use((req, res, next) => {
-  res.setHeader("X-MAMAKI-Version", VERSION);
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader(
+    "X-MAMAKI-Version",
+    VERSION
+  );
+
+  res.setHeader(
+    "X-Content-Type-Options",
+    "nosniff"
+  );
+
+  res.setHeader(
+    "Referrer-Policy",
+    "no-referrer"
+  );
+
   res.setHeader(
     "Permissions-Policy",
     "camera=(), microphone=(), geolocation=()"
   );
+
   next();
 });
+
 
 /* =========================================================
    STORAGE
 ========================================================= */
 
 async function ensureStorage() {
-  await fs.mkdir(TMP, { recursive: true });
-  await fs.mkdir(OUTPUTS, { recursive: true });
-  await fs.mkdir(PROJECTS, { recursive: true });
-  await fs.mkdir(DATA, { recursive: true });
+  await fs.mkdir(TMP, {
+    recursive: true
+  });
 
-  for (const file of [
-    USERS,
-    SESSIONS,
-    USAGE,
-    ERRORS,
-    SECURITY,
-    RESETS
-  ]) {
+  await fs.mkdir(OUTPUTS, {
+    recursive: true
+  });
+
+  await fs.mkdir(PROJECTS, {
+    recursive: true
+  });
+
+  await fs.mkdir(DATA, {
+    recursive: true
+  });
+
+  for (
+    const file of [
+      USERS,
+      SESSIONS,
+      USAGE,
+      ERRORS,
+      SECURITY,
+      RESETS
+    ]
+  ) {
     try {
       await fs.access(file);
     } catch {
-      await fs.writeFile(file, "{}", "utf8");
+      await fs.writeFile(
+        file,
+        "{}",
+        "utf8"
+      );
     }
   }
 }
 
-async function readJSON(file, fallback = {}) {
+async function readJSON(
+  file,
+  fallback = {}
+) {
   try {
-    const data = await fs.readFile(file, "utf8");
+    const data =
+      await fs.readFile(
+        file,
+        "utf8"
+      );
 
     if (!data.trim()) {
       return fallback;
@@ -143,23 +192,38 @@ async function readJSON(file, fallback = {}) {
   }
 }
 
-async function writeJSON(file, data) {
-  const temp = `${file}.${randomUUID()}.tmp`;
+async function writeJSON(
+  file,
+  data
+) {
+  const temp =
+    `${file}.${randomUUID()}.tmp`;
 
   await fs.writeFile(
     temp,
-    JSON.stringify(data, null, 2),
+    JSON.stringify(
+      data,
+      null,
+      2
+    ),
     "utf8"
   );
 
-  await fs.rename(temp, file);
+  await fs.rename(
+    temp,
+    file
+  );
 }
+
 
 /* =========================================================
    HELPERS
 ========================================================= */
 
-function text(value, max = 10000) {
+function text(
+  value,
+  max = 10000
+) {
   return String(value ?? "")
     .replace(/\0/g, "")
     .trim()
@@ -167,7 +231,10 @@ function text(value, max = 10000) {
 }
 
 function email(value) {
-  return text(value, 200).toLowerCase();
+  return text(
+    value,
+    200
+  ).toLowerCase();
 }
 
 function safeFileName(value) {
@@ -178,14 +245,23 @@ function safeFileName(value) {
 
   const cleaned =
     base
-      .replace(/[^a-zA-Z0-9._-]/g, "")
+      .replace(
+        /[^a-zA-Z0-9._-]/g,
+        ""
+      )
       .slice(0, 150);
 
-  return cleaned || `${randomUUID()}.bin`;
+  return (
+    cleaned ||
+    `${randomUUID()}.bin`
+  );
 }
 
 function duration(value) {
-  if (typeof value === "string") {
+  if (
+    typeof value ===
+    "string"
+  ) {
     const m =
       value
         .trim()
@@ -194,19 +270,30 @@ function duration(value) {
         );
 
     if (m) {
-      let n = Number(m[1]);
+      let n =
+        Number(m[1]);
 
       const unit =
-        String(m[2] || "s").toLowerCase();
+        String(
+          m[2] || "s"
+        ).toLowerCase();
 
       if (
-        ["m", "min", "mins"].includes(unit)
+        [
+          "m",
+          "min",
+          "mins"
+        ].includes(unit)
       ) {
         n *= 60;
       }
 
       if (
-        ["h", "hr", "hrs"].includes(unit)
+        [
+          "h",
+          "hr",
+          "hrs"
+        ].includes(unit)
       ) {
         n *= 3600;
       }
@@ -221,7 +308,8 @@ function duration(value) {
     }
   }
 
-  const n = Number(value);
+  const n =
+    Number(value);
 
   if (!Number.isFinite(n)) {
     return MIN_DURATION;
@@ -241,7 +329,9 @@ function ratio(value) {
     "16:9",
     "9:16",
     "1:1"
-  ].includes(String(value))
+  ].includes(
+    String(value)
+  )
     ? String(value)
     : "16:9";
 }
@@ -260,15 +350,18 @@ function ratioSize(r) {
 
 function hashPassword(
   password,
-  salt = randomBytes(16).toString("hex")
+  salt =
+    randomBytes(16)
+      .toString("hex")
 ) {
   return {
     salt,
-    hash: scryptSync(
-      String(password),
-      salt,
-      64
-    ).toString("hex")
+    hash:
+      scryptSync(
+        String(password),
+        salt,
+        64
+      ).toString("hex")
   };
 }
 
@@ -278,7 +371,10 @@ function verifyPassword(
   expected
 ) {
   try {
-    if (!salt || !expected) {
+    if (
+      !salt ||
+      !expected
+    ) {
       return false;
     }
 
@@ -296,7 +392,8 @@ function verifyPassword(
       );
 
     return (
-      actual.length === stored.length &&
+      actual.length ===
+        stored.length &&
       timingSafeEqual(
         actual,
         stored
@@ -309,16 +406,21 @@ function verifyPassword(
 
 function token() {
   const random =
-    randomBytes(32).toString("hex");
+    randomBytes(32)
+      .toString("hex");
 
   const secret =
     SESSION_SECRET
       ? scryptSync(
           SESSION_SECRET,
-          random.slice(0, 16),
+          random.slice(
+            0,
+            16
+          ),
           32
         ).toString("hex")
-      : randomBytes(16).toString("hex");
+      : randomBytes(16)
+          .toString("hex");
 
   return `${random}.${secret}`;
 }
@@ -326,7 +428,8 @@ function token() {
 function bearer(req) {
   const h =
     String(
-      req.headers.authorization || ""
+      req.headers.authorization ||
+      ""
     );
 
   return h
@@ -335,6 +438,7 @@ function bearer(req) {
     ? h.slice(7).trim()
     : "";
 }
+
 
 /* =========================================================
    SESSIONS
@@ -350,13 +454,16 @@ async function createSession(
       {}
     );
 
-  const t = token();
+  const t =
+    token();
 
   sessions[t] = {
     userId,
     role,
-    createdAt: Date.now(),
-    lastSeen: Date.now()
+    createdAt:
+      Date.now(),
+    lastSeen:
+      Date.now()
   };
 
   await writeJSON(
@@ -377,11 +484,16 @@ async function destroyUserSessions(
     );
 
   for (
-    const [sessionToken, session]
-    of Object.entries(sessions)
+    const [
+      sessionToken,
+      session
+    ] of Object.entries(
+      sessions
+    )
   ) {
     if (
-      session.userId === userId
+      session.userId ===
+      userId
     ) {
       delete sessions[
         sessionToken
@@ -396,7 +508,8 @@ async function destroyUserSessions(
 }
 
 async function currentUser(req) {
-  const t = bearer(req);
+  const t =
+    bearer(req);
 
   if (!t) {
     return null;
@@ -408,7 +521,8 @@ async function currentUser(req) {
       {}
     );
 
-  const s = sessions[t];
+  const s =
+    sessions[t];
 
   if (!s) {
     return null;
@@ -451,7 +565,8 @@ async function currentUser(req) {
     return null;
   }
 
-  s.lastSeen = Date.now();
+  s.lastSeen =
+    Date.now();
 
   sessions[t] = s;
 
@@ -462,7 +577,8 @@ async function currentUser(req) {
 
   return {
     ...u,
-    sessionRole: s.role
+    sessionRole:
+      s.role
   };
 }
 
@@ -477,7 +593,8 @@ async function requireUser(
   if (!u) {
     return res.status(401).json({
       ok: false,
-      error: "AUTH_REQUIRED",
+      error:
+        "AUTH_REQUIRED",
       message:
         "Please log in."
     });
@@ -502,7 +619,8 @@ async function requireAdmin(
   ) {
     return res.status(403).json({
       ok: false,
-      error: "ADMIN_REQUIRED",
+      error:
+        "ADMIN_REQUIRED",
       message:
         "Administrator access required."
     });
@@ -512,6 +630,7 @@ async function requireAdmin(
 
   next();
 }
+
 
 /* =========================================================
    LOGGING
@@ -541,7 +660,9 @@ async function security(
   const keys =
     Object.keys(db);
 
-  if (keys.length > 500) {
+  if (
+    keys.length > 500
+  ) {
     keys
       .sort(
         (a, b) =>
@@ -598,7 +719,9 @@ async function errorLog(
     const keys =
       Object.keys(db);
 
-    if (keys.length > 500) {
+    if (
+      keys.length > 500
+    ) {
       keys
         .sort(
           (a, b) =>
@@ -652,21 +775,30 @@ async function usage(
   }
 
   if (type === "ai") {
-    db[userId].aiGenerations++;
+    db[userId]
+      .aiGenerations++;
 
-    db[userId].aiSeconds +=
-      Number(seconds || 0);
+    db[userId]
+      .aiSeconds +=
+      Number(
+        seconds || 0
+      );
   }
 
   if (type === "studio") {
-    db[userId].studioJobs++;
+    db[userId]
+      .studioJobs++;
   }
 
-  if (type === "narration") {
-    db[userId].narrationJobs++;
+  if (
+    type === "narration"
+  ) {
+    db[userId]
+      .narrationJobs++;
   }
 
-  db[userId].updatedAt =
+  db[userId]
+    .updatedAt =
     Date.now();
 
   await writeJSON(
@@ -674,6 +806,7 @@ async function usage(
     db
   );
 }
+
 
 /* =========================================================
    AUTH — REGISTER
@@ -696,7 +829,8 @@ app.post(
 
       const password =
         String(
-          req.body.password || ""
+          req.body.password ||
+          ""
         );
 
       if (
@@ -782,10 +916,13 @@ app.post(
         }
       });
     } catch (e) {
-      await errorLog(e, {
-        route:
-          req.originalUrl
-      });
+      await errorLog(
+        e,
+        {
+          route:
+            req.originalUrl
+        }
+      );
 
       res.status(500).json({
         ok: false,
@@ -795,6 +932,7 @@ app.post(
     }
   }
 );
+
 
 /* =========================================================
    AUTH — LOGIN
@@ -811,7 +949,8 @@ app.post(
 
       const password =
         String(
-          req.body.password || ""
+          req.body.password ||
+          ""
         );
 
       const users =
@@ -897,6 +1036,7 @@ app.post(
   }
 );
 
+
 /* =========================================================
    AUTH — LOGOUT
 ========================================================= */
@@ -936,6 +1076,7 @@ app.post(
   }
 );
 
+
 /* =========================================================
    AUTH — CURRENT USER
 ========================================================= */
@@ -956,12 +1097,15 @@ app.get(
   }
 );
 
+
 /* =========================================================
    PASSWORD RECOVERY
 ========================================================= */
 
 function resetHash(code) {
-  return createHash("sha256")
+  return createHash(
+    "sha256"
+  )
     .update(
       String(code)
     )
@@ -993,42 +1137,46 @@ async function sendRecoveryEmail(
       "https://api.resend.com/emails",
       {
         method: "POST",
+
         headers: {
           Authorization:
             `Bearer ${RESEND_API_KEY}`,
           "Content-Type":
             "application/json"
         },
-        body: JSON.stringify({
-          from: RESEND_FROM,
-          to: [to],
-          subject:
-            "MAMAKI AI password recovery",
-          html: `
-<!doctype html>
-<html>
-<body style="font-family:Arial,sans-serif;background:#f5f5f5;padding:30px">
-  <div style="max-width:520px;margin:auto;background:white;padding:30px;border-radius:16px">
-    <h2>✨ MAMAKI AI</h2>
-    <p>Your password recovery code is:</p>
-    <div style="font-size:36px;font-weight:bold;letter-spacing:8px;padding:20px 0">
-      ${code}
-    </div>
-    <p>This code expires in 15 minutes.</p>
-    <p>If you did not request this password reset, you can safely ignore this email.</p>
-  </div>
-</body>
-</html>
-          `
-        })
+
+        body:
+          JSON.stringify({
+            from:
+              RESEND_FROM,
+
+            to: [to],
+
+            subject:
+              "MAMAKI AI password recovery",
+
+            html:
+              "<!doctype html>" +
+              "<html><body style=\"font-family:Arial,sans-serif;background:#f5f5f5;padding:30px\">" +
+              "<div style=\"max-width:520px;margin:auto;background:white;padding:30px;border-radius:16px\">" +
+              "<h2>✨ MAMAKI AI</h2>" +
+              "<p>Your password recovery code is:</p>" +
+              "<div style=\"font-size:36px;font-weight:bold;letter-spacing:8px;padding:20px 0\">" +
+              text(code, 20) +
+              "</div>" +
+              "<p>This code expires in 15 minutes.</p>" +
+              "<p>If you did not request this password reset, you can safely ignore this email.</p>" +
+              "</div></body></html>"
+          })
       }
     );
 
   return response.ok;
 }
 
+
 /* =========================================================
-   FORGOT PASSWORD API
+   FORGOT PASSWORD
 ========================================================= */
 
 app.post(
@@ -1100,25 +1248,33 @@ app.post(
             code
           );
       } catch (e) {
-        await errorLog(e, {
-          action:
-            "SEND_RECOVERY_EMAIL",
-          userId: u.id
-        });
+        await errorLog(
+          e,
+          {
+            action:
+              "SEND_RECOVERY_EMAIL",
+            userId:
+              u.id
+          }
+        );
       }
 
       await security(
         "PASSWORD_RECOVERY_REQUEST",
         {
-          userId: u.id,
-          email: u.email,
-          emailSent: sent
+          userId:
+            u.id,
+          email:
+            u.email,
+          emailSent:
+            sent
         }
       );
 
       res.json({
         ok: true,
-        emailSent: sent,
+        emailSent:
+          sent,
         message:
           sent
             ? "Recovery code sent to your email."
@@ -1136,8 +1292,9 @@ app.post(
   }
 );
 
+
 /* =========================================================
-   RESET PASSWORD API
+   RESET PASSWORD
 ========================================================= */
 
 app.post(
@@ -1157,7 +1314,8 @@ app.post(
 
       const newPassword =
         String(
-          req.body.password || ""
+          req.body.password ||
+          ""
         );
 
       if (
@@ -1222,7 +1380,8 @@ app.post(
         resetHash(code) !==
         r.codeHash
       ) {
-        resets[u.id] = r;
+        resets[u.id] =
+          r;
 
         await writeJSON(
           RESETS,
@@ -1232,8 +1391,10 @@ app.post(
         await security(
           "PASSWORD_RECOVERY_FAILED",
           {
-            userId: u.id,
-            email: u.email
+            userId:
+              u.id,
+            email:
+              u.email
           }
         );
 
@@ -1249,13 +1410,17 @@ app.post(
           newPassword
         );
 
-      u.salt = hp.salt;
-      u.hash = hp.hash;
+      u.salt =
+        hp.salt;
+
+      u.hash =
+        hp.hash;
 
       u.passwordChangedAt =
         new Date().toISOString();
 
-      users[u.id] = u;
+      users[u.id] =
+        u;
 
       await writeJSON(
         USERS,
@@ -1276,8 +1441,10 @@ app.post(
       await security(
         "PASSWORD_CHANGED",
         {
-          userId: u.id,
-          email: u.email
+          userId:
+            u.id,
+          email:
+            u.email
         }
       );
 
@@ -1298,6 +1465,7 @@ app.post(
   }
 );
 
+
 /* =========================================================
    FORGOT PASSWORD WEB PAGE
 ========================================================= */
@@ -1307,162 +1475,45 @@ app.get(
   (req, res) => {
     res.type("html").send(`
 <!doctype html>
-<html lang="en">
+<html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MAMAKI AI — Forgot Password</title>
 <style>
-*{box-sizing:border-box}
-body{
-  margin:0;
-  min-height:100vh;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  background:#080b12;
-  color:#fff;
-  font-family:Arial,sans-serif;
-  padding:20px
-}
-.card{
-  width:100%;
-  max-width:460px;
-  background:#111722;
-  border:1px solid #263044;
-  border-radius:22px;
-  padding:30px;
-  box-shadow:0 20px 60px rgba(0,0,0,.4)
-}
-.logo{
-  font-size:26px;
-  font-weight:800;
-  margin-bottom:10px
-}
-.sub{
-  color:#9ca8bb;
-  line-height:1.6;
-  margin-bottom:25px
-}
-input{
-  width:100%;
-  padding:15px;
-  border-radius:12px;
-  border:1px solid #303b50;
-  background:#0b1019;
-  color:white;
-  outline:none;
-  margin-bottom:14px
-}
-button{
-  width:100%;
-  padding:15px;
-  border:0;
-  border-radius:12px;
-  background:#fff;
-  color:#000;
-  font-weight:800;
-  cursor:pointer
-}
-button:disabled{
-  opacity:.5;
-  cursor:not-allowed
-}
-.msg{
-  margin-top:18px;
-  padding:13px;
-  border-radius:12px;
-  display:none;
-  line-height:1.5
-}
-.back{
-  display:block;
-  margin-top:20px;
-  text-align:center;
-  color:#9ca8bb;
-  text-decoration:none
-}
+body{margin:0;background:#080b12;color:white;font-family:Arial,sans-serif}
+.box{max-width:430px;margin:80px auto;padding:25px;background:#111722;border:1px solid #283246;border-radius:18px}
+input,button{width:100%;padding:14px;margin-top:10px;box-sizing:border-box;border-radius:10px}
+input{background:#080c14;border:1px solid #30394d;color:white}
+button{border:0;font-weight:bold;cursor:pointer}
 </style>
 </head>
 <body>
-<div class="card">
-  <div class="logo">✨ MAMAKI AI</div>
-  <div class="sub">
-    Enter your account email and we will send you a recovery code.
-  </div>
-
-  <form id="form">
-    <input
-      id="email"
-      type="email"
-      placeholder="Your email address"
-      autocomplete="email"
-      required
-    >
-    <button id="button" type="submit">
-      Send Recovery Code
-    </button>
-  </form>
-
-  <div id="msg" class="msg"></div>
-
-  <a class="back" href="/">
-    ← Back to MAMAKI AI
-  </a>
+<div class="box">
+<h2>✨ MAMAKI AI</h2>
+<p>Enter your account email and we will send you a recovery code.</p>
+<form id="form">
+<input id="email" type="email" placeholder="Email address" required>
+<button type="submit">Send Recovery Code</button>
+</form>
+<p id="msg"></p>
+<a href="/">← Back to MAMAKI AI</a>
 </div>
-
 <script>
-const form=document.getElementById("form");
-const button=document.getElementById("button");
+document.getElementById("form").addEventListener("submit",async function(e){
+e.preventDefault();
 const msg=document.getElementById("msg");
-
-function show(message,error=false){
-  msg.style.display="block";
-  msg.textContent=message;
-  msg.style.background=error
-    ?"rgba(255,70,70,.12)"
-    :"rgba(70,255,150,.10)";
-  msg.style.color=error
-    ?" #ff9b9b"
-    :"#9dffc5";
+try{
+const r=await fetch("/api/auth/forgot-password",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({email:document.getElementById("email").value})
+});
+const d=await r.json();
+msg.textContent=d.message||"Request completed.";
+}catch(e){
+msg.textContent="Request failed.";
 }
-
-form.addEventListener("submit",async e=>{
-  e.preventDefault();
-
-  button.disabled=true;
-  button.textContent="Sending...";
-
-  try{
-    const response=await fetch("/api/auth/forgot-password",{
-      method:"POST",
-      headers:{
-        "Content-Type":"application/json"
-      },
-      body:JSON.stringify({
-        email:document.getElementById("email").value
-      })
-    });
-
-    const data=await response.json();
-
-    if(!response.ok){
-      throw new Error(data.message||"Request failed.");
-    }
-
-    show(data.message||"If the account exists, recovery instructions have been sent.");
-
-    if(data.emailSent){
-      setTimeout(()=>{
-        window.location.href="/reset-password";
-      },1200);
-    }
-  }catch(error){
-    show(error.message||"Something went wrong.",true);
-  }finally{
-    button.disabled=false;
-    button.textContent="Send Recovery Code";
-  }
 });
 </script>
 </body>
@@ -1470,6 +1521,7 @@ form.addEventListener("submit",async e=>{
     `);
   }
 );
+
 
 /* =========================================================
    RESET PASSWORD WEB PAGE
@@ -1480,205 +1532,69 @@ app.get(
   (req, res) => {
     res.type("html").send(`
 <!doctype html>
-<html lang="en">
+<html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MAMAKI AI — Reset Password</title>
 <style>
-*{box-sizing:border-box}
-body{
-  margin:0;
-  min-height:100vh;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  background:#080b12;
-  color:#fff;
-  font-family:Arial,sans-serif;
-  padding:20px
-}
-.card{
-  width:100%;
-  max-width:460px;
-  background:#111722;
-  border:1px solid #263044;
-  border-radius:22px;
-  padding:30px;
-  box-shadow:0 20px 60px rgba(0,0,0,.4)
-}
-.logo{
-  font-size:26px;
-  font-weight:800;
-  margin-bottom:10px
-}
-.sub{
-  color:#9ca8bb;
-  line-height:1.6;
-  margin-bottom:25px
-}
-input{
-  width:100%;
-  padding:15px;
-  border-radius:12px;
-  border:1px solid #303b50;
-  background:#0b1019;
-  color:white;
-  outline:none;
-  margin-bottom:14px
-}
-button{
-  width:100%;
-  padding:15px;
-  border:0;
-  border-radius:12px;
-  background:#fff;
-  color:#000;
-  font-weight:800;
-  cursor:pointer
-}
-button:disabled{
-  opacity:.5;
-  cursor:not-allowed
-}
-.msg{
-  margin-top:18px;
-  padding:13px;
-  border-radius:12px;
-  display:none;
-  line-height:1.5
-}
-.back{
-  display:block;
-  margin-top:20px;
-  text-align:center;
-  color:#9ca8bb;
-  text-decoration:none
-}
+body{margin:0;background:#080b12;color:white;font-family:Arial,sans-serif}
+.box{max-width:430px;margin:60px auto;padding:25px;background:#111722;border:1px solid #283246;border-radius:18px}
+input,button{width:100%;padding:14px;margin-top:10px;box-sizing:border-box;border-radius:10px}
+input{background:#080c14;border:1px solid #30394d;color:white}
+button{border:0;font-weight:bold;cursor:pointer}
 </style>
 </head>
 <body>
-<div class="card">
-  <div class="logo">✨ MAMAKI AI</div>
-  <div class="sub">
-    Enter the recovery code sent to your email and choose a new password.
-  </div>
-
-  <form id="form">
-
-    <input
-      id="email"
-      type="email"
-      placeholder="Email address"
-      autocomplete="email"
-      required
-    >
-
-    <input
-      id="code"
-      type="text"
-      inputmode="numeric"
-      maxlength="6"
-      placeholder="6-digit recovery code"
-      required
-    >
-
-    <input
-      id="password"
-      type="password"
-      minlength="6"
-      placeholder="New password"
-      autocomplete="new-password"
-      required
-    >
-
-    <input
-      id="confirm"
-      type="password"
-      minlength="6"
-      placeholder="Confirm new password"
-      autocomplete="new-password"
-      required
-    >
-
-    <button id="button" type="submit">
-      Reset Password
-    </button>
-  </form>
-
-  <div id="msg" class="msg"></div>
-
-  <a class="back" href="/">
-    ← Back to MAMAKI AI
-  </a>
+<div class="box">
+<h2>✨ MAMAKI AI</h2>
+<p>Enter your recovery code and choose a new password.</p>
+<form id="form">
+<input id="email" type="email" placeholder="Email address" required>
+<input id="code" type="text" inputmode="numeric" maxlength="6" placeholder="6-digit recovery code" required>
+<input id="password" type="password" minlength="6" placeholder="New password" required>
+<input id="confirm" type="password" minlength="6" placeholder="Confirm new password" required>
+<button type="submit">Reset Password</button>
+</form>
+<p id="msg"></p>
+<a href="/">← Back to MAMAKI AI</a>
 </div>
-
 <script>
-const form=document.getElementById("form");
-const button=document.getElementById("button");
+document.getElementById("form").addEventListener("submit",async function(e){
+e.preventDefault();
+
+const password=document.getElementById("password").value;
+const confirm=document.getElementById("confirm").value;
 const msg=document.getElementById("msg");
 
-function show(message,error=false){
-  msg.style.display="block";
-  msg.textContent=message;
-  msg.style.background=error
-    ?"rgba(255,70,70,.12)"
-    :"rgba(70,255,150,.10)";
-  msg.style.color=error
-    ?" #ff9b9b"
-    :"#9dffc5";
+if(password!==confirm){
+msg.textContent="Passwords do not match.";
+return;
 }
 
-form.addEventListener("submit",async e=>{
-  e.preventDefault();
+try{
+const r=await fetch("/api/auth/reset-password",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({
+email:document.getElementById("email").value,
+code:document.getElementById("code").value,
+password
+})
+});
 
-  const password=document.getElementById("password").value;
-  const confirm=document.getElementById("confirm").value;
+const d=await r.json();
 
-  if(password!==confirm){
-    show("The two passwords do not match.",true);
-    return;
-  }
+msg.textContent=d.message||"Request completed.";
 
-  if(password.length<6){
-    show("Password must contain at least 6 characters.",true);
-    return;
-  }
-
-  button.disabled=true;
-  button.textContent="Resetting...";
-
-  try{
-    const response=await fetch("/api/auth/reset-password",{
-      method:"POST",
-      headers:{
-        "Content-Type":"application/json"
-      },
-      body:JSON.stringify({
-        email:document.getElementById("email").value,
-        code:document.getElementById("code").value,
-        password
-      })
-    });
-
-    const data=await response.json();
-
-    if(!response.ok){
-      throw new Error(data.message||"Password reset failed.");
-    }
-
-    show(data.message||"Password changed successfully.");
-
-    setTimeout(()=>{
-      window.location.href="/";
-    },1800);
-
-  }catch(error){
-    show(error.message||"Password reset failed.",true);
-  }finally{
-    button.disabled=false;
-    button.textContent="Reset Password";
-  }
+if(d.ok){
+setTimeout(function(){
+location.href="/";
+},1500);
+}
+}catch(e){
+msg.textContent="Password reset failed.";
+}
 });
 </script>
 </body>
@@ -1686,6 +1602,7 @@ form.addEventListener("submit",async e=>{
     `);
   }
 );
+
 
 /* =========================================================
    ACCOUNT
@@ -1703,14 +1620,21 @@ app.get(
 
     res.json({
       ok: true,
+
       user: {
-        id: req.user.id,
-        name: req.user.name,
-        email: req.user.email,
-        role: req.user.role
+        id:
+          req.user.id,
+        name:
+          req.user.name,
+        email:
+          req.user.email,
+        role:
+          req.user.role
       },
+
       usage:
-        db[req.user.id] || {
+        db[req.user.id] ||
+        {
           aiGenerations: 0,
           aiSeconds: 0,
           studioJobs: 0,
@@ -1756,9 +1680,11 @@ app.post(
         });
       }
 
-      u.name = name;
+      u.name =
+        name;
 
-      users[u.id] = u;
+      users[u.id] =
+        u;
 
       await writeJSON(
         USERS,
@@ -1768,10 +1694,14 @@ app.post(
       res.json({
         ok: true,
         user: {
-          id: u.id,
-          name: u.name,
-          email: u.email,
-          role: u.role
+          id:
+            u.id,
+          name:
+            u.name,
+          email:
+            u.email,
+          role:
+            u.role
         }
       });
     } catch (e) {
@@ -1786,8 +1716,9 @@ app.post(
   }
 );
 
+
 /* =========================================================
-   AI GENERATION HELPERS
+   VIDEO HELPERS
 ========================================================= */
 
 async function downloadOutput(
@@ -1850,7 +1781,9 @@ async function downloadOutput(
   return file;
 }
 
-function runFFmpeg(args) {
+function runFFmpeg(
+  args
+) {
   return new Promise(
     (resolve, reject) => {
       const p =
@@ -1877,7 +1810,9 @@ function runFFmpeg(args) {
       p.on(
         "close",
         code => {
-          if (code === 0) {
+          if (
+            code === 0
+          ) {
             resolve();
           } else {
             reject(
@@ -1970,6 +1905,11 @@ async function watermark(
   );
 }
 
+
+/* =========================================================
+   AI VIDEO GENERATION
+========================================================= */
+
 async function generateVideo({
   prompt,
   image,
@@ -2059,10 +1999,12 @@ async function generateVideo({
 
   return {
     file,
+
     url:
       `/outputs/${path.basename(file)}`
   };
 }
+
 
 /* =========================================================
    GENERATE VIDEO
@@ -2157,7 +2099,8 @@ app.post(
             jobs.get(id);
 
           if (job) {
-            job.progress = 20;
+            job.progress =
+              20;
           }
 
           const result =
@@ -2174,11 +2117,15 @@ app.post(
             jobs.get(id);
 
           if (finished) {
-            finished.progress = 100;
+            finished.progress =
+              100;
+
             finished.status =
               "completed";
+
             finished.url =
               result.url;
+
             finished.completedAt =
               new Date().toISOString();
           }
@@ -2212,7 +2159,9 @@ app.post(
             }
           );
         } finally {
-          if (temporaryImage) {
+          if (
+            temporaryImage
+          ) {
             await fs.rm(
               temporaryImage,
               {
@@ -2226,7 +2175,9 @@ app.post(
     } catch (e) {
       await errorLog(e);
 
-      if (!res.headersSent) {
+      if (
+        !res.headersSent
+      ) {
         res.status(500).json({
           ok: false,
           message:
@@ -2236,6 +2187,7 @@ app.post(
     }
   }
 );
+
 
 /* =========================================================
    JOB STATUS
@@ -2269,6 +2221,7 @@ app.get(
   }
 );
 
+
 /* =========================================================
    PROJECTS
 ========================================================= */
@@ -2283,13 +2236,16 @@ app.get(
           PROJECTS
         );
 
-      const projects = [];
+      const projects =
+        [];
 
       for (
         const f of files
       ) {
         if (
-          !f.endsWith(".json")
+          !f.endsWith(
+            ".json"
+          )
         ) {
           continue;
         }
@@ -2447,6 +2403,7 @@ app.delete(
   }
 );
 
+
 /* =========================================================
    FREE STUDIO — TRIM
 ========================================================= */
@@ -2486,7 +2443,8 @@ app.post(
         Math.max(
           0,
           Number(
-            req.body.start || 0
+            req.body.start ||
+            0
           )
         );
 
@@ -2494,7 +2452,8 @@ app.post(
         Math.max(
           start + 0.1,
           Number(
-            req.body.end || 5
+            req.body.end ||
+            5
           )
         );
 
@@ -2546,6 +2505,7 @@ app.post(
   }
 );
 
+
 /* =========================================================
    FREE STUDIO — COMBINE
 ========================================================= */
@@ -2580,8 +2540,7 @@ app.post(
         );
 
       for (
-        const file
-        of req.files
+        const file of req.files
       ) {
         const p =
           path.join(
@@ -2649,8 +2608,7 @@ app.post(
       });
     } finally {
       for (
-        const p
-        of inputs
+        const p of inputs
       ) {
         await fs.rm(
           p,
@@ -2671,6 +2629,7 @@ app.post(
     }
   }
 );
+
 
 /* =========================================================
    NARRATION
@@ -2740,6 +2699,7 @@ app.post(
   }
 );
 
+
 /* =========================================================
    ADMIN LOGIN
    IMPORTANT:
@@ -2757,7 +2717,8 @@ app.post(
 
       const password =
         String(
-          req.body.password || ""
+          req.body.password ||
+          ""
         );
 
       if (
@@ -2799,8 +2760,8 @@ app.post(
 
       /*
        * IMPORTANT:
-       * We search for the existing admin account.
-       * We DO NOT create another account.
+       * Search for the existing administrator.
+       * NEVER create another admin account.
        */
 
       const admin =
@@ -2873,6 +2834,7 @@ app.post(
   }
 );
 
+
 /* =========================================================
    ADMIN STATS
 ========================================================= */
@@ -2906,33 +2868,32 @@ app.get(
       let narration = 0;
 
       for (
-        const u
-        of Object.values(
+        const u of Object.values(
           usageDb
         )
       ) {
         generations +=
           Number(
             u.aiGenerations ||
-              0
+            0
           );
 
         seconds +=
           Number(
             u.aiSeconds ||
-              0
+            0
           );
 
         studio +=
           Number(
             u.studioJobs ||
-              0
+            0
           );
 
         narration +=
           Number(
             u.narrationJobs ||
-              0
+            0
           );
       }
 
@@ -2955,6 +2916,7 @@ app.get(
 
       res.json({
         ok: true,
+
         stats: {
           totalUsers:
             Object.keys(
@@ -3014,6 +2976,7 @@ app.get(
   }
 );
 
+
 /* =========================================================
    ADMIN USERS
 ========================================================= */
@@ -3037,6 +3000,7 @@ app.get(
 
       res.json({
         ok: true,
+
         users:
           Object.values(
             users
@@ -3044,25 +3008,31 @@ app.get(
             u => ({
               id:
                 u.id,
+
               name:
                 u.name,
+
               email:
                 u.email,
+
               role:
                 u.role,
+
               disabled:
                 Boolean(
                   u.disabled
                 ),
+
               createdAt:
                 u.createdAt,
+
               lastLoginAt:
                 u.lastLoginAt ||
                 null,
+
               usage:
-                usageDb[
-                  u.id
-                ] || {}
+                usageDb[u.id] ||
+                {}
             })
           )
       });
@@ -3078,6 +3048,7 @@ app.get(
   }
 );
 
+
 /* =========================================================
    ADMIN USER DETAILS
 ========================================================= */
@@ -3086,62 +3057,80 @@ app.get(
   "/api/admin/users/:id",
   requireAdmin,
   async (req, res) => {
-    const users =
-      await readJSON(
-        USERS,
-        {}
-      );
+    try {
+      const users =
+        await readJSON(
+          USERS,
+          {}
+        );
 
-    const u =
-      users[
-        req.params.id
-      ];
+      const u =
+        users[
+          req.params.id
+        ];
 
-    if (!u) {
-      return res.status(404).json({
+      if (!u) {
+        return res.status(404).json({
+          ok: false,
+          message:
+            "User not found."
+        });
+      }
+
+      const usageDb =
+        await readJSON(
+          USAGE,
+          {}
+        );
+
+      res.json({
+        ok: true,
+
+        user: {
+          id:
+            u.id,
+
+          name:
+            u.name,
+
+          email:
+            u.email,
+
+          role:
+            u.role,
+
+          disabled:
+            Boolean(
+              u.disabled
+            ),
+
+          createdAt:
+            u.createdAt,
+
+          lastLoginAt:
+            u.lastLoginAt ||
+            null,
+
+          usage:
+            usageDb[u.id] ||
+            {}
+        }
+      });
+    } catch (e) {
+      await errorLog(e);
+
+      res.status(500).json({
         ok: false,
         message:
-          "User not found."
+          "Unable to load user."
       });
     }
-
-    const usageDb =
-      await readJSON(
-        USAGE,
-        {}
-      );
-
-    res.json({
-      ok: true,
-      user: {
-        id:
-          u.id,
-        name:
-          u.name,
-        email:
-          u.email,
-        role:
-          u.role,
-        disabled:
-          Boolean(
-            u.disabled
-          ),
-        createdAt:
-          u.createdAt,
-        lastLoginAt:
-          u.lastLoginAt ||
-          null,
-        usage:
-          usageDb[
-            u.id
-          ] || {}
-      }
-    });
   }
 );
 
+
 /* =========================================================
-   ADMIN DISABLE USER
+   ADMIN DISABLE / ENABLE USER
 ========================================================= */
 
 app.post(
@@ -3167,6 +3156,11 @@ app.post(
             "User not found."
         });
       }
+
+      /*
+       * NEVER allow the main administrator
+       * to be disabled here.
+       */
 
       if (
         u.email ===
@@ -3232,6 +3226,7 @@ app.post(
   }
 );
 
+
 /* =========================================================
    ADMIN JOBS
 ========================================================= */
@@ -3250,6 +3245,7 @@ app.get(
   }
 );
 
+
 /* =========================================================
    ADMIN ERRORS
 ========================================================= */
@@ -3266,6 +3262,7 @@ app.get(
 
     res.json({
       ok: true,
+
       errors:
         Object.values(
           db
@@ -3278,6 +3275,7 @@ app.get(
     });
   }
 );
+
 
 /* =========================================================
    ADMIN SECURITY
@@ -3295,6 +3293,7 @@ app.get(
 
     res.json({
       ok: true,
+
       events:
         Object.values(
           db
@@ -3308,8 +3307,11 @@ app.get(
   }
 );
 
+
 /* =========================================================
    ADMIN PAGE
+   IMPORTANT:
+   NO NESTED BACKTICKS INSIDE THIS HTML TEMPLATE.
 ========================================================= */
 
 app.get(
@@ -3318,18 +3320,31 @@ app.get(
     res.type("html").send(`
 <!doctype html>
 <html lang="en">
+
 <head>
+
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<meta
+  name="viewport"
+  content="width=device-width,initial-scale=1"
+>
+
 <title>MAMAKI AI — Admin</title>
+
 <style>
-*{box-sizing:border-box}
+
+*{
+  box-sizing:border-box;
+}
+
 body{
   margin:0;
   background:#080b12;
   color:#fff;
-  font-family:Arial,sans-serif
+  font-family:Arial,sans-serif;
 }
+
 header{
   padding:20px;
   border-bottom:1px solid #252d3d;
@@ -3337,75 +3352,91 @@ header{
   justify-content:space-between;
   align-items:center;
   gap:15px;
-  flex-wrap:wrap
+  flex-wrap:wrap;
 }
+
 .logo{
   font-weight:900;
-  font-size:22px
+  font-size:22px;
 }
+
 button{
   border:0;
   border-radius:10px;
   padding:11px 16px;
   cursor:pointer;
-  font-weight:700
+  font-weight:700;
 }
+
 .primary{
   background:#fff;
-  color:#000
+  color:#000;
 }
+
 .danger{
   background:#ff4d4d;
-  color:#fff
+  color:#fff;
 }
+
 main{
   max-width:1300px;
   margin:auto;
-  padding:25px
+  padding:25px;
 }
+
 .card{
   background:#111722;
   border:1px solid #263044;
   border-radius:18px;
   padding:20px;
-  margin-bottom:20px
+  margin-bottom:20px;
 }
+
 .grid{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-  gap:15px
+  grid-template-columns:
+    repeat(
+      auto-fit,
+      minmax(180px,1fr)
+    );
+  gap:15px;
 }
+
 .stat{
   background:#0c111b;
   border:1px solid #252f42;
   border-radius:15px;
-  padding:18px
+  padding:18px;
 }
+
 .stat b{
   display:block;
   font-size:28px;
-  margin-top:8px
+  margin-top:8px;
 }
-.muted{
-  color:#93a0b4
-}
+
 table{
   width:100%;
-  border-collapse:collapse
+  border-collapse:collapse;
 }
-th,td{
+
+th,
+td{
   padding:12px;
   text-align:left;
   border-bottom:1px solid #252d3d;
-  font-size:14px
+  font-size:14px;
 }
+
 .scroll{
-  overflow:auto
+  overflow:auto;
 }
+
 #login{
   max-width:430px;
-  margin:70px auto
+  margin:70px auto;
 }
+
 input{
   width:100%;
   padding:14px;
@@ -3413,64 +3444,111 @@ input{
   background:#090e16;
   border:1px solid #303a4e;
   border-radius:10px;
-  color:#fff
+  color:#fff;
 }
+
 .notice{
   padding:12px;
   border-radius:10px;
   margin-top:12px;
-  display:none
+  display:none;
+  background:#35151b;
+  border:1px solid #73303b;
 }
+
 </style>
+
 </head>
+
 <body>
 
 <header>
-  <div class="logo">✨ MAMAKI AI ADMIN</div>
-  <button class="danger" onclick="logout()">Logout</button>
+
+<div class="logo">
+✨ MAMAKI AI ADMIN
+</div>
+
+<button
+  class="danger"
+  onclick="logout()"
+>
+Logout
+</button>
+
 </header>
 
 <main>
 
-<section id="login" class="card">
-  <h2>Administrator Login</h2>
+<section
+  id="login"
+  class="card"
+>
 
-  <form id="loginForm">
-    <input
-      id="email"
-      type="email"
-      placeholder="Administrator email"
-      required
-    >
+<h2>
+Administrator Login
+</h2>
 
-    <input
-      id="password"
-      type="password"
-      placeholder="Administrator password"
-      required
-    >
+<form
+  id="loginForm"
+>
 
-    <button
-      class="primary"
-      style="width:100%;margin-top:10px"
-    >
-      Login
-    </button>
-  </form>
+<input
+  id="email"
+  type="email"
+  placeholder="Administrator email"
+  required
+>
 
-  <div id="loginMsg" class="notice"></div>
+<input
+  id="password"
+  type="password"
+  placeholder="Administrator password"
+  required
+>
+
+<button
+  class="primary"
+  style="width:100%;margin-top:10px"
+  type="submit"
+>
+Login
+</button>
+
+</form>
+
+<div
+  id="loginMsg"
+  class="notice"
+></div>
+
 </section>
 
-<section id="dashboard" style="display:none">
 
-<div class="grid" id="stats"></div>
+<section
+  id="dashboard"
+  style="display:none"
+>
+
+<div
+  class="grid"
+  id="stats"
+></div>
+
 
 <div class="card">
-<h2>Users</h2>
+
+<h2>
+Users
+</h2>
+
 <div class="scroll">
+
 <table>
+
 <thead>
+
 <tr>
+
 <th>Name</th>
 <th>Email</th>
 <th>Role</th>
@@ -3478,257 +3556,781 @@ input{
 <th>AI Generations</th>
 <th>AI Seconds</th>
 <th>Action</th>
+
 </tr>
+
 </thead>
-<tbody id="users"></tbody>
+
+<tbody
+  id="users"
+></tbody>
+
 </table>
-</div>
+
 </div>
 
+</div>
+
+
 <div class="card">
-<h2>Current Jobs</h2>
+
+<h2>
+Current Jobs
+</h2>
+
 <div class="scroll">
+
 <table>
+
 <thead>
+
 <tr>
+
 <th>ID</th>
 <th>User</th>
 <th>Status</th>
 <th>Progress</th>
 <th>Created</th>
+
 </tr>
+
 </thead>
-<tbody id="jobs"></tbody>
+
+<tbody
+  id="jobs"
+></tbody>
+
 </table>
-</div>
+
 </div>
 
+</div>
+
+
 <div class="card">
-<h2>Recent Security Events</h2>
+
+<h2>
+Recent Security Events
+</h2>
+
 <div class="scroll">
+
 <table>
+
 <thead>
+
 <tr>
+
 <th>Type</th>
 <th>Email</th>
 <th>Date</th>
+
 </tr>
+
 </thead>
-<tbody id="security"></tbody>
+
+<tbody
+  id="security"
+></tbody>
+
 </table>
-</div>
+
 </div>
 
+</div>
+
+
 <div class="card">
-<h2>Recent Errors</h2>
+
+<h2>
+Recent Errors
+</h2>
+
 <div class="scroll">
+
 <table>
+
 <thead>
+
 <tr>
+
 <th>Date</th>
 <th>Message</th>
+
 </tr>
+
 </thead>
-<tbody id="errors"></tbody>
+
+<tbody
+  id="errors"
+></tbody>
+
 </table>
+
 </div>
+
 </div>
 
 </section>
+
 </main>
 
+
 <script>
-let adminToken=localStorage.getItem("mamaki_admin_token")||"";
+
+let adminToken =
+  localStorage.getItem(
+    "mamaki_admin_token"
+  ) || "";
+
 
 function esc(v){
-  return String(v??"")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;");
+
+  return String(
+    v == null ? "" : v
+  )
+  .replaceAll(
+    "&",
+    "&amp;"
+  )
+  .replaceAll(
+    "<",
+    "&lt;"
+  )
+  .replaceAll(
+    ">",
+    "&gt;"
+  )
+  .replaceAll(
+    '"',
+    "&quot;"
+  )
+  .replaceAll(
+    "'",
+    "&#039;"
+  );
+
 }
 
-function showLoginMessage(message){
-  const el=document.getElementById("loginMsg");
-  el.style.display="block";
-  el.textContent=message;
+
+function showLoginMessage(
+  message
+){
+
+  const el =
+    document.getElementById(
+      "loginMsg"
+    );
+
+  el.style.display =
+    "block";
+
+  el.textContent =
+    message;
+
 }
 
-async function api(url,options={}){
-  options.headers={
-    ...(options.headers||{}),
-    Authorization:"Bearer "+adminToken,
-    "Content-Type":"application/json"
-  };
 
-  const r=await fetch(url,options);
+async function api(
+  url,
+  options
+){
 
-  const data=await r.json().catch(()=>({}));
+  options =
+    options || {};
+
+  options.headers =
+    Object.assign(
+      {},
+      options.headers || {},
+      {
+        Authorization:
+          "Bearer " +
+          adminToken,
+
+        "Content-Type":
+          "application/json"
+      }
+    );
+
+  const r =
+    await fetch(
+      url,
+      options
+    );
+
+  const data =
+    await r.json()
+      .catch(
+        function(){
+          return {};
+        }
+      );
 
   if(!r.ok){
-    throw new Error(data.message||"Request failed.");
+
+    throw new Error(
+      data.message ||
+      "Request failed."
+    );
+
   }
 
   return data;
+
 }
+
 
 function logout(){
-  localStorage.removeItem("mamaki_admin_token");
-  adminToken="";
+
+  localStorage.removeItem(
+    "mamaki_admin_token"
+  );
+
+  adminToken = "";
+
   location.reload();
+
 }
 
-document.getElementById("loginForm").addEventListener("submit",async e=>{
-  e.preventDefault();
+
+document
+  .getElementById(
+    "loginForm"
+  )
+  .addEventListener(
+    "submit",
+    async function(e){
+
+      e.preventDefault();
+
+      try{
+
+        const r =
+          await fetch(
+            "/api/admin/login",
+            {
+              method:
+                "POST",
+
+              headers:{
+                "Content-Type":
+                  "application/json"
+              },
+
+              body:
+                JSON.stringify({
+                  email:
+                    document
+                      .getElementById(
+                        "email"
+                      )
+                      .value,
+
+                  password:
+                    document
+                      .getElementById(
+                        "password"
+                      )
+                      .value
+                })
+            }
+          );
+
+        const data =
+          await r.json();
+
+        if(!r.ok){
+
+          throw new Error(
+            data.message ||
+            "Login failed."
+          );
+
+        }
+
+        adminToken =
+          data.token;
+
+        localStorage.setItem(
+          "mamaki_admin_token",
+          adminToken
+        );
+
+        await loadDashboard();
+
+      }catch(e){
+
+        showLoginMessage(
+          e.message
+        );
+
+      }
+
+    }
+  );
+
+
+async function loadDashboard(){
 
   try{
-    const r=await fetch("/api/admin/login",{
-      method:"POST",
-      headers:{
-        "Content-Type":"application/json"
-      },
-      body:JSON.stringify({
-        email:document.getElementById("email").value,
-        password:document.getElementById("password").value
-      })
-    });
 
-    const data=await r.json();
+    const result =
+      await Promise.all([
+        api(
+          "/api/admin/stats"
+        ),
 
-    if(!r.ok){
-      throw new Error(data.message||"Login failed.");
+        api(
+          "/api/admin/users"
+        ),
+
+        api(
+          "/api/admin/jobs"
+        ),
+
+        api(
+          "/api/admin/security"
+        ),
+
+        api(
+          "/api/admin/errors"
+        )
+      ]);
+
+    const stats =
+      result[0];
+
+    const users =
+      result[1];
+
+    const jobs =
+      result[2];
+
+    const security =
+      result[3];
+
+    const errors =
+      result[4];
+
+
+    document
+      .getElementById(
+        "login"
+      )
+      .style.display =
+      "none";
+
+
+    document
+      .getElementById(
+        "dashboard"
+      )
+      .style.display =
+      "block";
+
+
+    const s =
+      stats.stats;
+
+
+    let statsHTML =
+      "";
+
+    statsHTML +=
+      '<div class="stat">Users<b>' +
+      esc(s.totalUsers) +
+      '</b></div>';
+
+    statsHTML +=
+      '<div class="stat">Projects<b>' +
+      esc(s.totalProjects) +
+      '</b></div>';
+
+    statsHTML +=
+      '<div class="stat">AI Generations<b>' +
+      esc(s.aiGenerations) +
+      '</b></div>';
+
+    statsHTML +=
+      '<div class="stat">AI Seconds<b>' +
+      esc(s.aiSeconds) +
+      '</b></div>';
+
+    statsHTML +=
+      '<div class="stat">Studio Jobs<b>' +
+      esc(s.studioJobs) +
+      '</b></div>';
+
+    statsHTML +=
+      '<div class="stat">Narration Jobs<b>' +
+      esc(s.narrationJobs) +
+      '</b></div>';
+
+    statsHTML +=
+      '<div class="stat">Failed Jobs<b>' +
+      esc(s.failedJobs) +
+      '</b></div>';
+
+    statsHTML +=
+      '<div class="stat">Errors<b>' +
+      esc(s.recordedErrors) +
+      '</b></div>';
+
+    document
+      .getElementById(
+        "stats"
+      )
+      .innerHTML =
+      statsHTML;
+
+
+    let usersHTML =
+      "";
+
+    if(
+      users.users &&
+      users.users.length
+    ){
+
+      users.users.forEach(
+        function(u){
+
+          let action =
+            "Admin";
+
+          if(
+            u.role !==
+            "admin"
+          ){
+
+            action =
+              '<button onclick="toggleUser(' +
+              JSON.stringify(
+                u.id
+              ) +
+              "," +
+              String(
+                !u.disabled
+              ) +
+              ')">' +
+              (
+                u.disabled
+                  ? "Enable"
+                  : "Disable"
+              ) +
+              "</button>";
+
+          }
+
+          usersHTML +=
+            "<tr>" +
+
+            "<td>" +
+            esc(u.name) +
+            "</td>" +
+
+            "<td>" +
+            esc(u.email) +
+            "</td>" +
+
+            "<td>" +
+            esc(u.role) +
+            "</td>" +
+
+            "<td>" +
+            (
+              u.disabled
+                ? "Disabled"
+                : "Active"
+            ) +
+            "</td>" +
+
+            "<td>" +
+            esc(
+              u.usage &&
+              u.usage.aiGenerations ||
+              0
+            ) +
+            "</td>" +
+
+            "<td>" +
+            esc(
+              u.usage &&
+              u.usage.aiSeconds ||
+              0
+            ) +
+            "</td>" +
+
+            "<td>" +
+            action +
+            "</td>" +
+
+            "</tr>";
+
+        }
+      );
+
+    }else{
+
+      usersHTML =
+        '<tr><td colspan="7">No users found.</td></tr>';
+
     }
 
-    adminToken=data.token;
+    document
+      .getElementById(
+        "users"
+      )
+      .innerHTML =
+      usersHTML;
 
-    localStorage.setItem(
-      "mamaki_admin_token",
-      adminToken
+
+    let jobsHTML =
+      "";
+
+    if(
+      jobs.jobs &&
+      jobs.jobs.length
+    ){
+
+      jobs.jobs.forEach(
+        function(j){
+
+          jobsHTML +=
+            "<tr>" +
+
+            "<td>" +
+            esc(j.id) +
+            "</td>" +
+
+            "<td>" +
+            esc(j.userId) +
+            "</td>" +
+
+            "<td>" +
+            esc(j.status) +
+            "</td>" +
+
+            "<td>" +
+            esc(
+              j.progress ||
+              0
+            ) +
+            "%</td>" +
+
+            "<td>" +
+            esc(j.createdAt) +
+            "</td>" +
+
+            "</tr>";
+
+        }
+      );
+
+    }else{
+
+      jobsHTML =
+        '<tr><td colspan="5">No active jobs.</td></tr>';
+
+    }
+
+    document
+      .getElementById(
+        "jobs"
+      )
+      .innerHTML =
+      jobsHTML;
+
+
+    let securityHTML =
+      "";
+
+    if(
+      security.events &&
+      security.events.length
+    ){
+
+      security.events
+        .slice(
+          0,
+          100
+        )
+        .forEach(
+          function(e){
+
+            securityHTML +=
+              "<tr>" +
+
+              "<td>" +
+              esc(e.type) +
+              "</td>" +
+
+              "<td>" +
+              esc(
+                e.email ||
+                ""
+              ) +
+              "</td>" +
+
+              "<td>" +
+              esc(e.createdAt) +
+              "</td>" +
+
+              "</tr>";
+
+          }
+        );
+
+    }else{
+
+      securityHTML =
+        '<tr><td colspan="3">No events.</td></tr>';
+
+    }
+
+    document
+      .getElementById(
+        "security"
+      )
+      .innerHTML =
+      securityHTML;
+
+
+    let errorsHTML =
+      "";
+
+    if(
+      errors.errors &&
+      errors.errors.length
+    ){
+
+      errors.errors
+        .slice(
+          0,
+          100
+        )
+        .forEach(
+          function(e){
+
+            errorsHTML +=
+              "<tr>" +
+
+              "<td>" +
+              esc(e.createdAt) +
+              "</td>" +
+
+              "<td>" +
+              esc(e.message) +
+              "</td>" +
+
+              "</tr>";
+
+          }
+        );
+
+    }else{
+
+      errorsHTML =
+        '<tr><td colspan="2">No errors.</td></tr>';
+
+    }
+
+    document
+      .getElementById(
+        "errors"
+      )
+      .innerHTML =
+      errorsHTML;
+
+  }catch(e){
+
+    localStorage.removeItem(
+      "mamaki_admin_token"
+    );
+
+    adminToken =
+      "";
+
+    document
+      .getElementById(
+        "dashboard"
+      )
+      .style.display =
+      "none";
+
+    document
+      .getElementById(
+        "login"
+      )
+      .style.display =
+      "block";
+
+    showLoginMessage(
+      e.message
+    );
+
+  }
+
+}
+
+
+async function toggleUser(
+  id,
+  disabled
+){
+
+  if(
+    !confirm(
+      disabled
+        ? "Disable this user?"
+        : "Enable this user?"
+    )
+  ){
+
+    return;
+
+  }
+
+  try{
+
+    await api(
+      "/api/admin/users/" +
+      encodeURIComponent(
+        id
+      ) +
+      "/disable",
+      {
+        method:
+          "POST",
+
+        body:
+          JSON.stringify({
+            disabled:
+              disabled
+          })
+      }
     );
 
     await loadDashboard();
 
   }catch(e){
-    showLoginMessage(e.message);
+
+    alert(
+      e.message
+    );
+
   }
-});
 
-async function loadDashboard(){
-  try{
-    const [stats,users,jobs,security,errors]=await Promise.all([
-      api("/api/admin/stats"),
-      api("/api/admin/users"),
-      api("/api/admin/jobs"),
-      api("/api/admin/security"),
-      api("/api/admin/errors")
-    ]);
-
-    document.getElementById("login").style.display="none";
-    document.getElementById("dashboard").style.display="block";
-
-    const s=stats.stats;
-
-    document.getElementById("stats").innerHTML=`
-      <div class="stat">Users<b>${esc(s.totalUsers)}</b></div>
-      <div class="stat">Projects<b>${esc(s.totalProjects)}</b></div>
-      <div class="stat">AI Generations<b>${esc(s.aiGenerations)}</b></div>
-      <div class="stat">AI Seconds<b>${esc(s.aiSeconds)}</b></div>
-      <div class="stat">Studio Jobs<b>${esc(s.studioJobs)}</b></div>
-      <div class="stat">Narration Jobs<b>${esc(s.narrationJobs)}</b></div>
-      <div class="stat">Failed Jobs<b>${esc(s.failedJobs)}</b></div>
-      <div class="stat">Errors<b>${esc(s.recordedErrors)}</b></div>
-    `;
-
-    document.getElementById("users").innerHTML=
-      users.users.map(u=>`
-        <tr>
-          <td>${esc(u.name)}</td>
-          <td>${esc(u.email)}</td>
-          <td>${esc(u.role)}</td>
-          <td>${u.disabled?"Disabled":"Active"}</td>
-          <td>${esc(u.usage?.aiGenerations||0)}</td>
-          <td>${esc(u.usage?.aiSeconds||0)}</td>
-          <td>
-            ${
-              u.role==="admin"
-              ?"Admin"
-              :`
-              <button
-                onclick="toggleUser('${esc(u.id)}',${!u.disabled})"
-              >
-                ${u.disabled?"Enable":"Disable"}
-              </button>
-              `
-            }
-          </td>
-        </tr>
-      `).join("");
-
-    document.getElementById("jobs").innerHTML=
-      jobs.jobs.length
-      ?jobs.jobs.map(j=>`
-        <tr>
-          <td>${esc(j.id)}</td>
-          <td>${esc(j.userId)}</td>
-          <td>${esc(j.status)}</td>
-          <td>${esc(j.progress||0)}%</td>
-          <td>${esc(j.createdAt)}</td>
-        </tr>
-      `).join("")
-      :`<tr><td colspan="5">No active jobs.</td></tr>`;
-
-    document.getElementById("security").innerHTML=
-      security.events.length
-      ?security.events.slice(0,100).map(e=>`
-        <tr>
-          <td>${esc(e.type)}</td>
-          <td>${esc(e.email||"")}</td>
-          <td>${esc(e.createdAt)}</td>
-        </tr>
-      `).join("")
-      :`<tr><td colspan="3">No events.</td></tr>`;
-
-    document.getElementById("errors").innerHTML=
-      errors.errors.length
-      ?errors.errors.slice(0,100).map(e=>`
-        <tr>
-          <td>${esc(e.createdAt)}</td>
-          <td>${esc(e.message)}</td>
-        </tr>
-      `).join("")
-      :`<tr><td colspan="2">No errors.</td></tr>`;
-
-  }catch(e){
-    localStorage.removeItem("mamaki_admin_token");
-    adminToken="";
-    document.getElementById("dashboard").style.display="none";
-    document.getElementById("login").style.display="block";
-    showLoginMessage(e.message);
-  }
 }
 
-async function toggleUser(id,disabled){
-  if(!confirm(disabled?"Disable this user?":"Enable this user?")){
-    return;
-  }
-
-  try{
-    await api("/api/admin/users/"+encodeURIComponent(id)+"/disable",{
-      method:"POST",
-      body:JSON.stringify({
-        disabled
-      })
-    });
-
-    await loadDashboard();
-  }catch(e){
-    alert(e.message);
-  }
-}
 
 if(adminToken){
+
   loadDashboard();
+
 }
+
 </script>
 
 </body>
@@ -3737,8 +4339,9 @@ if(adminToken){
   }
 );
 
+
 /* =========================================================
-   OUTPUT FILES
+   OUTPUTS
 ========================================================= */
 
 app.use(
@@ -3746,13 +4349,12 @@ app.use(
   express.static(
     OUTPUTS,
     {
-      maxAge:
-        "1h",
-      etag:
-        true
+      maxAge: "1h",
+      etag: true
     }
   )
 );
+
 
 /* =========================================================
    HEALTH
@@ -3761,37 +4363,45 @@ app.use(
 app.get(
   "/api/health",
   (req, res) => {
+
     res.json({
       ok: true,
       app:
         "MAMAKI AI",
       version:
         VERSION,
+
       replicate:
         Boolean(
           REPLICATE_API_TOKEN
         ),
+
       recovery:
         Boolean(
           RESEND_API_KEY &&
           RESEND_FROM
         ),
+
       admin:
         Boolean(
           ADMIN_EMAIL &&
           ADMIN_PASSWORD
         ),
+
       uptime:
         process.uptime(),
+
       timestamp:
         new Date().toISOString()
     });
+
   }
 );
 
 app.get(
   "/health",
   (req, res) => {
+
     res.json({
       ok: true,
       app:
@@ -3801,8 +4411,10 @@ app.get(
       uptime:
         process.uptime()
     });
+
   }
 );
+
 
 /* =========================================================
    STATUS
@@ -3811,36 +4423,46 @@ app.get(
 app.get(
   "/api/status",
   (req, res) => {
+
     res.json({
       ok: true,
       app:
         "MAMAKI AI",
+
       version:
         VERSION,
+
       replicate:
         Boolean(
           REPLICATE_API_TOKEN
         ),
+
       models: {
         textToVideo:
           T2V_MODEL,
+
         imageToVideo:
           I2V_MODEL
       },
+
       duration: {
         minimum:
           MIN_DURATION,
+
         maximum:
           MAX_DURATION
       },
+
       recovery:
         Boolean(
           RESEND_API_KEY &&
           RESEND_FROM
         )
     });
+
   }
 );
+
 
 /* =========================================================
    ROOT
@@ -3849,14 +4471,17 @@ app.get(
 app.get(
   "/",
   (req, res) => {
+
     res.sendFile(
       path.join(
         ROOT,
         "index.html"
       )
     );
+
   }
 );
+
 
 /* =========================================================
    404
@@ -3864,6 +4489,7 @@ app.get(
 
 app.use(
   (req, res) => {
+
     res.status(404).json({
       ok: false,
       error:
@@ -3871,8 +4497,10 @@ app.use(
       path:
         req.originalUrl
     });
+
   }
 );
+
 
 /* =========================================================
    GLOBAL ERROR HANDLER
@@ -3885,6 +4513,7 @@ app.use(
     res,
     next
   ) => {
+
     await errorLog(
       err,
       {
@@ -3908,8 +4537,10 @@ app.use(
       message:
         "MAMAKI encountered an unexpected server error."
     });
+
   }
 );
+
 
 /* =========================================================
    JOB CLEANUP
@@ -3917,6 +4548,7 @@ app.use(
 
 setInterval(
   () => {
+
     const now =
       Date.now();
 
@@ -3924,9 +4556,9 @@ setInterval(
       const [
         id,
         job
-      ]
-      of jobs.entries()
+      ] of jobs.entries()
     ) {
+
       if (
         [
           "completed",
@@ -3935,6 +4567,7 @@ setInterval(
           job.status
         )
       ) {
+
         const time =
           Date.parse(
             job.completedAt ||
@@ -3948,25 +4581,35 @@ setInterval(
           ) &&
           now - time >
             60 *
-              60 *
-              1000
+            60 *
+            1000
         ) {
-          jobs.delete(id);
+
+          jobs.delete(
+            id
+          );
+
         }
+
       }
+
     }
+
   },
   10 *
-    60 *
-    1000
+  60 *
+  1000
 );
+
 
 /* =========================================================
    TEMP FILE CLEANUP
 ========================================================= */
 
 async function cleanupTempFiles() {
+
   try {
+
     const files =
       await fs.readdir(
         TMP
@@ -3976,10 +4619,11 @@ async function cleanupTempFiles() {
       Date.now();
 
     for (
-      const file
-      of files
+      const file of files
     ) {
+
       try {
+
         const full =
           path.join(
             TMP,
@@ -3999,24 +4643,31 @@ async function cleanupTempFiles() {
             60 *
             1000
         ) {
+
           await fs.rm(
             full,
             {
               force: true
             }
           );
+
         }
+
       } catch {}
+
     }
+
   } catch {}
+
 }
 
 setInterval(
   cleanupTempFiles,
   30 *
-    60 *
-    1000
+  60 *
+  1000
 );
+
 
 /* =========================================================
    START
@@ -4030,32 +4681,38 @@ app.listen(
   PORT,
   HOST,
   () => {
+
     console.log(
       `✨ MAMAKI AI v${VERSION} running on ${HOST}:${PORT}`
     );
 
     console.log(
-      `Replicate configured: ${Boolean(
+      "Replicate configured: " +
+      Boolean(
         REPLICATE_API_TOKEN
-      )}`
+      )
     );
 
     console.log(
-      `Admin configured: ${Boolean(
+      "Admin configured: " +
+      Boolean(
         ADMIN_EMAIL &&
         ADMIN_PASSWORD
-      )}`
+      )
     );
 
     console.log(
-      `Password recovery configured: ${Boolean(
+      "Password recovery configured: " +
+      Boolean(
         RESEND_API_KEY &&
         RESEND_FROM
-      )}`
+      )
     );
 
     console.log(
-      `App URL: ${APP_URL}`
+      "App URL: " +
+      APP_URL
     );
+
   }
 );
