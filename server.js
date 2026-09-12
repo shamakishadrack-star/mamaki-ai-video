@@ -60,10 +60,11 @@ const RESEND_FROM =
   String(process.env.RESEND_FROM || "")
     .trim();
 
-const APP_URL = String(
-  process.env.APP_URL ||
-  "https://mamaki-ai-video.onrender.com"
-).replace(/\/$/, "");
+const APP_URL =
+  String(
+    process.env.APP_URL ||
+    "https://mamaki-ai-video.onrender.com"
+  ).replace(/\/$/, "");
 
 const T2V_MODEL =
   process.env.T2V_MODEL ||
@@ -73,11 +74,12 @@ const I2V_MODEL =
   process.env.I2V_MODEL ||
   "wan-video/wan-2.2-i2v-fast";
 
-const replicate = REPLICATE_API_TOKEN
-  ? new Replicate({
-      auth: REPLICATE_API_TOKEN
-    })
-  : null;
+const replicate =
+  REPLICATE_API_TOKEN
+    ? new Replicate({
+        auth: REPLICATE_API_TOKEN
+      })
+    : null;
 
 const jobs = new Map();
 
@@ -126,7 +128,6 @@ app.use((req, res, next) => {
 
   next();
 });
-
 
 /* =========================================================
    STORAGE
@@ -215,7 +216,6 @@ async function writeJSON(
   );
 }
 
-
 /* =========================================================
    HELPERS
 ========================================================= */
@@ -224,7 +224,9 @@ function text(
   value,
   max = 10000
 ) {
-  return String(value ?? "")
+  return String(
+    value ?? ""
+  )
     .replace(/\0/g, "")
     .trim()
     .slice(0, max);
@@ -259,8 +261,7 @@ function safeFileName(value) {
 
 function duration(value) {
   if (
-    typeof value ===
-    "string"
+    typeof value === "string"
   ) {
     const m =
       value
@@ -311,7 +312,9 @@ function duration(value) {
   const n =
     Number(value);
 
-  if (!Number.isFinite(n)) {
+  if (
+    !Number.isFinite(n)
+  ) {
     return MIN_DURATION;
   }
 
@@ -350,18 +353,15 @@ function ratioSize(r) {
 
 function hashPassword(
   password,
-  salt =
-    randomBytes(16)
-      .toString("hex")
+  salt = randomBytes(16).toString("hex")
 ) {
   return {
     salt,
-    hash:
-      scryptSync(
-        String(password),
-        salt,
-        64
-      ).toString("hex")
+    hash: scryptSync(
+      String(password),
+      salt,
+      64
+    ).toString("hex")
   };
 }
 
@@ -413,10 +413,7 @@ function token() {
     SESSION_SECRET
       ? scryptSync(
           SESSION_SECRET,
-          random.slice(
-            0,
-            16
-          ),
+          random.slice(0, 16),
           32
         ).toString("hex")
       : randomBytes(16)
@@ -439,7 +436,6 @@ function bearer(req) {
     : "";
 }
 
-
 /* =========================================================
    SESSIONS
 ========================================================= */
@@ -454,16 +450,13 @@ async function createSession(
       {}
     );
 
-  const t =
-    token();
+  const t = token();
 
   sessions[t] = {
     userId,
     role,
-    createdAt:
-      Date.now(),
-    lastSeen:
-      Date.now()
+    createdAt: Date.now(),
+    lastSeen: Date.now()
   };
 
   await writeJSON(
@@ -508,8 +501,7 @@ async function destroyUserSessions(
 }
 
 async function currentUser(req) {
-  const t =
-    bearer(req);
+  const t = bearer(req);
 
   if (!t) {
     return null;
@@ -591,13 +583,15 @@ async function requireUser(
     await currentUser(req);
 
   if (!u) {
-    return res.status(401).json({
-      ok: false,
-      error:
-        "AUTH_REQUIRED",
-      message:
-        "Please log in."
-    });
+    return res
+      .status(401)
+      .json({
+        ok: false,
+        error:
+          "AUTH_REQUIRED",
+        message:
+          "Please log in."
+      });
   }
 
   req.user = u;
@@ -617,20 +611,21 @@ async function requireAdmin(
     !u ||
     u.role !== "admin"
   ) {
-    return res.status(403).json({
-      ok: false,
-      error:
-        "ADMIN_REQUIRED",
-      message:
-        "Administrator access required."
-    });
+    return res
+      .status(403)
+      .json({
+        ok: false,
+        error:
+          "ADMIN_REQUIRED",
+        message:
+          "Administrator access required."
+      });
   }
 
   req.user = u;
 
   next();
 }
-
 
 /* =========================================================
    LOGGING
@@ -791,7 +786,8 @@ async function usage(
   }
 
   if (
-    type === "narration"
+    type ===
+    "narration"
   ) {
     db[userId]
       .narrationJobs++;
@@ -806,7 +802,6 @@ async function usage(
     db
   );
 }
-
 
 /* =========================================================
    AUTH — REGISTER
@@ -839,11 +834,13 @@ app.post(
         !password ||
         password.length < 6
       ) {
-        return res.status(400).json({
-          ok: false,
-          message:
-            "Name, valid email and password of at least 6 characters are required."
-        });
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            message:
+              "Name, valid email and password of at least 6 characters are required."
+          });
       }
 
       const users =
@@ -853,18 +850,21 @@ app.post(
         );
 
       if (
-        Object.values(users)
-          .some(
-            u =>
-              u.email ===
-              mail
-          )
+        Object.values(
+          users
+        ).some(
+          u =>
+            email(u.email) ===
+            mail
+        )
       ) {
-        return res.status(409).json({
-          ok: false,
-          message:
-            "An account with this email already exists."
-        });
+        return res
+          .status(409)
+          .json({
+            ok: false,
+            message:
+              "An account with this email already exists."
+          });
       }
 
       const id =
@@ -924,15 +924,16 @@ app.post(
         }
       );
 
-      res.status(500).json({
-        ok: false,
-        message:
-          "Registration failed."
-      });
+      res
+        .status(500)
+        .json({
+          ok: false,
+          message:
+            "Registration failed."
+        });
     }
   }
 );
-
 
 /* =========================================================
    AUTH — LOGIN
@@ -960,12 +961,13 @@ app.post(
         );
 
       const u =
-        Object.values(users)
-          .find(
-            x =>
-              x.email ===
-              mail
-          );
+        Object.values(
+          users
+        ).find(
+          x =>
+            email(x.email) ===
+            mail
+        );
 
       if (
         !u ||
@@ -983,11 +985,13 @@ app.post(
           }
         );
 
-        return res.status(401).json({
-          ok: false,
-          message:
-            "Invalid email or password."
-        });
+        return res
+          .status(401)
+          .json({
+            ok: false,
+            message:
+              "Invalid email or password."
+          });
       }
 
       u.lastLoginAt =
@@ -1027,15 +1031,16 @@ app.post(
     } catch (e) {
       await errorLog(e);
 
-      res.status(500).json({
-        ok: false,
-        message:
-          "Login failed."
-      });
+      res
+        .status(500)
+        .json({
+          ok: false,
+          message:
+            "Login failed."
+        });
     }
   }
 );
-
 
 /* =========================================================
    AUTH — LOGOUT
@@ -1076,7 +1081,6 @@ app.post(
   }
 );
 
-
 /* =========================================================
    AUTH — CURRENT USER
 ========================================================= */
@@ -1088,15 +1092,18 @@ app.get(
     res.json({
       ok: true,
       user: {
-        id: req.user.id,
-        name: req.user.name,
-        email: req.user.email,
-        role: req.user.role
+        id:
+          req.user.id,
+        name:
+          req.user.name,
+        email:
+          req.user.email,
+        role:
+          req.user.role
       }
     });
   }
 );
-
 
 /* =========================================================
    PASSWORD RECOVERY
@@ -1137,24 +1144,19 @@ async function sendRecoveryEmail(
       "https://api.resend.com/emails",
       {
         method: "POST",
-
         headers: {
           Authorization:
             `Bearer ${RESEND_API_KEY}`,
           "Content-Type":
             "application/json"
         },
-
         body:
           JSON.stringify({
             from:
               RESEND_FROM,
-
             to: [to],
-
             subject:
               "MAMAKI AI password recovery",
-
             html:
               "<!doctype html>" +
               "<html><body style=\"font-family:Arial,sans-serif;background:#f5f5f5;padding:30px\">" +
@@ -1173,7 +1175,6 @@ async function sendRecoveryEmail(
 
   return response.ok;
 }
-
 
 /* =========================================================
    FORGOT PASSWORD
@@ -1195,12 +1196,13 @@ app.post(
         );
 
       const u =
-        Object.values(users)
-          .find(
-            x =>
-              x.email ===
-              mail
-          );
+        Object.values(
+          users
+        ).find(
+          x =>
+            email(x.email) ===
+            mail
+        );
 
       if (!u) {
         return res.json({
@@ -1283,15 +1285,16 @@ app.post(
     } catch (e) {
       await errorLog(e);
 
-      res.status(500).json({
-        ok: false,
-        message:
-          "Password recovery request failed."
-      });
+      res
+        .status(500)
+        .json({
+          ok: false,
+          message:
+            "Password recovery request failed."
+        });
     }
   }
 );
-
 
 /* =========================================================
    RESET PASSWORD
@@ -1321,11 +1324,13 @@ app.post(
       if (
         newPassword.length < 6
       ) {
-        return res.status(400).json({
-          ok: false,
-          message:
-            "New password must be at least 6 characters."
-        });
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            message:
+              "New password must be at least 6 characters."
+          });
       }
 
       const users =
@@ -1335,12 +1340,13 @@ app.post(
         );
 
       const u =
-        Object.values(users)
-          .find(
-            x =>
-              x.email ===
-              mail
-          );
+        Object.values(
+          users
+        ).find(
+          x =>
+            email(x.email) ===
+            mail
+        );
 
       const resets =
         await readJSON(
@@ -1364,11 +1370,13 @@ app.post(
           r.attempts || 0
         ) >= 5
       ) {
-        return res.status(400).json({
-          ok: false,
-          message:
-            "Invalid or expired recovery code."
-        });
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            message:
+              "Invalid or expired recovery code."
+          });
       }
 
       r.attempts =
@@ -1380,8 +1388,7 @@ app.post(
         resetHash(code) !==
         r.codeHash
       ) {
-        resets[u.id] =
-          r;
+        resets[u.id] = r;
 
         await writeJSON(
           RESETS,
@@ -1398,11 +1405,13 @@ app.post(
           }
         );
 
-        return res.status(400).json({
-          ok: false,
-          message:
-            "Invalid recovery code."
-        });
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            message:
+              "Invalid recovery code."
+          });
       }
 
       const hp =
@@ -1456,15 +1465,16 @@ app.post(
     } catch (e) {
       await errorLog(e);
 
-      res.status(500).json({
-        ok: false,
-        message:
-          "Password reset failed."
-      });
+      res
+        .status(500)
+        .json({
+          ok: false,
+          message:
+            "Password reset failed."
+        });
     }
   }
 );
-
 
 /* =========================================================
    FORGOT PASSWORD WEB PAGE
@@ -1473,55 +1483,56 @@ app.post(
 app.get(
   "/forgot-password",
   (req, res) => {
-    res.type("html").send(`
+    res
+      .type("html")
+      .send(`
 <!doctype html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MAMAKI AI — Forgot Password</title>
 <style>
-body{margin:0;background:#080b12;color:white;font-family:Arial,sans-serif}
-.box{max-width:430px;margin:80px auto;padding:25px;background:#111722;border:1px solid #283246;border-radius:18px}
-input,button{width:100%;padding:14px;margin-top:10px;box-sizing:border-box;border-radius:10px}
-input{background:#080c14;border:1px solid #30394d;color:white}
-button{border:0;font-weight:bold;cursor:pointer}
+body{margin:0;background:#080b12;color:#fff;font-family:Arial,sans-serif}
+.card{max-width:430px;margin:70px auto;padding:25px;background:#111722;border:1px solid #263044;border-radius:18px}
+input{width:100%;box-sizing:border-box;padding:14px;margin:8px 0;background:#090e16;border:1px solid #303a4e;border-radius:10px;color:#fff}
+button{width:100%;padding:14px;border:0;border-radius:10px;font-weight:700;cursor:pointer}
+.primary{background:#fff;color:#000}
+a{color:#fff}
 </style>
 </head>
 <body>
-<div class="box">
+<div class="card">
 <h2>✨ MAMAKI AI</h2>
 <p>Enter your account email and we will send you a recovery code.</p>
 <form id="form">
 <input id="email" type="email" placeholder="Email address" required>
-<button type="submit">Send Recovery Code</button>
+<button class="primary" type="submit">Send Recovery Code</button>
 </form>
 <p id="msg"></p>
-<a href="/">← Back to MAMAKI AI</a>
+<p><a href="/">← Back to MAMAKI AI</a></p>
 </div>
 <script>
-document.getElementById("form").addEventListener("submit",async function(e){
-e.preventDefault();
-const msg=document.getElementById("msg");
-try{
-const r=await fetch("/api/auth/forgot-password",{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({email:document.getElementById("email").value})
-});
-const d=await r.json();
-msg.textContent=d.message||"Request completed.";
-}catch(e){
-msg.textContent="Request failed.";
-}
+document.getElementById("form").addEventListener("submit", async function(e){
+  e.preventDefault();
+
+  const r = await fetch("/api/auth/forgot-password",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      email:document.getElementById("email").value
+    })
+  });
+
+  const data = await r.json();
+  document.getElementById("msg").textContent = data.message || "Request completed.";
 });
 </script>
 </body>
 </html>
-    `);
+`);
   }
 );
-
 
 /* =========================================================
    RESET PASSWORD WEB PAGE
@@ -1530,79 +1541,60 @@ msg.textContent="Request failed.";
 app.get(
   "/reset-password",
   (req, res) => {
-    res.type("html").send(`
+    res
+      .type("html")
+      .send(`
 <!doctype html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MAMAKI AI — Reset Password</title>
 <style>
-body{margin:0;background:#080b12;color:white;font-family:Arial,sans-serif}
-.box{max-width:430px;margin:60px auto;padding:25px;background:#111722;border:1px solid #283246;border-radius:18px}
-input,button{width:100%;padding:14px;margin-top:10px;box-sizing:border-box;border-radius:10px}
-input{background:#080c14;border:1px solid #30394d;color:white}
-button{border:0;font-weight:bold;cursor:pointer}
+body{margin:0;background:#080b12;color:#fff;font-family:Arial,sans-serif}
+.card{max-width:430px;margin:70px auto;padding:25px;background:#111722;border:1px solid #263044;border-radius:18px}
+input{width:100%;box-sizing:border-box;padding:14px;margin:8px 0;background:#090e16;border:1px solid #303a4e;border-radius:10px;color:#fff}
+button{width:100%;padding:14px;border:0;border-radius:10px;font-weight:700;cursor:pointer}
+.primary{background:#fff;color:#000}
+a{color:#fff}
 </style>
 </head>
 <body>
-<div class="box">
+<div class="card">
 <h2>✨ MAMAKI AI</h2>
 <p>Enter your recovery code and choose a new password.</p>
 <form id="form">
 <input id="email" type="email" placeholder="Email address" required>
-<input id="code" type="text" inputmode="numeric" maxlength="6" placeholder="6-digit recovery code" required>
-<input id="password" type="password" minlength="6" placeholder="New password" required>
-<input id="confirm" type="password" minlength="6" placeholder="Confirm new password" required>
-<button type="submit">Reset Password</button>
+<input id="code" type="text" placeholder="Recovery code" required>
+<input id="password" type="password" placeholder="New password" required>
+<button class="primary" type="submit">Reset Password</button>
 </form>
 <p id="msg"></p>
-<a href="/">← Back to MAMAKI AI</a>
+<p><a href="/">← Back to MAMAKI AI</a></p>
 </div>
 <script>
-document.getElementById("form").addEventListener("submit",async function(e){
-e.preventDefault();
+document.getElementById("form").addEventListener("submit", async function(e){
+  e.preventDefault();
 
-const password=document.getElementById("password").value;
-const confirm=document.getElementById("confirm").value;
-const msg=document.getElementById("msg");
+  const r = await fetch("/api/auth/reset-password",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      email:document.getElementById("email").value,
+      code:document.getElementById("code").value,
+      password:document.getElementById("password").value
+    })
+  });
 
-if(password!==confirm){
-msg.textContent="Passwords do not match.";
-return;
-}
-
-try{
-const r=await fetch("/api/auth/reset-password",{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({
-email:document.getElementById("email").value,
-code:document.getElementById("code").value,
-password
-})
-});
-
-const d=await r.json();
-
-msg.textContent=d.message||"Request completed.";
-
-if(d.ok){
-setTimeout(function(){
-location.href="/";
-},1500);
-}
-}catch(e){
-msg.textContent="Password reset failed.";
-}
+  const data = await r.json();
+  document.getElementById("msg").textContent = data.message || "Request completed.";
 });
 </script>
 </body>
 </html>
-    `);
+`);
   }
 );
-
 
 /* =========================================================
    ACCOUNT
@@ -1620,7 +1612,6 @@ app.get(
 
     res.json({
       ok: true,
-
       user: {
         id:
           req.user.id,
@@ -1631,7 +1622,6 @@ app.get(
         role:
           req.user.role
       },
-
       usage:
         db[req.user.id] ||
         {
@@ -1656,11 +1646,13 @@ app.post(
         );
 
       if (!name) {
-        return res.status(400).json({
-          ok: false,
-          message:
-            "Name is required."
-        });
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            message:
+              "Name is required."
+          });
       }
 
       const users =
@@ -1673,11 +1665,13 @@ app.post(
         users[req.user.id];
 
       if (!u) {
-        return res.status(404).json({
-          ok: false,
-          message:
-            "Account not found."
-        });
+        return res
+          .status(404)
+          .json({
+            ok: false,
+            message:
+              "Account not found."
+          });
       }
 
       u.name =
@@ -1707,15 +1701,16 @@ app.post(
     } catch (e) {
       await errorLog(e);
 
-      res.status(500).json({
-        ok: false,
-        message:
-          "Profile update failed."
-      });
+      res
+        .status(500)
+        .json({
+          ok: false,
+          message:
+            "Profile update failed."
+        });
     }
   }
 );
-
 
 /* =========================================================
    VIDEO HELPERS
@@ -1817,7 +1812,9 @@ function runFFmpeg(
           } else {
             reject(
               new Error(
-                stderr.slice(-5000) ||
+                stderr.slice(
+                  -5000
+                ) ||
                 `FFmpeg exited with code ${code}`
               )
             );
@@ -1905,7 +1902,6 @@ async function watermark(
   );
 }
 
-
 /* =========================================================
    AI VIDEO GENERATION
 ========================================================= */
@@ -1937,16 +1933,20 @@ async function generateVideo({
         : 121,
 
     width:
-      ratioValue === "9:16"
+      ratioValue ===
+      "9:16"
         ? 480
-        : ratioValue === "1:1"
+        : ratioValue ===
+          "1:1"
           ? 480
           : 640,
 
     height:
-      ratioValue === "9:16"
+      ratioValue ===
+      "9:16"
         ? 640
-        : ratioValue === "1:1"
+        : ratioValue ===
+          "1:1"
           ? 480
           : 480,
 
@@ -1999,12 +1999,10 @@ async function generateVideo({
 
   return {
     file,
-
     url:
       `/outputs/${path.basename(file)}`
   };
 }
-
 
 /* =========================================================
    GENERATE VIDEO
@@ -2023,11 +2021,13 @@ app.post(
         );
 
       if (!prompt) {
-        return res.status(400).json({
-          ok: false,
-          message:
-            "Please enter a video prompt."
-        });
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            message:
+              "Please enter a video prompt."
+          });
       }
 
       const seconds =
@@ -2171,23 +2171,23 @@ app.post(
           }
         }
       })();
-
     } catch (e) {
       await errorLog(e);
 
       if (
         !res.headersSent
       ) {
-        res.status(500).json({
-          ok: false,
-          message:
-            "Video generation failed."
-        });
+        res
+          .status(500)
+          .json({
+            ok: false,
+            message:
+              "Video generation failed."
+          });
       }
     }
   }
 );
-
 
 /* =========================================================
    JOB STATUS
@@ -2207,11 +2207,13 @@ app.get(
       job.userId !==
         req.user.id
     ) {
-      return res.status(404).json({
-        ok: false,
-        message:
-          "Job not found."
-      });
+      return res
+        .status(404)
+        .json({
+          ok: false,
+          message:
+            "Job not found."
+        });
     }
 
     res.json({
@@ -2220,7 +2222,6 @@ app.get(
     });
   }
 );
-
 
 /* =========================================================
    PROJECTS
@@ -2288,11 +2289,13 @@ app.get(
     } catch (e) {
       await errorLog(e);
 
-      res.status(500).json({
-        ok: false,
-        message:
-          "Unable to load projects."
-      });
+      res
+        .status(500)
+        .json({
+          ok: false,
+          message:
+            "Unable to load projects."
+        });
     }
   }
 );
@@ -2305,23 +2308,19 @@ app.post(
       const p = {
         id:
           randomUUID(),
-
         userId:
           req.user.id,
-
         name:
           text(
             req.body.name,
             200
           ) ||
           "Untitled Project",
-
         prompt:
           text(
             req.body.prompt,
             10000
           ),
-
         createdAt:
           new Date().toISOString()
       };
@@ -2341,11 +2340,13 @@ app.post(
     } catch (e) {
       await errorLog(e);
 
-      res.status(500).json({
-        ok: false,
-        message:
-          "Project creation failed."
-      });
+      res
+        .status(500)
+        .json({
+          ok: false,
+          message:
+            "Project creation failed."
+        });
     }
   }
 );
@@ -2374,11 +2375,13 @@ app.delete(
         p.userId !==
           req.user.id
       ) {
-        return res.status(404).json({
-          ok: false,
-          message:
-            "Project not found."
-        });
+        return res
+          .status(404)
+          .json({
+            ok: false,
+            message:
+              "Project not found."
+          });
       }
 
       await fs.rm(
@@ -2394,15 +2397,16 @@ app.delete(
     } catch (e) {
       await errorLog(e);
 
-      res.status(500).json({
-        ok: false,
-        message:
-          "Project deletion failed."
-      });
+      res
+        .status(500)
+        .json({
+          ok: false,
+          message:
+            "Project deletion failed."
+        });
     }
   }
 );
-
 
 /* =========================================================
    FREE STUDIO — TRIM
@@ -2415,11 +2419,13 @@ app.post(
   async (req, res) => {
     try {
       if (!req.file) {
-        return res.status(400).json({
-          ok: false,
-          message:
-            "Video required."
-        });
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            message:
+              "Video required."
+          });
       }
 
       const input =
@@ -2496,15 +2502,16 @@ app.post(
     } catch (e) {
       await errorLog(e);
 
-      res.status(500).json({
-        ok: false,
-        message:
-          "Video trimming failed."
-      });
+      res
+        .status(500)
+        .json({
+          ok: false,
+          message:
+            "Video trimming failed."
+        });
     }
   }
 );
-
 
 /* =========================================================
    FREE STUDIO — COMBINE
@@ -2526,11 +2533,13 @@ app.post(
         !req.files ||
         req.files.length < 2
       ) {
-        return res.status(400).json({
-          ok: false,
-          message:
-            "At least two videos are required."
-        });
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            message:
+              "At least two videos are required."
+          });
       }
 
       list =
@@ -2601,11 +2610,13 @@ app.post(
     } catch (e) {
       await errorLog(e);
 
-      res.status(500).json({
-        ok: false,
-        message:
-          "Video combination failed."
-      });
+      res
+        .status(500)
+        .json({
+          ok: false,
+          message:
+            "Video combination failed."
+        });
     } finally {
       for (
         const p of inputs
@@ -2630,7 +2641,6 @@ app.post(
   }
 );
 
-
 /* =========================================================
    NARRATION
 ========================================================= */
@@ -2647,11 +2657,13 @@ app.post(
         );
 
       if (!script) {
-        return res.status(400).json({
-          ok: false,
-          message:
-            "Narration text is required."
-        });
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            message:
+              "Narration text is required."
+          });
       }
 
       const voice =
@@ -2690,20 +2702,25 @@ app.post(
     } catch (e) {
       await errorLog(e);
 
-      res.status(500).json({
-        ok: false,
-        message:
-          "Narration generation failed."
-      });
+      res
+        .status(500)
+        .json({
+          ok: false,
+          message:
+            "Narration generation failed."
+        });
     }
   }
 );
 
-
 /* =========================================================
    ADMIN LOGIN
    IMPORTANT:
-   DOES NOT CREATE A NEW ADMIN ACCOUNT.
+   - Render ADMIN_EMAIL is the main admin identity.
+   - Render ADMIN_PASSWORD is the master password.
+   - Existing account is repaired/promoted if found.
+   - Missing admin account is restored.
+   - No duplicate admin is created when the email already exists.
 ========================================================= */
 
 app.post(
@@ -2725,31 +2742,71 @@ app.post(
         !ADMIN_EMAIL ||
         !ADMIN_PASSWORD
       ) {
-        return res.status(503).json({
-          ok: false,
-          message:
-            "Admin environment variables are not configured."
-        });
+        return res
+          .status(503)
+          .json({
+            ok: false,
+            error:
+              "ADMIN_NOT_CONFIGURED",
+            message:
+              "Admin environment variables are not configured in Render."
+          });
       }
 
+      /*
+       * The main administrator must use
+       * the email configured in Render.
+       */
       if (
         mail !==
-          ADMIN_EMAIL ||
-        password !==
-          ADMIN_PASSWORD
+        ADMIN_EMAIL
       ) {
         await security(
           "ADMIN_LOGIN_FAILED",
           {
-            email: mail
+            email: mail,
+            reason:
+              "EMAIL_MISMATCH"
           }
         );
 
-        return res.status(401).json({
-          ok: false,
-          message:
-            "Invalid administrator credentials."
-        });
+        return res
+          .status(401)
+          .json({
+            ok: false,
+            error:
+              "INVALID_ADMIN_CREDENTIALS",
+            message:
+              "Invalid administrator credentials."
+          });
+      }
+
+      /*
+       * The password entered must match the
+       * ADMIN_PASSWORD saved in Render.
+       */
+      if (
+        password !==
+        ADMIN_PASSWORD
+      ) {
+        await security(
+          "ADMIN_LOGIN_FAILED",
+          {
+            email: mail,
+            reason:
+              "PASSWORD_MISMATCH"
+          }
+        );
+
+        return res
+          .status(401)
+          .json({
+            ok: false,
+            error:
+              "INVALID_ADMIN_CREDENTIALS",
+            message:
+              "Invalid administrator credentials."
+          });
       }
 
       const users =
@@ -2759,39 +2816,143 @@ app.post(
         );
 
       /*
-       * IMPORTANT:
-       * Search for the existing administrator.
-       * NEVER create another admin account.
+       * Find ANY existing account with the
+       * administrator email.
+       *
+       * We deliberately do NOT require role=admin here.
+       * If the old account was accidentally saved as
+       * "user", it will be repaired instead of creating
+       * another account.
        */
+      let admin =
+        Object.values(
+          users
+        ).find(
+          u =>
+            email(u.email) ===
+            ADMIN_EMAIL
+        );
 
-      const admin =
-        Object.values(users)
-          .find(
-            u =>
-              u.email ===
-                ADMIN_EMAIL &&
-              u.role ===
-                "admin"
+      /*
+       * Existing account found:
+       * repair it and promote it to admin.
+       */
+      if (admin) {
+        const hp =
+          hashPassword(
+            ADMIN_PASSWORD
           );
 
+        admin.email =
+          ADMIN_EMAIL;
+
+        admin.role =
+          "admin";
+
+        admin.disabled =
+          false;
+
+        admin.salt =
+          hp.salt;
+
+        admin.hash =
+          hp.hash;
+
+        admin.lastLoginAt =
+          new Date().toISOString();
+
+        users[admin.id] =
+          admin;
+
+        await writeJSON(
+          USERS,
+          users
+        );
+
+        await security(
+          "ADMIN_ACCOUNT_REPAIRED",
+          {
+            userId:
+              admin.id,
+            email:
+              admin.email
+          }
+        );
+      }
+
+      /*
+       * No account exists:
+       * create exactly ONE main administrator
+       * using the Render credentials.
+       */
       if (!admin) {
-        return res.status(404).json({
-          ok: false,
-          error:
-            "ADMIN_ACCOUNT_NOT_FOUND",
-          message:
-            "The configured administrator account was not found. Your existing admin account must be restored rather than creating another account."
-        });
+        const id =
+          randomUUID();
+
+        const hp =
+          hashPassword(
+            ADMIN_PASSWORD
+          );
+
+        admin = {
+          id,
+          name:
+            "MAMAKI Administrator",
+          email:
+            ADMIN_EMAIL,
+          ...hp,
+          role:
+            "admin",
+          disabled:
+            false,
+          createdAt:
+            new Date().toISOString(),
+          lastLoginAt:
+            new Date().toISOString()
+        };
+
+        users[id] =
+          admin;
+
+        await writeJSON(
+          USERS,
+          users
+        );
+
+        await security(
+          "ADMIN_ACCOUNT_RESTORED",
+          {
+            userId:
+              admin.id,
+            email:
+              admin.email
+          }
+        );
       }
 
-      if (admin.disabled) {
-        return res.status(403).json({
-          ok: false,
-          message:
-            "Administrator account is disabled."
-        });
-      }
+      /*
+       * Final safety check.
+       */
+      admin.role =
+        "admin";
 
+      admin.disabled =
+        false;
+
+      admin.lastLoginAt =
+        new Date().toISOString();
+
+      users[admin.id] =
+        admin;
+
+      await writeJSON(
+        USERS,
+        users
+      );
+
+      /*
+       * Create admin session.
+       */
       const t =
         await createSession(
           admin.id,
@@ -2808,7 +2969,7 @@ app.post(
         }
       );
 
-      res.json({
+      return res.json({
         ok: true,
         token: t,
         user: {
@@ -2823,17 +2984,26 @@ app.post(
         }
       });
     } catch (e) {
-      await errorLog(e);
+      await errorLog(
+        e,
+        {
+          route:
+            "/api/admin/login"
+        }
+      );
 
-      res.status(500).json({
-        ok: false,
-        message:
-          "Administrator login failed."
-      });
+      return res
+        .status(500)
+        .json({
+          ok: false,
+          error:
+            "ADMIN_LOGIN_ERROR",
+          message:
+            "Administrator login failed."
+        });
     }
   }
 );
-
 
 /* =========================================================
    ADMIN STATS
@@ -2916,7 +3086,6 @@ app.get(
 
       res.json({
         ok: true,
-
         stats: {
           totalUsers:
             Object.keys(
@@ -2967,15 +3136,16 @@ app.get(
     } catch (e) {
       await errorLog(e);
 
-      res.status(500).json({
-        ok: false,
-        message:
-          "Unable to load administrator statistics."
-      });
+      res
+        .status(500)
+        .json({
+          ok: false,
+          message:
+            "Unable to load administrator statistics."
+        });
     }
   }
 );
-
 
 /* =========================================================
    ADMIN USERS
@@ -3000,7 +3170,6 @@ app.get(
 
       res.json({
         ok: true,
-
         users:
           Object.values(
             users
@@ -3008,46 +3177,41 @@ app.get(
             u => ({
               id:
                 u.id,
-
               name:
                 u.name,
-
               email:
                 u.email,
-
               role:
                 u.role,
-
               disabled:
                 Boolean(
                   u.disabled
                 ),
-
               createdAt:
                 u.createdAt,
-
               lastLoginAt:
                 u.lastLoginAt ||
                 null,
-
               usage:
-                usageDb[u.id] ||
-                {}
+                usageDb[
+                  u.id
+                ] || {}
             })
           )
       });
     } catch (e) {
       await errorLog(e);
 
-      res.status(500).json({
-        ok: false,
-        message:
-          "Unable to load users."
-      });
+      res
+        .status(500)
+        .json({
+          ok: false,
+          message:
+            "Unable to load users."
+        });
     }
   }
 );
-
 
 /* =========================================================
    ADMIN USER DETAILS
@@ -3070,11 +3234,13 @@ app.get(
         ];
 
       if (!u) {
-        return res.status(404).json({
-          ok: false,
-          message:
-            "User not found."
-        });
+        return res
+          .status(404)
+          .json({
+            ok: false,
+            message:
+              "User not found."
+          });
       }
 
       const usageDb =
@@ -3085,49 +3251,43 @@ app.get(
 
       res.json({
         ok: true,
-
         user: {
           id:
             u.id,
-
           name:
             u.name,
-
           email:
             u.email,
-
           role:
             u.role,
-
           disabled:
             Boolean(
               u.disabled
             ),
-
           createdAt:
             u.createdAt,
-
           lastLoginAt:
             u.lastLoginAt ||
             null,
-
           usage:
-            usageDb[u.id] ||
-            {}
+            usageDb[
+              u.id
+            ] || {}
         }
       });
     } catch (e) {
       await errorLog(e);
 
-      res.status(500).json({
-        ok: false,
-        message:
-          "Unable to load user."
-      });
+      res
+        .status(500)
+        .json({
+          ok: false,
+          message:
+            "Unable to load user."
+        });
     }
   }
 );
-
 
 /* =========================================================
    ADMIN DISABLE / ENABLE USER
@@ -3150,27 +3310,30 @@ app.post(
         ];
 
       if (!u) {
-        return res.status(404).json({
-          ok: false,
-          message:
-            "User not found."
-        });
+        return res
+          .status(404)
+          .json({
+            ok: false,
+            message:
+              "User not found."
+          });
       }
 
       /*
-       * NEVER allow the main administrator
-       * to be disabled here.
+       * Never allow the main administrator
+       * to be disabled.
        */
-
       if (
-        u.email ===
+        email(u.email) ===
         ADMIN_EMAIL
       ) {
-        return res.status(400).json({
-          ok: false,
-          message:
-            "The main administrator account cannot be disabled from this endpoint."
-        });
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            message:
+              "The main administrator account cannot be disabled from this endpoint."
+          });
       }
 
       u.disabled =
@@ -3187,7 +3350,9 @@ app.post(
         users
       );
 
-      if (u.disabled) {
+      if (
+        u.disabled
+      ) {
         await destroyUserSessions(
           u.id
         );
@@ -3217,15 +3382,16 @@ app.post(
     } catch (e) {
       await errorLog(e);
 
-      res.status(500).json({
-        ok: false,
-        message:
-          "Unable to update user."
-      });
+      res
+        .status(500)
+        .json({
+          ok: false,
+          message:
+            "Unable to update user."
+        });
     }
   }
 );
-
 
 /* =========================================================
    ADMIN JOBS
@@ -3245,7 +3411,6 @@ app.get(
   }
 );
 
-
 /* =========================================================
    ADMIN ERRORS
 ========================================================= */
@@ -3262,7 +3427,6 @@ app.get(
 
     res.json({
       ok: true,
-
       errors:
         Object.values(
           db
@@ -3275,7 +3439,6 @@ app.get(
     });
   }
 );
-
 
 /* =========================================================
    ADMIN SECURITY
@@ -3293,7 +3456,6 @@ app.get(
 
     res.json({
       ok: true,
-
       events:
         Object.values(
           db
@@ -3307,33 +3469,24 @@ app.get(
   }
 );
 
-
 /* =========================================================
    ADMIN PAGE
-   IMPORTANT:
-   NO NESTED BACKTICKS INSIDE THIS HTML TEMPLATE.
 ========================================================= */
 
 app.get(
   "/admin",
   (req, res) => {
-    res.type("html").send(`
+    res
+      .type("html")
+      .send(`
 <!doctype html>
 <html lang="en">
-
 <head>
-
 <meta charset="utf-8">
-
-<meta
-  name="viewport"
-  content="width=device-width,initial-scale=1"
->
-
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MAMAKI AI — Admin</title>
 
 <style>
-
 *{
   box-sizing:border-box;
 }
@@ -3415,6 +3568,10 @@ main{
   margin-top:8px;
 }
 
+.muted{
+  color:#93a0b4;
+}
+
 table{
   width:100%;
   border-collapse:collapse;
@@ -3452,29 +3609,28 @@ input{
   border-radius:10px;
   margin-top:12px;
   display:none;
-  background:#35151b;
-  border:1px solid #73303b;
 }
 
+.small-button{
+  padding:7px 10px;
+  font-size:12px;
+}
 </style>
-
 </head>
 
 <body>
 
 <header>
+  <div class="logo">
+    ✨ MAMAKI AI ADMIN
+  </div>
 
-<div class="logo">
-✨ MAMAKI AI ADMIN
-</div>
-
-<button
-  class="danger"
-  onclick="logout()"
->
-Logout
-</button>
-
+  <button
+    class="danger"
+    onclick="logout()"
+  >
+    Logout
+  </button>
 </header>
 
 <main>
@@ -3484,197 +3640,189 @@ Logout
   class="card"
 >
 
-<h2>
-Administrator Login
-</h2>
+  <h2>
+    Administrator Login
+  </h2>
 
-<form
-  id="loginForm"
->
+  <p class="muted">
+    Sign in with the main MAMAKI administrator credentials.
+  </p>
 
-<input
-  id="email"
-  type="email"
-  placeholder="Administrator email"
-  required
->
+  <form
+    id="loginForm"
+  >
 
-<input
-  id="password"
-  type="password"
-  placeholder="Administrator password"
-  required
->
+    <input
+      id="email"
+      type="email"
+      placeholder="Administrator email"
+      autocomplete="username"
+      required
+    >
 
-<button
-  class="primary"
-  style="width:100%;margin-top:10px"
-  type="submit"
->
-Login
-</button>
+    <input
+      id="password"
+      type="password"
+      placeholder="Administrator password"
+      autocomplete="current-password"
+      required
+    >
 
-</form>
+    <button
+      class="primary"
+      style="width:100%;margin-top:10px"
+      type="submit"
+    >
+      Login
+    </button>
 
-<div
-  id="loginMsg"
-  class="notice"
-></div>
+  </form>
+
+  <div
+    id="loginMsg"
+    class="notice"
+  ></div>
 
 </section>
-
 
 <section
   id="dashboard"
   style="display:none"
 >
 
-<div
-  class="grid"
-  id="stats"
-></div>
+  <div
+    class="grid"
+    id="stats"
+  ></div>
 
+  <div class="card">
 
-<div class="card">
+    <h2>
+      Users
+    </h2>
 
-<h2>
-Users
-</h2>
+    <div class="scroll">
 
-<div class="scroll">
+      <table>
 
-<table>
+        <thead>
 
-<thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>AI Generations</th>
+            <th>AI Seconds</th>
+            <th>Action</th>
+          </tr>
 
-<tr>
+        </thead>
 
-<th>Name</th>
-<th>Email</th>
-<th>Role</th>
-<th>Status</th>
-<th>AI Generations</th>
-<th>AI Seconds</th>
-<th>Action</th>
+        <tbody
+          id="users"
+        ></tbody>
 
-</tr>
+      </table>
 
-</thead>
+    </div>
 
-<tbody
-  id="users"
-></tbody>
+  </div>
 
-</table>
+  <div class="card">
 
-</div>
+    <h2>
+      Current Jobs
+    </h2>
 
-</div>
+    <div class="scroll">
 
+      <table>
 
-<div class="card">
+        <thead>
 
-<h2>
-Current Jobs
-</h2>
+          <tr>
+            <th>ID</th>
+            <th>User</th>
+            <th>Status</th>
+            <th>Progress</th>
+            <th>Created</th>
+          </tr>
 
-<div class="scroll">
+        </thead>
 
-<table>
+        <tbody
+          id="jobs"
+        ></tbody>
 
-<thead>
+      </table>
 
-<tr>
+    </div>
 
-<th>ID</th>
-<th>User</th>
-<th>Status</th>
-<th>Progress</th>
-<th>Created</th>
+  </div>
 
-</tr>
+  <div class="card">
 
-</thead>
+    <h2>
+      Recent Security Events
+    </h2>
 
-<tbody
-  id="jobs"
-></tbody>
+    <div class="scroll">
 
-</table>
+      <table>
 
-</div>
+        <thead>
 
-</div>
+          <tr>
+            <th>Type</th>
+            <th>Email</th>
+            <th>Date</th>
+          </tr>
 
+        </thead>
 
-<div class="card">
+        <tbody
+          id="security"
+        ></tbody>
 
-<h2>
-Recent Security Events
-</h2>
+      </table>
 
-<div class="scroll">
+    </div>
 
-<table>
+  </div>
 
-<thead>
+  <div class="card">
 
-<tr>
+    <h2>
+      Recent Errors
+    </h2>
 
-<th>Type</th>
-<th>Email</th>
-<th>Date</th>
+    <div class="scroll">
 
-</tr>
+      <table>
 
-</thead>
+        <thead>
 
-<tbody
-  id="security"
-></tbody>
+          <tr>
+            <th>Date</th>
+            <th>Message</th>
+          </tr>
 
-</table>
+        </thead>
 
-</div>
+        <tbody
+          id="errors"
+        ></tbody>
 
-</div>
+      </table>
 
+    </div>
 
-<div class="card">
-
-<h2>
-Recent Errors
-</h2>
-
-<div class="scroll">
-
-<table>
-
-<thead>
-
-<tr>
-
-<th>Date</th>
-<th>Message</th>
-
-</tr>
-
-</thead>
-
-<tbody
-  id="errors"
-></tbody>
-
-</table>
-
-</div>
-
-</div>
+  </div>
 
 </section>
 
 </main>
-
 
 <script>
 
@@ -3683,40 +3831,33 @@ let adminToken =
     "mamaki_admin_token"
   ) || "";
 
-
 function esc(v){
-
-  return String(
-    v == null ? "" : v
-  )
-  .replaceAll(
-    "&",
-    "&amp;"
-  )
-  .replaceAll(
-    "<",
-    "&lt;"
-  )
-  .replaceAll(
-    ">",
-    "&gt;"
-  )
-  .replaceAll(
-    '"',
-    "&quot;"
-  )
-  .replaceAll(
-    "'",
-    "&#039;"
-  );
-
+  return String(v ?? "")
+    .replaceAll(
+      "&",
+      "&amp;"
+    )
+    .replaceAll(
+      "<",
+      "&lt;"
+    )
+    .replaceAll(
+      ">",
+      "&gt;"
+    )
+    .replaceAll(
+      '"',
+      "&quot;"
+    )
+    .replaceAll(
+      "'",
+      "&#039;"
+    );
 }
-
 
 function showLoginMessage(
   message
 ){
-
   const el =
     document.getElementById(
       "loginMsg"
@@ -3727,31 +3868,20 @@ function showLoginMessage(
 
   el.textContent =
     message;
-
 }
-
 
 async function api(
   url,
-  options
+  options = {}
 ){
-
-  options =
-    options || {};
-
-  options.headers =
-    Object.assign(
-      {},
-      options.headers || {},
-      {
-        Authorization:
-          "Bearer " +
-          adminToken,
-
-        "Content-Type":
-          "application/json"
-      }
-    );
+  options.headers = {
+    ...(options.headers || {}),
+    Authorization:
+      "Bearer " +
+      adminToken,
+    "Content-Type":
+      "application/json"
+  };
 
   const r =
     await fetch(
@@ -3760,39 +3890,32 @@ async function api(
     );
 
   const data =
-    await r.json()
+    await r
+      .json()
       .catch(
-        function(){
-          return {};
-        }
+        () => ({})
       );
 
-  if(!r.ok){
-
+  if (!r.ok) {
     throw new Error(
       data.message ||
       "Request failed."
     );
-
   }
 
   return data;
-
 }
 
-
 function logout(){
-
   localStorage.removeItem(
     "mamaki_admin_token"
   );
 
-  adminToken = "";
+  adminToken =
+    "";
 
   location.reload();
-
 }
-
 
 document
   .getElementById(
@@ -3840,13 +3963,11 @@ document
         const data =
           await r.json();
 
-        if(!r.ok){
-
+        if (!r.ok) {
           throw new Error(
             data.message ||
             "Login failed."
           );
-
         }
 
         adminToken =
@@ -3870,7 +3991,6 @@ document
     }
   );
 
-
 async function loadDashboard(){
 
   try{
@@ -3880,19 +4000,15 @@ async function loadDashboard(){
         api(
           "/api/admin/stats"
         ),
-
         api(
           "/api/admin/users"
         ),
-
         api(
           "/api/admin/jobs"
         ),
-
         api(
           "/api/admin/security"
         ),
-
         api(
           "/api/admin/errors"
         )
@@ -3913,26 +4029,18 @@ async function loadDashboard(){
     const errors =
       result[4];
 
-
-    document
-      .getElementById(
-        "login"
-      )
-      .style.display =
+    document.getElementById(
+      "login"
+    ).style.display =
       "none";
 
-
-    document
-      .getElementById(
-        "dashboard"
-      )
-      .style.display =
+    document.getElementById(
+      "dashboard"
+    ).style.display =
       "block";
-
 
     const s =
       stats.stats;
-
 
     let statsHTML =
       "";
@@ -3940,72 +4048,68 @@ async function loadDashboard(){
     statsHTML +=
       '<div class="stat">Users<b>' +
       esc(s.totalUsers) +
-      '</b></div>';
+      "</b></div>";
 
     statsHTML +=
       '<div class="stat">Projects<b>' +
       esc(s.totalProjects) +
-      '</b></div>';
+      "</b></div>";
 
     statsHTML +=
       '<div class="stat">AI Generations<b>' +
       esc(s.aiGenerations) +
-      '</b></div>';
+      "</b></div>";
 
     statsHTML +=
       '<div class="stat">AI Seconds<b>' +
       esc(s.aiSeconds) +
-      '</b></div>';
+      "</b></div>";
 
     statsHTML +=
       '<div class="stat">Studio Jobs<b>' +
       esc(s.studioJobs) +
-      '</b></div>';
+      "</b></div>";
 
     statsHTML +=
       '<div class="stat">Narration Jobs<b>' +
       esc(s.narrationJobs) +
-      '</b></div>';
+      "</b></div>";
 
     statsHTML +=
       '<div class="stat">Failed Jobs<b>' +
       esc(s.failedJobs) +
-      '</b></div>';
+      "</b></div>";
 
     statsHTML +=
       '<div class="stat">Errors<b>' +
       esc(s.recordedErrors) +
-      '</b></div>';
+      "</b></div>";
 
-    document
-      .getElementById(
-        "stats"
-      )
-      .innerHTML =
+    document.getElementById(
+      "stats"
+    ).innerHTML =
       statsHTML;
-
 
     let usersHTML =
       "";
 
-    if(
-      users.users &&
+    if (
       users.users.length
     ){
 
       users.users.forEach(
-        function(u){
+        u => {
 
           let action =
             "Admin";
 
-          if(
+          if (
             u.role !==
             "admin"
           ){
 
             action =
-              '<button onclick="toggleUser(' +
+              '<button class="small-button" onclick="toggleUser(' +
               JSON.stringify(
                 u.id
               ) +
@@ -4020,24 +4124,19 @@ async function loadDashboard(){
                   : "Disable"
               ) +
               "</button>";
-
           }
 
           usersHTML +=
             "<tr>" +
-
             "<td>" +
             esc(u.name) +
             "</td>" +
-
             "<td>" +
             esc(u.email) +
             "</td>" +
-
             "<td>" +
             esc(u.role) +
             "</td>" +
-
             "<td>" +
             (
               u.disabled
@@ -4045,29 +4144,22 @@ async function loadDashboard(){
                 : "Active"
             ) +
             "</td>" +
-
             "<td>" +
             esc(
-              u.usage &&
-              u.usage.aiGenerations ||
+              u.usage?.aiGenerations ||
               0
             ) +
             "</td>" +
-
             "<td>" +
             esc(
-              u.usage &&
-              u.usage.aiSeconds ||
+              u.usage?.aiSeconds ||
               0
             ) +
             "</td>" +
-
             "<td>" +
             action +
             "</td>" +
-
             "</tr>";
-
         }
       );
 
@@ -4078,51 +4170,43 @@ async function loadDashboard(){
 
     }
 
-    document
-      .getElementById(
-        "users"
-      )
-      .innerHTML =
+    document.getElementById(
+      "users"
+    ).innerHTML =
       usersHTML;
-
 
     let jobsHTML =
       "";
 
-    if(
-      jobs.jobs &&
+    if (
       jobs.jobs.length
     ){
 
       jobs.jobs.forEach(
-        function(j){
+        j => {
 
           jobsHTML +=
             "<tr>" +
-
             "<td>" +
             esc(j.id) +
             "</td>" +
-
             "<td>" +
             esc(j.userId) +
             "</td>" +
-
             "<td>" +
             esc(j.status) +
             "</td>" +
-
             "<td>" +
             esc(
               j.progress ||
               0
             ) +
             "%</td>" +
-
             "<td>" +
-            esc(j.createdAt) +
+            esc(
+              j.createdAt
+            ) +
             "</td>" +
-
             "</tr>";
 
         }
@@ -4135,19 +4219,15 @@ async function loadDashboard(){
 
     }
 
-    document
-      .getElementById(
-        "jobs"
-      )
-      .innerHTML =
+    document.getElementById(
+      "jobs"
+    ).innerHTML =
       jobsHTML;
-
 
     let securityHTML =
       "";
 
-    if(
-      security.events &&
+    if (
       security.events.length
     ){
 
@@ -4157,26 +4237,24 @@ async function loadDashboard(){
           100
         )
         .forEach(
-          function(e){
+          e => {
 
             securityHTML +=
               "<tr>" +
-
               "<td>" +
               esc(e.type) +
               "</td>" +
-
               "<td>" +
               esc(
                 e.email ||
                 ""
               ) +
               "</td>" +
-
               "<td>" +
-              esc(e.createdAt) +
+              esc(
+                e.createdAt
+              ) +
               "</td>" +
-
               "</tr>";
 
           }
@@ -4189,19 +4267,15 @@ async function loadDashboard(){
 
     }
 
-    document
-      .getElementById(
-        "security"
-      )
-      .innerHTML =
+    document.getElementById(
+      "security"
+    ).innerHTML =
       securityHTML;
-
 
     let errorsHTML =
       "";
 
-    if(
-      errors.errors &&
+    if (
       errors.errors.length
     ){
 
@@ -4211,19 +4285,20 @@ async function loadDashboard(){
           100
         )
         .forEach(
-          function(e){
+          e => {
 
             errorsHTML +=
               "<tr>" +
-
               "<td>" +
-              esc(e.createdAt) +
+              esc(
+                e.createdAt
+              ) +
               "</td>" +
-
               "<td>" +
-              esc(e.message) +
+              esc(
+                e.message
+              ) +
               "</td>" +
-
               "</tr>";
 
           }
@@ -4236,11 +4311,9 @@ async function loadDashboard(){
 
     }
 
-    document
-      .getElementById(
-        "errors"
-      )
-      .innerHTML =
+    document.getElementById(
+      "errors"
+    ).innerHTML =
       errorsHTML;
 
   }catch(e){
@@ -4252,53 +4325,42 @@ async function loadDashboard(){
     adminToken =
       "";
 
-    document
-      .getElementById(
-        "dashboard"
-      )
-      .style.display =
+    document.getElementById(
+      "dashboard"
+    ).style.display =
       "none";
 
-    document
-      .getElementById(
-        "login"
-      )
-      .style.display =
+    document.getElementById(
+      "login"
+    ).style.display =
       "block";
 
     showLoginMessage(
       e.message
     );
-
   }
-
 }
-
 
 async function toggleUser(
   id,
   disabled
 ){
 
-  if(
+  if (
     !confirm(
       disabled
         ? "Disable this user?"
         : "Enable this user?"
     )
   ){
-
     return;
-
   }
 
   try{
 
     await api(
       "/api/admin/users/" +
-      encodeURIComponent(
-        id
-      ) +
+      encodeURIComponent(id) +
       "/disable",
       {
         method:
@@ -4306,8 +4368,7 @@ async function toggleUser(
 
         body:
           JSON.stringify({
-            disabled:
-              disabled
+            disabled
           })
       }
     );
@@ -4321,24 +4382,21 @@ async function toggleUser(
     );
 
   }
-
 }
 
-
-if(adminToken){
-
+if (
+  adminToken
+){
   loadDashboard();
-
 }
 
 </script>
 
 </body>
 </html>
-    `);
+`);
   }
 );
-
 
 /* =========================================================
    OUTPUTS
@@ -4355,7 +4413,6 @@ app.use(
   )
 );
 
-
 /* =========================================================
    HEALTH
 ========================================================= */
@@ -4363,356 +4420,16 @@ app.use(
 app.get(
   "/api/health",
   (req, res) => {
-
     res.json({
       ok: true,
       app:
         "MAMAKI AI",
       version:
         VERSION,
-
       replicate:
         Boolean(
           REPLICATE_API_TOKEN
         ),
-
       recovery:
         Boolean(
-          RESEND_API_KEY &&
-          RESEND_FROM
-        ),
-
-      admin:
-        Boolean(
-          ADMIN_EMAIL &&
-          ADMIN_PASSWORD
-        ),
-
-      uptime:
-        process.uptime(),
-
-      timestamp:
-        new Date().toISOString()
-    });
-
-  }
-);
-
-app.get(
-  "/health",
-  (req, res) => {
-
-    res.json({
-      ok: true,
-      app:
-        "MAMAKI AI",
-      version:
-        VERSION,
-      uptime:
-        process.uptime()
-    });
-
-  }
-);
-
-
-/* =========================================================
-   STATUS
-========================================================= */
-
-app.get(
-  "/api/status",
-  (req, res) => {
-
-    res.json({
-      ok: true,
-      app:
-        "MAMAKI AI",
-
-      version:
-        VERSION,
-
-      replicate:
-        Boolean(
-          REPLICATE_API_TOKEN
-        ),
-
-      models: {
-        textToVideo:
-          T2V_MODEL,
-
-        imageToVideo:
-          I2V_MODEL
-      },
-
-      duration: {
-        minimum:
-          MIN_DURATION,
-
-        maximum:
-          MAX_DURATION
-      },
-
-      recovery:
-        Boolean(
-          RESEND_API_KEY &&
-          RESEND_FROM
-        )
-    });
-
-  }
-);
-
-
-/* =========================================================
-   ROOT
-========================================================= */
-
-app.get(
-  "/",
-  (req, res) => {
-
-    res.sendFile(
-      path.join(
-        ROOT,
-        "index.html"
-      )
-    );
-
-  }
-);
-
-
-/* =========================================================
-   404
-========================================================= */
-
-app.use(
-  (req, res) => {
-
-    res.status(404).json({
-      ok: false,
-      error:
-        "NOT_FOUND",
-      path:
-        req.originalUrl
-    });
-
-  }
-);
-
-
-/* =========================================================
-   GLOBAL ERROR HANDLER
-========================================================= */
-
-app.use(
-  async (
-    err,
-    req,
-    res,
-    next
-  ) => {
-
-    await errorLog(
-      err,
-      {
-        route:
-          req.originalUrl,
-        method:
-          req.method
-      }
-    );
-
-    if (
-      res.headersSent
-    ) {
-      return next(err);
-    }
-
-    res.status(500).json({
-      ok: false,
-      error:
-        "INTERNAL_SERVER_ERROR",
-      message:
-        "MAMAKI encountered an unexpected server error."
-    });
-
-  }
-);
-
-
-/* =========================================================
-   JOB CLEANUP
-========================================================= */
-
-setInterval(
-  () => {
-
-    const now =
-      Date.now();
-
-    for (
-      const [
-        id,
-        job
-      ] of jobs.entries()
-    ) {
-
-      if (
-        [
-          "completed",
-          "failed"
-        ].includes(
-          job.status
-        )
-      ) {
-
-        const time =
-          Date.parse(
-            job.completedAt ||
-            job.createdAt ||
-            ""
-          );
-
-        if (
-          Number.isFinite(
-            time
-          ) &&
-          now - time >
-            60 *
-            60 *
-            1000
-        ) {
-
-          jobs.delete(
-            id
-          );
-
-        }
-
-      }
-
-    }
-
-  },
-  10 *
-  60 *
-  1000
-);
-
-
-/* =========================================================
-   TEMP FILE CLEANUP
-========================================================= */
-
-async function cleanupTempFiles() {
-
-  try {
-
-    const files =
-      await fs.readdir(
-        TMP
-      );
-
-    const now =
-      Date.now();
-
-    for (
-      const file of files
-    ) {
-
-      try {
-
-        const full =
-          path.join(
-            TMP,
-            file
-          );
-
-        const stat =
-          await fs.stat(
-            full
-          );
-
-        if (
-          now -
-            stat.mtimeMs >
-          2 *
-            60 *
-            60 *
-            1000
-        ) {
-
-          await fs.rm(
-            full,
-            {
-              force: true
-            }
-          );
-
-        }
-
-      } catch {}
-
-    }
-
-  } catch {}
-
-}
-
-setInterval(
-  cleanupTempFiles,
-  30 *
-  60 *
-  1000
-);
-
-
-/* =========================================================
-   START
-========================================================= */
-
-await ensureStorage();
-
-await cleanupTempFiles();
-
-app.listen(
-  PORT,
-  HOST,
-  () => {
-
-    console.log(
-      `✨ MAMAKI AI v${VERSION} running on ${HOST}:${PORT}`
-    );
-
-    console.log(
-      "Replicate configured: " +
-      Boolean(
-        REPLICATE_API_TOKEN
-      )
-    );
-
-    console.log(
-      "Admin configured: " +
-      Boolean(
-        ADMIN_EMAIL &&
-        ADMIN_PASSWORD
-      )
-    );
-
-    console.log(
-      "Password recovery configured: " +
-      Boolean(
-        RESEND_API_KEY &&
-        RESEND_FROM
-      )
-    );
-
-    console.log(
-      "App URL: " +
-      APP_URL
-    );
-
-  }
-);
+          RESEND_API
