@@ -15,9 +15,10 @@ import {
 } from "node:crypto";
 
 const app = express();
+
 const PORT = Number(process.env.PORT || 10000);
 const HOST = "0.0.0.0";
-const VERSION = "17.0.0";
+const VERSION = "17.0.1";
 
 const ROOT = process.cwd();
 const TMP = path.join(ROOT, "tmp");
@@ -36,27 +37,40 @@ const FINANCE_FILE = path.join(DATA, "finance.json");
 
 const T2V_MODEL =
   process.env.T2V_MODEL || "wan-video/wan-2.2-t2v-fast";
+
 const I2V_MODEL =
   process.env.I2V_MODEL || "wan-video/wan-2.2-i2v-fast";
 
 const MAX_DURATION = 7200;
 const MIN_DURATION = 5;
 
-const ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || "")
+const ADMIN_EMAIL = String(
+  process.env.ADMIN_EMAIL || ""
+)
   .trim()
   .toLowerCase();
 
 const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || "");
-const SESSION_SECRET = String(process.env.SESSION_SECRET || "");
+
+const SESSION_SECRET = String(
+  process.env.SESSION_SECRET || ""
+);
+
 const REPLICATE_API_TOKEN = String(
   process.env.REPLICATE_API_TOKEN || ""
 ).trim();
 
-const RESEND_API_KEY = String(process.env.RESEND_API_KEY || "").trim();
-const RESEND_FROM = String(process.env.RESEND_FROM || "").trim();
+const RESEND_API_KEY = String(
+  process.env.RESEND_API_KEY || ""
+).trim();
+
+const RESEND_FROM = String(
+  process.env.RESEND_FROM || ""
+).trim();
 
 const APP_URL = String(
-  process.env.APP_URL || "https://mamaki-ai-video.onrender.com"
+  process.env.APP_URL ||
+    "https://mamaki-ai-video.onrender.com"
 ).replace(/\/$/, "");
 
 const replicate = REPLICATE_API_TOKEN
@@ -64,6 +78,7 @@ const replicate = REPLICATE_API_TOKEN
   : null;
 
 const jobs = new Map();
+
 const resetRate = new Map();
 const adminLoginRate = new Map();
 const forgotIpRate = new Map();
@@ -130,7 +145,11 @@ async function ensureStorage() {
 async function readJson(file, fallback = {}) {
   try {
     const raw = await fs.readFile(file, "utf8");
-    if (!raw.trim()) return fallback;
+
+    if (!raw.trim()) {
+      return fallback;
+    }
+
     return JSON.parse(raw);
   } catch {
     return fallback;
@@ -168,13 +187,14 @@ function normalizeDuration(value) {
   if (typeof value === "string") {
     const match = value
       .trim()
-      .match(
-        /^(\d+(?:\.\d+)?)\s*(s|sec|secs|m|min|mins|h|hr|hrs)?$/i
-      );
+      .match(/^(\d+(?:\.\d+)?)\s*(s|sec|secs|m|min|mins|h|hr|hrs)?$/i);
 
     if (match) {
       let n = Number(match[1]);
-      const unit = String(match[2] || "s").toLowerCase();
+
+      const unit = String(
+        match[2] || "s"
+      ).toLowerCase();
 
       if (["m", "min", "mins"].includes(unit)) {
         n *= 60;
@@ -212,8 +232,14 @@ function normalizeRatio(value) {
 }
 
 function ratioSize(ratio) {
-  if (ratio === "9:16") return "1080:1920";
-  if (ratio === "1:1") return "1080:1080";
+  if (ratio === "9:16") {
+    return "1080:1920";
+  }
+
+  if (ratio === "1:1") {
+    return "1080:1080";
+  }
+
   return "1920:1080";
 }
 
@@ -222,10 +248,12 @@ function wanFrames(seconds) {
 }
 
 function safeFileName(name, fallback = "file") {
-  const base = path.basename(String(name || fallback));
+  const base = path.basename(
+    String(name || fallback)
+  );
 
   return base
-    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .replace(/[^a-zA-Z0-9.-]/g, "")
     .slice(0, 150);
 }
 
@@ -270,7 +298,10 @@ function verifyPassword(
       return false;
     }
 
-    return timingSafeEqual(actual, expected);
+    return timingSafeEqual(
+      actual,
+      expected
+    );
   } catch {
     return false;
   }
@@ -360,7 +391,9 @@ async function invalidateUserSessions(userId) {
 async function getSession(req) {
   const token = getBearerToken(req);
 
-  if (!token) return null;
+  if (!token) {
+    return null;
+  }
 
   const sessions = await readJson(
     SESSIONS_FILE,
@@ -369,7 +402,9 @@ async function getSession(req) {
 
   const session = sessions[token];
 
-  if (!session) return null;
+  if (!session) {
+    return null;
+  }
 
   const maxAge =
     30 * 24 * 60 * 60 * 1000;
@@ -406,7 +441,9 @@ async function getSession(req) {
 async function getCurrentUser(req) {
   const session = await getSession(req);
 
-  if (!session) return null;
+  if (!session) {
+    return null;
+  }
 
   const users = await readJson(
     USERS_FILE,
@@ -425,7 +462,8 @@ async function getCurrentUser(req) {
 
   if (
     !Number.isFinite(activeAt) ||
-    Date.now() - activeAt > 60 * 1000
+    Date.now() - activeAt >
+      60 * 1000
   ) {
     user.lastActiveAt =
       new Date().toISOString();
@@ -471,7 +509,10 @@ async function requireAdmin(
 ) {
   const user = await getCurrentUser(req);
 
-  if (!user || user.role !== "admin") {
+  if (
+    !user ||
+    user.role !== "admin"
+  ) {
     return res.status(403).json({
       ok: false,
       error: "ADMIN_REQUIRED",
@@ -606,7 +647,9 @@ async function recordUsage(
   type,
   seconds = 0
 ) {
-  if (!userId) return;
+  if (!userId) {
+    return;
+  }
 
   const usage = await readJson(
     USAGE_FILE,
@@ -654,7 +697,8 @@ async function recordUsage(
 const STARTER_CREDITS = Math.max(
   0,
   Number(
-    process.env.FREE_STARTER_CREDITS || 100
+    process.env.FREE_STARTER_CREDITS ||
+      100
   )
 );
 
@@ -695,15 +739,13 @@ function creditCost(seconds) {
   );
 }
 
-async function ensureCredits(
-  userId
-) {
-  const data =
-    await readCredits();
+async function ensureCredits(userId) {
+  const data = await readCredits();
 
   if (!data.users[userId]) {
     data.users[userId] = {
-      freeCredits: STARTER_CREDITS,
+      freeCredits:
+        STARTER_CREDITS,
       paidCredits: 0,
       promotionalCredits: 0,
       consumedCredits: 0,
@@ -738,12 +780,12 @@ async function reserveCredits(
   userId,
   amount
 ) {
-  const data =
-    await readCredits();
+  const data = await readCredits();
 
   if (!data.users[userId]) {
     data.users[userId] = {
-      freeCredits: STARTER_CREDITS,
+      freeCredits:
+        STARTER_CREDITS,
       paidCredits: 0,
       promotionalCredits: 0,
       consumedCredits: 0,
@@ -818,15 +860,16 @@ async function refundCredits(
   used,
   reason = "Generation failed"
 ) {
-  if (!used) return;
+  if (!used) {
+    return;
+  }
 
-  const data =
-    await readCredits();
+  const data = await readCredits();
+  const account = data.users[userId];
 
-  const account =
-    data.users[userId];
-
-  if (!account) return;
+  if (!account) {
+    return;
+  }
 
   let total = 0;
 
@@ -894,8 +937,7 @@ async function addFinance(
   adminId,
   userId = null
 ) {
-  const data =
-    await readFinance();
+  const data = await readFinance();
 
   data.transactions.push({
     id: randomUUID(),
@@ -963,7 +1005,8 @@ function financeTotals(
     totalCosts: costs,
     profit,
     profitMargin: netRevenue
-      ? (profit / netRevenue) * 100
+      ? (profit / netRevenue) *
+        100
       : 0,
   };
 }
@@ -972,9 +1015,7 @@ function financeTotals(
    REPLICATE
 ========================================================= */
 
-function classifyReplicateError(
-  error
-) {
+function classifyReplicateError(error) {
   const text = String(
     error?.message ||
       error ||
@@ -1091,10 +1132,10 @@ async function downloadReplicateOutput(
 
   if (
     output &&
-    typeof output.url === "function"
+    typeof output.url ===
+      "function"
   ) {
-    const url =
-      await output.url();
+    const url = await output.url();
 
     return downloadToFile(
       String(url),
@@ -1104,7 +1145,8 @@ async function downloadReplicateOutput(
 
   if (
     output &&
-    typeof output.url === "string"
+    typeof output.url ===
+      "string"
   ) {
     return downloadToFile(
       output.url,
@@ -1121,7 +1163,9 @@ async function downloadReplicateOutput(
     return destination;
   }
 
-  if (output instanceof Uint8Array) {
+  if (
+    output instanceof Uint8Array
+  ) {
     await fs.writeFile(
       destination,
       Buffer.from(output)
@@ -1188,7 +1232,8 @@ async function runFFmpeg(args) {
       child.stderr.on(
         "data",
         (chunk) => {
-          stderr += chunk.toString();
+          stderr +=
+            chunk.toString();
         }
       );
 
@@ -1286,8 +1331,7 @@ async function resizeVideo(
   output,
   ratio
 ) {
-  const size =
-    ratioSize(ratio);
+  const size = ratioSize(ratio);
 
   await runFFmpeg([
     "-y",
@@ -1317,8 +1361,10 @@ async function createSoftMusic(
   output,
   seconds = 5
 ) {
-  const duration =
-    Math.max(1, Number(seconds));
+  const duration = Math.max(
+    1,
+    Number(seconds)
+  );
 
   await runFFmpeg([
     "-y",
@@ -1458,7 +1504,9 @@ function splitIntoScenes(
     30000
   );
 
-  if (!text) return [];
+  if (!text) {
+    return [];
+  }
 
   const chunks = text
     .split(
@@ -1472,7 +1520,9 @@ function splitIntoScenes(
     Math.ceil(targetSeconds / 5)
   );
 
-  if (chunks.length <= maxScenes) {
+  if (
+    chunks.length <= maxScenes
+  ) {
     return chunks;
   }
 
@@ -1506,7 +1556,9 @@ function enhancePrompt(
     5000
   );
 
-  if (!clean) return "";
+  if (!clean) {
+    return "";
+  }
 
   return [
     clean,
@@ -1537,11 +1589,15 @@ async function wanTextToVideo(
     throw error;
   }
 
-  const frames =
-    wanFrames(seconds);
+  const frames = wanFrames(
+    seconds
+  );
 
-  const enhanced =
-    `${prompt}\n\nOutput requirements: ${ratio} aspect ratio, professional ${quality || "standard"} quality.`;
+  const enhanced = `${prompt}
+
+Output requirements: ${ratio} aspect ratio, professional ${
+    quality || "standard"
+  } quality.`;
 
   const input = {
     prompt: enhanced,
@@ -1552,7 +1608,9 @@ async function wanTextToVideo(
   try {
     return await replicate.run(
       T2V_MODEL,
-      { input }
+      {
+        input,
+      }
     );
   } catch (error) {
     const classified =
@@ -1589,8 +1647,9 @@ async function wanImageToVideo(
     throw error;
   }
 
-  const frames =
-    wanFrames(seconds);
+  const frames = wanFrames(
+    seconds
+  );
 
   const base64 =
     imageBuffer.toString(
@@ -1601,8 +1660,11 @@ async function wanImageToVideo(
     `data:image/jpeg;base64,${base64}`;
 
   const input = {
-    prompt:
-      `${prompt}\n\nCreate coherent motion from the supplied reference image. Aspect ratio ${ratio}. Quality ${quality || "standard"}.`,
+    prompt: `${prompt}
+
+Create coherent motion from the supplied reference image. Aspect ratio ${ratio}. Quality ${
+      quality || "standard"
+    }.`,
     image: dataUri,
     num_frames: frames,
     aspect_ratio: ratio,
@@ -1611,7 +1673,9 @@ async function wanImageToVideo(
   try {
     return await replicate.run(
       I2V_MODEL,
-      { input }
+      {
+        input,
+      }
     );
   } catch (error) {
     const classified =
@@ -1668,8 +1732,7 @@ async function generateVideoProduction({
       );
     }
 
-    job.currentScene =
-      i + 1;
+    job.currentScene = i + 1;
 
     job.progress = Math.round(
       (i / scenes.length) * 75
@@ -1710,11 +1773,12 @@ async function generateVideoProduction({
 
     files.push(rawFile);
 
-    job.progress = Math.round(
-      ((i + 1) /
-        scenes.length) *
-        75
-    );
+    job.progress =
+      Math.round(
+        ((i + 1) /
+          scenes.length) *
+          75
+      );
   }
 
   const combined =
@@ -1847,10 +1911,11 @@ async function saveProjectForUser(
     project.id ||
     randomUUID();
 
-  const file = path.join(
-    PROJECTS,
-    `${safeFileName(id)}.json`
-  );
+  const file =
+    path.join(
+      PROJECTS,
+      `${safeFileName(id)}.json`
+    );
 
   const record = {
     ...project,
@@ -1916,13 +1981,14 @@ async function getAllProjects() {
 const PASSWORD_RESET_EXPIRY =
   15 * 60 * 1000;
 
-const PASSWORD_RESET_MAX_ATTEMPTS = 5;
+const PASSWORD_RESET_MAX_ATTEMPTS =
+  5;
 
 function createResetCode() {
   return String(
-    randomBytes(4)
-      .readUInt32BE(0) %
-      1000000
+    randomBytes(4).readUInt32BE(
+      0
+    ) % 1000000
   ).padStart(6, "0");
 }
 
@@ -2033,8 +2099,7 @@ async function sendPasswordRecoveryEmail(
       {
         method: "POST",
         headers: {
-          Authorization:
-            `Bearer ${RESEND_API_KEY}`,
+          Authorization: `Bearer ${RESEND_API_KEY}`,
           "Content-Type":
             "application/json",
         },
@@ -2046,12 +2111,11 @@ async function sendPasswordRecoveryEmail(
           html: `
             <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto">
               <h2>✨ MAMAKI AI</h2>
-              <p>We received a request to reset your MAMAKI account password.</p>
+              <p>We received a request to reset the password for your MAMAKI account.</p>
               <p>Your recovery code is:</p>
               <div style="font-size:32px;font-weight:700;letter-spacing:8px;padding:18px;background:#f3f3f3;text-align:center">${code}</div>
-              <p>This code expires in 15 minutes.</p>
-              <p>If you did not request this, you can ignore this email.</p>
-              <p>Never share this recovery code with anyone.</p>
+              <p>This code expires in 15 minutes. If you did not request this, you can ignore this message.</p>
+              <p>For your security, never share this code with anyone.</p>
             </div>
           `,
         }),
@@ -2083,8 +2147,7 @@ function allowedByRate(
   limit,
   windowMs
 ) {
-  const now =
-    Date.now();
+  const now = Date.now();
 
   const current =
     map.get(key) || [];
@@ -2097,8 +2160,7 @@ function allowedByRate(
     );
 
   if (
-    recent.length >=
-    limit
+    recent.length >= limit
   ) {
     map.set(
       key,
@@ -2169,10 +2231,8 @@ app.get(
           Boolean(
             REPLICATE_API_TOKEN
           ),
-        t2vModel:
-          T2V_MODEL,
-        i2vModel:
-          I2V_MODEL,
+        t2vModel: T2V_MODEL,
+        i2vModel: I2V_MODEL,
       },
       recovery: {
         configured:
@@ -2203,8 +2263,7 @@ app.get(
           ),
         internalCredits: true,
         finance: true,
-        watermark:
-          "MAMAKI ✨",
+        watermark: "MAMAKI ✨",
       },
     });
   }
@@ -2218,21 +2277,19 @@ app.post(
   "/api/auth/register",
   async (req, res) => {
     try {
-      const name =
-        cleanText(
-          req.body.name,
-          100
-        );
+      const name = cleanText(
+        req.body.name,
+        100
+      );
 
       const email =
         normalizeEmail(
           req.body.email
         );
 
-      const password =
-        String(
-          req.body.password || ""
-        );
+      const password = String(
+        req.body.password || ""
+      );
 
       if (
         !name ||
@@ -2248,9 +2305,7 @@ app.post(
         });
       }
 
-      if (
-        password.length < 6
-      ) {
+      if (password.length < 6) {
         return res.status(400).json({
           ok: false,
           error:
@@ -2296,8 +2351,7 @@ app.post(
         );
 
       const role =
-        email ===
-          ADMIN_EMAIL &&
+        email === ADMIN_EMAIL &&
         ADMIN_EMAIL
           ? "admin"
           : "user";
@@ -2382,10 +2436,9 @@ app.post(
           req.body.email
         );
 
-      const password =
-        String(
-          req.body.password || ""
-        );
+      const password = String(
+        req.body.password || ""
+      );
 
       const users =
         await readJson(
@@ -2468,8 +2521,7 @@ app.post(
           ? "ADMIN_LOGIN_SUCCESS"
           : "LOGIN_SUCCESS",
         {
-          userId:
-            user.id,
+          userId: user.id,
           email:
             user.email,
           role,
@@ -2486,7 +2538,8 @@ app.post(
         user: {
           id: user.id,
           name: user.name,
-          email: user.email,
+          email:
+            user.email,
           role,
         },
       });
@@ -2523,9 +2576,7 @@ app.post(
           {}
         );
 
-      delete sessions[
-        token
-      ];
+      delete sessions[token];
 
       await writeJson(
         SESSIONS_FILE,
@@ -2545,26 +2596,23 @@ app.get(
   "/api/auth/me",
   async (req, res) => {
     const user =
-      await getCurrentUser(
-        req
-      );
+      await getCurrentUser(req);
 
     if (!user) {
       return res.status(401).json({
         ok: false,
-        authenticated:
-          false,
+        authenticated: false,
       });
     }
 
     res.json({
       ok: true,
-      authenticated:
-        true,
+      authenticated: true,
       user: {
         id: user.id,
         name: user.name,
-        email: user.email,
+        email:
+          user.email,
         role: user.role,
         createdAt:
           user.createdAt,
@@ -2579,22 +2627,18 @@ app.post(
   "/api/auth/heartbeat",
   async (req, res) => {
     const user =
-      await getCurrentUser(
-        req
-      );
+      await getCurrentUser(req);
 
     if (!user) {
       return res.status(401).json({
         ok: false,
-        authenticated:
-          false,
+        authenticated: false,
       });
     }
 
     res.json({
       ok: true,
-      authenticated:
-        true,
+      authenticated: true,
       activeAt:
         user.lastActiveAt ||
         new Date().toISOString(),
@@ -2684,10 +2728,7 @@ app.post(
             email
         );
 
-      if (
-        !user ||
-        user.disabled
-      ) {
+      if (!user || user.disabled) {
         return res.json(
           generic
         );
@@ -2709,8 +2750,7 @@ app.post(
       await recordSecurityEvent(
         "PASSWORD_RECOVERY_REQUESTED",
         {
-          userId:
-            user.id,
+          userId: user.id,
           email,
         }
       );
@@ -2747,11 +2787,10 @@ app.post(
         req.body.email
       );
 
-    const code =
-      cleanText(
-        req.body.code,
-        20
-      );
+    const code = cleanText(
+      req.body.code,
+      20
+    );
 
     const newPassword =
       String(
@@ -2816,8 +2855,7 @@ app.post(
         !record ||
         Date.now() >
           Number(
-            record.expiresAt ||
-              0
+            record.expiresAt || 0
           )
       ) {
         await deletePasswordReset(
@@ -2914,10 +2952,7 @@ app.post(
             email
         );
 
-      if (
-        !user ||
-        user.disabled
-      ) {
+      if (!user || user.disabled) {
         return res.status(400).json({
           ok: false,
           error:
@@ -2960,8 +2995,7 @@ app.post(
       await recordSecurityEvent(
         "PASSWORD_CHANGED",
         {
-          userId:
-            user.id,
+          userId: user.id,
           email,
         }
       );
@@ -3021,14 +3055,11 @@ app.get(
     res.json({
       ok: true,
       account: {
-        id:
-          req.user.id,
-        name:
-          req.user.name,
+        id: req.user.id,
+        name: req.user.name,
         email:
           req.user.email,
-        role:
-          req.user.role,
+        role: req.user.role,
         createdAt:
           req.user.createdAt,
       },
@@ -3038,16 +3069,12 @@ app.get(
           availableCredits(
             credits
           ),
-        free:
-          Number(
-            credits.freeCredits ||
-              0
-          ),
-        paid:
-          Number(
-            credits.paidCredits ||
-              0
-          ),
+        free: Number(
+          credits.freeCredits || 0
+        ),
+        paid: Number(
+          credits.paidCredits || 0
+        ),
         promotional:
           Number(
             credits.promotionalCredits ||
@@ -3062,8 +3089,7 @@ app.get(
       limits: {
         maximumProductionSeconds:
           MAX_DURATION,
-        freeStudio:
-          true,
+        freeStudio: true,
       },
     });
   }
@@ -3090,11 +3116,10 @@ app.put(
       });
     }
 
-    const name =
-      cleanText(
-        req.body.name,
-        100
-      );
+    const name = cleanText(
+      req.body.name,
+      100
+    );
 
     if (name) {
       user.name = name;
@@ -3114,14 +3139,11 @@ app.put(
     res.json({
       ok: true,
       user: {
-        id:
-          user.id,
-        name:
-          user.name,
+        id: user.id,
+        name: user.name,
         email:
           user.email,
-        role:
-          user.role,
+        role: user.role,
       },
     });
   }
@@ -3238,10 +3260,8 @@ app.post(
       await recordSecurityEvent(
         "PASSWORD_CHANGED",
         {
-          userId:
-            user.id,
-          email:
-            user.email,
+          userId: user.id,
+          email: user.email,
           method:
             "CHANGE_PASSWORD",
         }
@@ -3289,16 +3309,12 @@ app.get(
           availableCredits(
             account
           ),
-        free:
-          Number(
-            account.freeCredits ||
-              0
-          ),
-        paid:
-          Number(
-            account.paidCredits ||
-              0
-          ),
+        free: Number(
+          account.freeCredits || 0
+        ),
+        paid: Number(
+          account.paidCredits || 0
+        ),
         promotional:
           Number(
             account.promotionalCredits ||
@@ -3344,8 +3360,7 @@ app.post(
 
     res.json({
       ok: true,
-      original:
-        prompt,
+      original: prompt,
       enhanced:
         enhancePrompt(
           prompt,
@@ -3447,8 +3462,7 @@ app.post(
           ok: false,
           error:
             "INSUFFICIENT_CREDITS",
-          message:
-            `This production requires ${generationCredits} MAMAKI credits.`,
+          message: `This production requires ${generationCredits} MAMAKI credits.`,
         });
       }
 
@@ -3456,14 +3470,10 @@ app.post(
         randomUUID();
 
       const job = {
-        id:
-          jobId,
-        userId:
-          user.id,
-        status:
-          "queued",
-        progress:
-          0,
+        id: jobId,
+        userId: user.id,
+        status: "queued",
+        progress: 0,
         message:
           "Production queued.",
         createdAt:
@@ -3472,8 +3482,7 @@ app.post(
         ratio,
         style,
         quality,
-        cancelled:
-          false,
+        cancelled: false,
         creditCost:
           generationCredits,
         creditReservation:
@@ -3488,8 +3497,7 @@ app.post(
       await recordSecurityEvent(
         "AI_GENERATION_REQUEST",
         {
-          userId:
-            user.id,
+          userId: user.id,
           jobId,
           duration,
           credits:
@@ -3500,10 +3508,8 @@ app.post(
       res.status(202).json({
         ok: true,
         jobId,
-        status:
-          "queued",
-        progress:
-          0,
+        status: "queued",
+        progress: 0,
         creditsReserved:
           generationCredits,
         message:
@@ -3539,8 +3545,7 @@ app.post(
             job.status =
               "completed";
 
-            job.progress =
-              100;
+            job.progress = 100;
 
             job.message =
               "Production completed successfully.";
@@ -3569,8 +3574,7 @@ app.post(
             job.status =
               "failed";
 
-            job.progress =
-              0;
+            job.progress = 0;
 
             job.error =
               classified.code;
@@ -3647,8 +3651,7 @@ app.get(
     if (
       job.userId &&
       (!user ||
-        user.id !==
-          job.userId)
+        user.id !== job.userId)
     ) {
       return res.status(403).json({
         ok: false,
@@ -3660,8 +3663,7 @@ app.get(
     res.json({
       ok: true,
       job: {
-        id:
-          job.id,
+        id: job.id,
         status:
           job.status,
         progress:
@@ -3669,11 +3671,9 @@ app.get(
         message:
           job.message,
         video:
-          job.video ||
-          null,
+          job.video || null,
         error:
-          job.error ||
-          null,
+          job.error || null,
         currentScene:
           job.currentScene ||
           null,
@@ -3699,9 +3699,9 @@ app.get(
       );
 
     if (!file.endsWith(".mp4")) {
-      return res.status(400).send(
-        "Invalid video."
-      );
+      return res
+        .status(400)
+        .send("Invalid video.");
     }
 
     const full =
@@ -3711,9 +3711,7 @@ app.get(
       );
 
     try {
-      await fs.access(
-        full
-      );
+      await fs.access(full);
 
       res.setHeader(
         "Content-Type",
@@ -3725,13 +3723,13 @@ app.get(
         "private, max-age=3600"
       );
 
-      res.sendFile(
-        full
-      );
+      res.sendFile(full);
     } catch {
-      res.status(404).send(
-        "Video not found."
-      );
+      res
+        .status(404)
+        .send(
+          "Video not found."
+        );
     }
   }
 );
@@ -3756,17 +3754,16 @@ app.get(
 
     res.json({
       ok: true,
-      projects:
-        mine.sort(
-          (a, b) =>
+      projects: mine.sort(
+        (a, b) =>
+          String(
+            b.updatedAt || ""
+          ).localeCompare(
             String(
-              b.updatedAt || ""
-            ).localeCompare(
-              String(
-                a.updatedAt || ""
-              )
+              a.updatedAt || ""
             )
-        ),
+          )
+      ),
     });
   }
 );
@@ -3896,9 +3893,7 @@ app.delete(
         });
       }
 
-      await fs.unlink(
-        file
-      );
+      await fs.unlink(file);
 
       res.json({
         ok: true,
@@ -3921,10 +3916,7 @@ app.delete(
 
 app.post(
   "/api/studio/photo-video",
-  upload.array(
-    "photos",
-    50
-  ),
+  upload.array("photos", 50),
   async (req, res) => {
     try {
       const user =
@@ -4006,9 +3998,7 @@ app.post(
           clip,
         ]);
 
-        clips.push(
-          clip
-        );
+        clips.push(clip);
       }
 
       const combined =
@@ -4044,10 +4034,9 @@ app.post(
 
       res.json({
         ok: true,
-        video:
-          `/api/video/${path.basename(
-            watermarked
-          )}`,
+        video: `/api/video/${path.basename(
+          watermarked
+        )}`,
         duration:
           photos.length *
           seconds,
@@ -4176,10 +4165,9 @@ app.post(
 
       res.json({
         ok: true,
-        video:
-          `/api/video/${path.basename(
-            final
-          )}`,
+        video: `/api/video/${path.basename(
+          final
+        )}`,
       });
     } catch (error) {
       await recordError(
@@ -4207,18 +4195,13 @@ app.post(
 
 app.post(
   "/api/studio/combine",
-  upload.array(
-    "videos",
-    50
-  ),
+  upload.array("videos", 50),
   async (req, res) => {
     try {
       const videos =
         req.files || [];
 
-      if (
-        videos.length < 2
-      ) {
+      if (videos.length < 2) {
         return res.status(400).json({
           ok: false,
           error:
@@ -4249,9 +4232,7 @@ app.post(
           videos[i].buffer
         );
 
-        inputs.push(
-          file
-        );
+        inputs.push(file);
       }
 
       const combined =
@@ -4291,10 +4272,9 @@ app.post(
 
       res.json({
         ok: true,
-        video:
-          `/api/video/${path.basename(
-            final
-          )}`,
+        video: `/api/video/${path.basename(
+          final
+        )}`,
       });
     } catch (error) {
       await recordError(
@@ -4379,10 +4359,9 @@ app.post(
 
       res.json({
         ok: true,
-        audio:
-          `/api/audio/${path.basename(
-            output
-          )}`,
+        audio: `/api/audio/${path.basename(
+          output
+        )}`,
         voice,
       });
     } catch (error) {
@@ -4414,9 +4393,9 @@ app.get(
       );
 
     if (!file.endsWith(".mp3")) {
-      return res.status(400).send(
-        "Invalid audio."
-      );
+      return res
+        .status(400)
+        .send("Invalid audio.");
     }
 
     const full =
@@ -4426,22 +4405,20 @@ app.get(
       );
 
     try {
-      await fs.access(
-        full
-      );
+      await fs.access(full);
 
       res.setHeader(
         "Content-Type",
         "audio/mpeg"
       );
 
-      res.sendFile(
-        full
-      );
+      res.sendFile(full);
     } catch {
-      res.status(404).send(
-        "Audio not found."
-      );
+      res
+        .status(404)
+        .send(
+          "Audio not found."
+        );
     }
   }
 );
@@ -4575,10 +4552,9 @@ app.post(
 
       res.json({
         ok: true,
-        video:
-          `/api/video/${path.basename(
-            final
-          )}`,
+        video: `/api/video/${path.basename(
+          final
+        )}`,
       });
     } catch (error) {
       await recordError(
@@ -4662,10 +4638,9 @@ app.post(
       res.json({
         ok: true,
         ratio,
-        video:
-          `/api/video/${path.basename(
-            final
-          )}`,
+        video: `/api/video/${path.basename(
+          final
+        )}`,
       });
     } catch (error) {
       await recordError(
@@ -4694,187 +4669,219 @@ app.post(
 app.post(
   "/api/admin/login",
   async (req, res) => {
-    if (
-      !ADMIN_EMAIL ||
-      !ADMIN_PASSWORD
-    ) {
-      return res.status(503).json({
-        ok: false,
-        error:
-          "ADMIN_NOT_CONFIGURED",
-        message:
-          "Admin credentials are not configured in Render.",
-      });
-    }
+    try {
+      if (
+        !ADMIN_EMAIL ||
+        !ADMIN_PASSWORD
+      ) {
+        return res.status(503).json({
+          ok: false,
+          error:
+            "ADMIN_NOT_CONFIGURED",
+          message:
+            "Admin credentials are not configured in Render.",
+        });
+      }
 
-    const email =
-      normalizeEmail(
-        req.body.email
-      );
-
-    const password =
-      String(
-        req.body.password || ""
-      );
-
-    if (
-      !allowedByRate(
-        adminLoginRate,
-        email ||
-          "unknown",
-        10,
-        15 * 60 * 1000
-      )
-    ) {
-      await recordSecurityEvent(
-        "ADMIN_LOGIN_RATE_LIMITED",
-        { email }
-      );
-
-      return res.status(429).json({
-        ok: false,
-        error:
-          "ADMIN_RATE_LIMITED",
-        message:
-          "Too many administrator login attempts. Try again later.",
-      });
-    }
-
-    if (
-      email !==
-        ADMIN_EMAIL ||
-      password !==
-        ADMIN_PASSWORD
-    ) {
-      await recordSecurityEvent(
-        "ADMIN_LOGIN_FAILED",
-        { email }
-      );
-
-      return res.status(401).json({
-        ok: false,
-        error:
-          "INVALID_ADMIN_LOGIN",
-        message:
-          "Invalid administrator credentials.",
-      });
-    }
-
-    const users =
-      await readJson(
-        USERS_FILE,
-        {}
-      );
-
-    let admin =
-      Object.values(
-        users
-      ).find(
-        (user) =>
-          String(
-            user.email
-          ).toLowerCase() ===
-          ADMIN_EMAIL
-      );
-
-    if (!admin) {
-      const id =
-        randomUUID();
-
-      const credentials =
-        hashPassword(
-          ADMIN_PASSWORD
+      const email =
+        normalizeEmail(
+          req.body.email
         );
 
-      admin = {
-        id,
-        name:
-          "MAMAKI Administrator",
-        email:
-          ADMIN_EMAIL,
-        salt:
-          credentials.salt,
-        passwordHash:
-          credentials.hash,
-        role:
-          "admin",
-        disabled:
-          false,
-        createdAt:
-          new Date().toISOString(),
-        lastLoginAt:
-          null,
-        lastActiveAt:
-          new Date().toISOString(),
-      };
+      const password =
+        String(
+          req.body.password || ""
+        );
 
-      users[id] =
-        admin;
+      if (
+        !allowedByRate(
+          adminLoginRate,
+          email || "unknown",
+          10,
+          15 * 60 * 1000
+        )
+      ) {
+        await recordSecurityEvent(
+          "ADMIN_LOGIN_RATE_LIMITED",
+          { email }
+        );
 
-      await recordSecurityEvent(
-        "ADMIN_ACCOUNT_RESTORED",
-        {
-          userId: id,
+        return res.status(429).json({
+          ok: false,
+          error:
+            "ADMIN_RATE_LIMITED",
+          message:
+            "Too many administrator login attempts. Try again later.",
+        });
+      }
+
+      if (
+        email !== ADMIN_EMAIL ||
+        password !==
+          ADMIN_PASSWORD
+      ) {
+        await recordSecurityEvent(
+          "ADMIN_LOGIN_FAILED",
+          { email }
+        );
+
+        return res.status(401).json({
+          ok: false,
+          error:
+            "INVALID_ADMIN_LOGIN",
+          message:
+            "Invalid administrator credentials.",
+        });
+      }
+
+      const users =
+        await readJson(
+          USERS_FILE,
+          {}
+        );
+
+      let admin =
+        Object.values(
+          users
+        ).find(
+          (user) =>
+            String(
+              user.email
+            ).toLowerCase() ===
+            ADMIN_EMAIL
+        );
+
+      if (!admin) {
+        const id =
+          randomUUID();
+
+        const credentials =
+          hashPassword(
+            ADMIN_PASSWORD
+          );
+
+        admin = {
+          id,
+          name:
+            "MAMAKI Administrator",
           email:
             ADMIN_EMAIL,
+          salt:
+            credentials.salt,
+          passwordHash:
+            credentials.hash,
+          role: "admin",
+          disabled: false,
+          createdAt:
+            new Date().toISOString(),
+          lastLoginAt: null,
+          lastActiveAt:
+            new Date().toISOString(),
+        };
+
+        users[id] =
+          admin;
+
+        await recordSecurityEvent(
+          "ADMIN_ACCOUNT_RESTORED",
+          {
+            userId: id,
+            email:
+              ADMIN_EMAIL,
+          }
+        );
+      } else {
+        admin.role =
+          "admin";
+
+        admin.disabled =
+          false;
+
+        /*
+         * IMPORTANT FIX:
+         * Keep the configured administrator
+         * password as the source of truth.
+         * This also repairs an old/stale admin
+         * password hash without exposing it.
+         */
+        const credentials =
+          hashPassword(
+            ADMIN_PASSWORD
+          );
+
+        admin.salt =
+          credentials.salt;
+
+        admin.passwordHash =
+          credentials.hash;
+      }
+
+      admin.lastLoginAt =
+        new Date().toISOString();
+
+      admin.lastActiveAt =
+        new Date().toISOString();
+
+      users[admin.id] =
+        admin;
+
+      await writeJson(
+        USERS_FILE,
+        users
+      );
+
+      await ensureCredits(
+        admin.id
+      );
+
+      const token =
+        await createSession(
+          admin.id,
+          "admin"
+        );
+
+      await recordSecurityEvent(
+        "ADMIN_LOGIN_SUCCESS",
+        {
+          userId:
+            admin.id,
+          email:
+            ADMIN_EMAIL,
+          method:
+            "MASTER_CREDENTIALS",
         }
       );
-    } else {
-      admin.role =
-        "admin";
 
-      admin.disabled =
-        false;
-    }
-
-    admin.lastLoginAt =
-      new Date().toISOString();
-
-    admin.lastActiveAt =
-      new Date().toISOString();
-
-    users[admin.id] =
-      admin;
-
-    await writeJson(
-      USERS_FILE,
-      users
-    );
-
-    await ensureCredits(
-      admin.id
-    );
-
-    const token =
-      await createSession(
-        admin.id,
-        "admin"
+      res.json({
+        ok: true,
+        token,
+        admin: {
+          id:
+            admin.id,
+          email:
+            admin.email,
+          role:
+            "admin",
+        },
+      });
+    } catch (error) {
+      await recordError(
+        error,
+        {
+          route:
+            "/api/admin/login",
+          method: "POST",
+        }
       );
 
-    await recordSecurityEvent(
-      "ADMIN_LOGIN_SUCCESS",
-      {
-        userId:
-          admin.id,
-        email:
-          ADMIN_EMAIL,
-        method:
-          "MASTER_CREDENTIALS",
-      }
-    );
-
-    res.json({
-      ok: true,
-      token,
-      admin: {
-        id:
-          admin.id,
-        email:
-          admin.email,
-        role:
-          "admin",
-      },
-    });
+      res.status(500).json({
+        ok: false,
+        error:
+          "ADMIN_LOGIN_FAILED",
+        message:
+          "MAMAKI encountered an unexpected server error.",
+      });
+    }
   }
 );
 
@@ -4902,9 +4909,7 @@ app.get(
       await getAllProjects();
 
     const userList =
-      Object.values(
-        users
-      );
+      Object.values(users);
 
     let aiGenerations = 0;
     let aiSeconds = 0;
@@ -4947,8 +4952,7 @@ app.get(
     res.json({
       ok: true,
       stats: {
-        version:
-          VERSION,
+        version: VERSION,
         totalUsers:
           userList.length,
         totalAdmins:
@@ -5042,11 +5046,13 @@ app.get(
     const finance =
       await readFinance();
 
-    const now =
-      Date.now();
+    const now = Date.now();
 
     const day =
-      24 * 60 * 60 * 1000;
+      24 *
+      60 *
+      60 *
+      1000;
 
     const activeUsers =
       users.filter(
@@ -5082,8 +5088,7 @@ app.get(
             Number.isFinite(
               time
             ) &&
-            now - time <
-              day
+            now - time < day
           );
         }
       ).length;
@@ -5135,21 +5140,18 @@ app.get(
               item.aiGenerations ||
                 0
             ),
-
           aiSeconds:
             acc.aiSeconds +
             Number(
               item.aiSeconds ||
                 0
             ),
-
           studioJobs:
             acc.studioJobs +
             Number(
               item.studioJobs ||
                 0
             ),
-
           narrationJobs:
             acc.narrationJobs +
             Number(
@@ -5201,9 +5203,7 @@ app.get(
       balances.reduce(
         (n, x) =>
           n +
-          availableCredits(
-            x
-          ),
+          availableCredits(x),
         0
       );
 
@@ -5217,33 +5217,23 @@ app.get(
       analytics: {
         users:
           users.length,
-
         admins:
           users.filter(
             (u) =>
-              u.role ===
-              "admin"
+              u.role === "admin"
           ).length,
-
         activeUsers,
-
         newUsersToday,
-
         newUsersWeek,
-
         newUsersMonth,
-
         disabledUsers:
           users.filter(
             (u) =>
               u.disabled
           ).length,
-
         projects:
           projects.length,
-
         ...totals,
-
         credits: {
           issued:
             creditIssued,
@@ -5282,21 +5272,16 @@ app.get(
               0
             ),
         },
-
         finance:
           financeTotalsValue,
-
         provider: {
           replicateConfigured:
             Boolean(
               REPLICATE_API_TOKEN
             ),
-          t2v:
-            T2V_MODEL,
-          i2v:
-            I2V_MODEL,
+          t2v: T2V_MODEL,
+          i2v: I2V_MODEL,
         },
-
         system: {
           uptime:
             process.uptime(),
@@ -5309,12 +5294,10 @@ app.get(
               RESEND_API_KEY &&
                 RESEND_FROM
             ),
-          server:
-            true,
+          server: true,
           authentication:
             true,
-          storage:
-            true,
+          storage: true,
         },
       },
     });
@@ -5334,8 +5317,7 @@ app.get(
 
     res.json({
       ok: true,
-      credits:
-        data,
+      credits: data,
     });
   }
 );
@@ -5349,15 +5331,16 @@ app.post(
         req.body.amount
       );
 
-    const bucket = [
-      "freeCredits",
-      "paidCredits",
-      "promotionalCredits",
-    ].includes(
-      req.body.bucket
-    )
-      ? req.body.bucket
-      : "promotionalCredits";
+    const bucket =
+      [
+        "freeCredits",
+        "paidCredits",
+        "promotionalCredits",
+      ].includes(
+        req.body.bucket
+      )
+        ? req.body.bucket
+        : "promotionalCredits";
 
     if (
       !Number.isFinite(
@@ -5401,8 +5384,7 @@ app.post(
       Math.max(
         0,
         Number(
-          account[bucket] ||
-            0
+          account[bucket] || 0
         ) + amount
       );
 
@@ -5417,12 +5399,11 @@ app.post(
         req.params.id,
       amount,
       bucket,
-      reason:
-        cleanText(
-          req.body.reason ||
-            "Admin adjustment",
-          300
-        ),
+      reason: cleanText(
+        req.body.reason ||
+          "Admin adjustment",
+        300
+      ),
       adminId:
         req.user.id,
       createdAt:
@@ -5480,15 +5461,16 @@ app.post(
   "/api/admin/finance",
   requireAdmin,
   async (req, res) => {
-    const type = [
-      "revenue",
-      "refund",
-      "cost",
-    ].includes(
-      req.body.type
-    )
-      ? req.body.type
-      : null;
+    const type =
+      [
+        "revenue",
+        "refund",
+        "cost",
+      ].includes(
+        req.body.type
+      )
+        ? req.body.type
+        : null;
 
     const amount =
       Number(
@@ -5561,50 +5543,42 @@ app.get(
     const list =
       Object.values(
         users
-      ).map(
-        (user) => {
-          const account =
-            credits.users[
-              user.id
-            ];
+      ).map((user) => {
+        const account =
+          credits.users[
+            user.id
+          ];
 
-          return {
-            id:
-              user.id,
-            name:
-              user.name,
-            email:
-              user.email,
-            role:
-              user.role,
-            disabled:
-              Boolean(
-                user.disabled
-              ),
-            createdAt:
-              user.createdAt,
-            lastLoginAt:
-              user.lastLoginAt,
-            lastActiveAt:
-              user.lastActiveAt,
-            credits:
-              account
-                ? availableCredits(
-                    account
-                  )
-                : 0,
-            usage:
-              usage[
-                user.id
-              ] || {
-                aiGenerations: 0,
-                aiSeconds: 0,
-                studioJobs: 0,
-                narrationJobs: 0,
-              },
-          };
-        }
-      );
+        return {
+          id: user.id,
+          name: user.name,
+          email:
+            user.email,
+          role: user.role,
+          disabled:
+            Boolean(
+              user.disabled
+            ),
+          createdAt:
+            user.createdAt,
+          lastLoginAt:
+            user.lastLoginAt,
+          lastActiveAt:
+            user.lastActiveAt,
+          credits: account
+            ? availableCredits(
+                account
+              )
+            : 0,
+          usage:
+            usage[user.id] || {
+              aiGenerations: 0,
+              aiSeconds: 0,
+              studioJobs: 0,
+              narrationJobs: 0,
+            },
+        };
+      });
 
     res.json({
       ok: true,
@@ -5630,9 +5604,7 @@ app.get(
       );
 
     const user =
-      users[
-        req.params.id
-      ];
+      users[req.params.id];
 
     if (!user) {
       return res.status(404).json({
@@ -5659,14 +5631,11 @@ app.get(
     res.json({
       ok: true,
       user: {
-        id:
-          user.id,
-        name:
-          user.name,
+        id: user.id,
+        name: user.name,
         email:
           user.email,
-        role:
-          user.role,
+        role: user.role,
         disabled:
           Boolean(
             user.disabled
@@ -5679,9 +5648,8 @@ app.get(
           user.lastActiveAt,
       },
       usage:
-        usage[
-          user.id
-        ] || {},
+        usage[user.id] ||
+        {},
       credits: {
         available:
           availableCredits(
@@ -5712,9 +5680,7 @@ app.post(
       );
 
     const user =
-      users[
-        req.params.id
-      ];
+      users[req.params.id];
 
     if (!user) {
       return res.status(404).json({
@@ -5725,8 +5691,7 @@ app.post(
     }
 
     if (
-      user.role ===
-        "admin" &&
+      user.role === "admin" &&
       user.email ===
         ADMIN_EMAIL
     ) {
@@ -5776,8 +5741,7 @@ app.post(
     res.json({
       ok: true,
       user: {
-        id:
-          user.id,
+        id: user.id,
         disabled:
           user.disabled,
       },
@@ -5796,9 +5760,7 @@ app.post(
       );
 
     const user =
-      users[
-        req.params.id
-      ];
+      users[req.params.id];
 
     if (!user) {
       return res.status(404).json({
@@ -5848,8 +5810,7 @@ app.post(
     res.json({
       ok: true,
       user: {
-        id:
-          user.id,
+        id: user.id,
         role:
           user.role,
       },
@@ -5870,31 +5831,26 @@ app.get(
       jobs:
         Array.from(
           jobs.values()
-        ).map(
-          (job) => ({
-            id:
-              job.id,
-            userId:
-              job.userId,
-            status:
-              job.status,
-            progress:
-              job.progress,
-            message:
-              job.message,
-            createdAt:
-              job.createdAt,
-            completedAt:
-              job.completedAt ||
-              null,
-            error:
-              job.error ||
-              null,
-            creditCost:
-              job.creditCost ||
-              0,
-          })
-        ),
+        ).map((job) => ({
+          id: job.id,
+          userId:
+            job.userId,
+          status:
+            job.status,
+          progress:
+            job.progress,
+          message:
+            job.message,
+          createdAt:
+            job.createdAt,
+          completedAt:
+            job.completedAt ||
+            null,
+          error:
+            job.error || null,
+          creditCost:
+            job.creditCost || 0,
+        })),
     });
   }
 );
@@ -5913,22 +5869,20 @@ app.get(
       Object.values(
         errors
       )
-        .sort(
-          (a, b) =>
+        .sort((a, b) =>
+          String(
+            b.createdAt
+          ).localeCompare(
             String(
-              b.createdAt
-            ).localeCompare(
-              String(
-                a.createdAt
-              )
+              a.createdAt
             )
+          )
         )
         .slice(0, 200);
 
     res.json({
       ok: true,
-      errors:
-        list,
+      errors: list,
     });
   }
 );
@@ -5947,22 +5901,20 @@ app.get(
       Object.values(
         security
       )
-        .sort(
-          (a, b) =>
+        .sort((a, b) =>
+          String(
+            b.createdAt
+          ).localeCompare(
             String(
-              b.createdAt
-            ).localeCompare(
-              String(
-                a.createdAt
-              )
+              a.createdAt
             )
+          )
         )
         .slice(0, 300);
 
     res.json({
       ok: true,
-      events:
-        list,
+      events: list,
     });
   }
 );
@@ -5977,582 +5929,716 @@ app.get(
   (req, res) => {
     res.type("html").send(`
 <!doctype html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MAMAKI AI Admin</title>
 <style>
+*{box-sizing:border-box}
 body{
-font-family:Inter,Arial,sans-serif;
-background:#08090d;
-color:#f7f7fb;
-margin:0;
-padding:24px
+  margin:0;
+  background:#08080c;
+  color:#fff;
+  font-family:Arial,Helvetica,sans-serif;
 }
 main{
-max-width:1250px;
-margin:auto
+  width:min(1200px,94%);
+  margin:30px auto;
 }
-.top{
-display:flex;
-justify-content:space-between;
-align-items:center;
-gap:12px
+h1,h2,h3{margin-top:0}
+.card{
+  background:#15151d;
+  border:1px solid #292936;
+  border-radius:16px;
+  padding:20px;
+  margin:14px 0;
 }
 .grid{
-display:grid;
-grid-template-columns:
-repeat(auto-fit,minmax(170px,1fr));
-gap:12px
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+  gap:12px;
 }
-.card{
-background:#151821;
-border:1px solid #252a37;
-border-radius:16px;
-padding:18px;
-margin:12px 0
+.stat{
+  background:#1b1b25;
+  border-radius:14px;
+  padding:18px;
 }
-.stat b{
-font-size:28px;
-display:block;
-margin-top:8px
+.stat small{
+  color:#aaa;
 }
-input,select,button{
-padding:12px;
-border-radius:10px;
-border:1px solid #303746;
-background:#0e1118;
-color:#fff;
-margin:4px
+.stat strong{
+  display:block;
+  font-size:28px;
+  margin-top:8px;
+}
+input,select,button,textarea{
+  width:100%;
+  padding:12px;
+  margin:6px 0;
+  border-radius:10px;
+  border:1px solid #333342;
+  background:#0f0f15;
+  color:#fff;
 }
 button{
-cursor:pointer
+  cursor:pointer;
+  background:#fff;
+  color:#08080c;
+  font-weight:700;
 }
-pre{
-white-space:pre-wrap;
-overflow:auto;
-max-height:420px;
-font-size:12px
+button.secondary{
+  background:#252531;
+  color:#fff;
+}
+button.danger{
+  background:#8d2222;
+  color:#fff;
 }
 .hidden{
-display:none
-}
-.login{
-max-width:460px;
-margin:8vh auto
+  display:none!important;
 }
 .muted{
-color:#aab0bf
+  color:#aaa;
+}
+.ok{
+  color:#69e69a;
+}
+.bad{
+  color:#ff7777;
+}
+pre{
+  white-space:pre-wrap;
+  overflow:auto;
+  max-height:420px;
+  background:#0b0b10;
+  padding:14px;
+  border-radius:10px;
+}
+.tableWrap{
+  overflow:auto;
+}
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+th,td{
+  padding:10px;
+  border-bottom:1px solid #292936;
+  text-align:left;
+  white-space:nowrap;
+}
+.badge{
+  display:inline-block;
+  padding:4px 8px;
+  border-radius:999px;
+  background:#292936;
+  font-size:12px;
+}
+header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+}
+.actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.actions button{
+  width:auto;
+}
+.financeGrid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:12px;
+}
+#message{
+  min-height:22px;
 }
 </style>
 </head>
 
 <body>
-
 <main>
 
-<div class="top">
-<div>
-<h1>✨ MAMAKI AI</h1>
-<p class="muted">
-Administrator Control Center · Private
-</p>
-</div>
+<header>
+  <div>
+    <h1>✨ MAMAKI AI</h1>
+    <div class="muted">
+      Administrator Control Center · Private
+    </div>
+  </div>
+  <div class="actions">
+    <button id="refreshBtn" class="secondary hidden" onclick="loadAll()">Refresh</button>
+    <button id="logoutBtn" class="danger hidden" onclick="logout()">Logout</button>
+  </div>
+</header>
 
-<button
-id="logout"
-class="hidden"
-onclick="logout()"
->
-Logout
-</button>
-</div>
-
-<section
-id="login"
-class="card login"
->
-
-<h2>Administrator Login</h2>
-
-<input
-id="email"
-type="email"
-placeholder="Administrator email"
->
-
-<input
-id="password"
-type="password"
-placeholder="Password"
->
-
-<button onclick="login()">
-Sign in
-</button>
-
-<p id="msg"></p>
-
+<section class="card" id="loginCard">
+  <h2>Administrator Login</h2>
+  <input id="email" type="email" placeholder="Administrator email" autocomplete="username">
+  <input id="password" type="password" placeholder="Password" autocomplete="current-password">
+  <button onclick="login()">Sign in</button>
+  <p id="message" class="muted"></p>
 </section>
 
-<div
-id="panel"
-class="hidden"
->
+<section id="dashboard" class="hidden">
 
 <div class="grid">
+  <div class="stat">
+    <small>Users</small>
+    <strong id="users">0</strong>
+  </div>
 
-<div class="card stat">
-Users
-<b id="users">0</b>
-</div>
+  <div class="stat">
+    <small>Active 15m</small>
+    <strong id="active">0</strong>
+  </div>
 
-<div class="card stat">
-Active 15m
-<b id="active">0</b>
-</div>
+  <div class="stat">
+    <small>New Today</small>
+    <strong id="newToday">0</strong>
+  </div>
 
-<div class="card stat">
-New Today
-<b id="today">0</b>
-</div>
+  <div class="stat">
+    <small>Videos Generated</small>
+    <strong id="videos">0</strong>
+  </div>
 
-<div class="card stat">
-Videos Generated
-<b id="gens">0</b>
-</div>
+  <div class="stat">
+    <small>Narrations</small>
+    <strong id="narrations">0</strong>
+  </div>
 
-<div class="card stat">
-Narrations
-<b id="narr">0</b>
-</div>
+  <div class="stat">
+    <small>Projects</small>
+    <strong id="projects">0</strong>
+  </div>
 
-<div class="card stat">
-Projects
-<b id="projects">0</b>
-</div>
+  <div class="stat">
+    <small>Credits Remaining</small>
+    <strong id="credits">0</strong>
+  </div>
 
-<div class="card stat">
-Credits Remaining
-<b id="credits">0</b>
-</div>
-
-<div class="card stat">
-Profit (NGN)
-<b id="profit">0</b>
-</div>
-
+  <div class="stat">
+    <small>Profit NGN</small>
+    <strong id="profit">₦0</strong>
+  </div>
 </div>
 
 <section class="card">
-
 <h2>Business & Finance</h2>
 
-<div class="grid">
+<div class="financeGrid">
+  <div class="stat">
+    <small>Gross Revenue</small>
+    <strong id="grossRevenue">₦0</strong>
+  </div>
 
-<div>
-Gross Revenue
-<h3 id="revenue">
-₦0
-</h3>
-</div>
+  <div class="stat">
+    <small>Refunds</small>
+    <strong id="refunds">₦0</strong>
+  </div>
 
-<div>
-Refunds
-<h3 id="refunds">
-₦0
-</h3>
-</div>
+  <div class="stat">
+    <small>Net Revenue</small>
+    <strong id="netRevenue">₦0</strong>
+  </div>
 
-<div>
-Costs
-<h3 id="costs">
-₦0
-</h3>
-</div>
+  <div class="stat">
+    <small>Total Costs</small>
+    <strong id="costs">₦0</strong>
+  </div>
 
-<div>
-Profit Margin
-<h3 id="margin">
-0%
-</h3>
-</div>
-
+  <div class="stat">
+    <small>Profit Margin</small>
+    <strong id="margin">0%</strong>
+  </div>
 </div>
 
 <p class="muted">
 Financial figures remain zero until real transactions are recorded.
 </p>
-
 </section>
 
 <section class="card">
-
-<h2>
-AI Provider & System Health
-</h2>
-
-<pre id="health"></pre>
-
+<h2>AI Provider & System Health</h2>
+<pre id="provider">Loading...</pre>
 </section>
 
 <section class="card">
-
-<h2>Users</h2>
-
-<pre id="userList"></pre>
-
-</section>
-
-<section class="card">
-
-<h2>Jobs</h2>
-
-<pre id="jobList"></pre>
-
-</section>
-
-<section class="card">
-
-<h2>Security Activity</h2>
-
-<pre id="securityList"></pre>
-
-</section>
-
-<section class="card">
-
-<h2>Errors</h2>
-
-<pre id="errorList"></pre>
-
-</section>
-
+<h2>👥 Users</h2>
+<div class="tableWrap">
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Email</th>
+<th>Role</th>
+<th>Status</th>
+<th>Credits</th>
+<th>AI Generations</th>
+<th>Last Active</th>
+</tr>
+</thead>
+<tbody id="userRows"></tbody>
+</table>
 </div>
+</section>
 
-</main>
+<section class="card">
+<h2>🎬 Jobs</h2>
+<pre id="jobList">Loading...</pre>
+</section>
+
+<section class="card">
+<h2>🔐 Security Activity</h2>
+<pre id="securityList">Loading...</pre>
+</section>
+
+<section class="card">
+<h2>🚨 Errors</h2>
+<pre id="errorList">Loading...</pre>
+</section>
+
+<section class="card">
+<h2>💳 Credit Management</h2>
+
+<input id="creditUserId" placeholder="User ID">
+<input id="creditAmount" type="number" placeholder="Credit amount">
+
+<select id="creditBucket">
+<option value="promotionalCredits">Promotional credits</option>
+<option value="freeCredits">Free credits</option>
+<option value="paidCredits">Paid credits</option>
+</select>
+
+<input id="creditReason" placeholder="Reason">
+
+<button onclick="adjustCredits()">Adjust user credits</button>
+
+<p id="creditMessage" class="muted"></p>
+</section>
+
+<section class="card">
+<h2>💰 Add Finance Transaction</h2>
+
+<select id="financeType">
+<option value="revenue">Revenue</option>
+<option value="refund">Refund</option>
+<option value="cost">Cost</option>
+</select>
+
+<input id="financeAmount" type="number" min="0" placeholder="Amount in NGN">
+<input id="financeCategory" placeholder="Category">
+<input id="financeDescription" placeholder="Description">
+<input id="financeUserId" placeholder="Optional user ID">
+
+<button onclick="addFinance()">Record transaction</button>
+
+<p id="financeMessage" class="muted"></p>
+</section>
+
+</section>
 
 <script>
+let token = localStorage.getItem("mamaki_admin_token") || "";
 
-let token =
-localStorage.getItem(
-"mamaki_admin_token"
-) || "";
+const $ = (id) => document.getElementById(id);
 
-const $ =
-id =>
-document.getElementById(id);
-
-const headers =
-() => ({
-Authorization:
-"Bearer " + token
-});
-
-async function api(
-url,
-opt = {}
-){
-
-const r =
-await fetch(
-url,
-{
-...opt,
-headers:{
-...headers(),
-...(opt.headers || {})
+function setMessage(text, good) {
+  $("message").textContent = text || "";
+  $("message").className = good ? "ok" : "bad";
 }
+
+function authHeaders() {
+  return {
+    Authorization: "Bearer " + token
+  };
 }
+
+async function parseResponse(response) {
+  const text = await response.text();
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {
+      ok:false,
+      error:"INVALID_SERVER_RESPONSE",
+      message:text || "Invalid server response."
+    };
+  }
+}
+
+async function login() {
+  const emailValue = $("email").value.trim();
+  const passwordValue = $("password").value;
+
+  if (!emailValue || !passwordValue) {
+    setMessage("Enter the administrator email and password.", false);
+    return;
+  }
+
+  $("message").textContent = "Signing in...";
+  $("message").className = "muted";
+
+  try {
+    const response = await fetch("/api/admin/login", {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json"
+      },
+      body:JSON.stringify({
+        email:emailValue,
+        password:passwordValue
+      })
+    });
+
+    const data = await parseResponse(response);
+
+    if (!response.ok || !data.ok) {
+      setMessage(
+        data.message || "Administrator login failed.",
+        false
+      );
+      return;
+    }
+
+    token = data.token;
+
+    localStorage.setItem(
+      "mamaki_admin_token",
+      token
+    );
+
+    setMessage(
+      "Administrator login successful.",
+      true
+    );
+
+    showDashboard();
+
+    await loadAll();
+  } catch (error) {
+    setMessage(
+      "Unable to contact the MAMAKI server.",
+      false
+    );
+  }
+}
+
+function showDashboard() {
+  $("loginCard").classList.add("hidden");
+  $("dashboard").classList.remove("hidden");
+  $("refreshBtn").classList.remove("hidden");
+  $("logoutBtn").classList.remove("hidden");
+}
+
+function showLogin() {
+  $("loginCard").classList.remove("hidden");
+  $("dashboard").classList.add("hidden");
+  $("refreshBtn").classList.add("hidden");
+  $("logoutBtn").classList.add("hidden");
+}
+
+async function api(path, options) {
+  const response = await fetch(
+    path,
+    Object.assign(
+      {
+        headers:authHeaders()
+      },
+      options || {}
+    )
+  );
+
+  const data = await parseResponse(response);
+
+  if (response.status === 401 || response.status === 403) {
+    token = "";
+    localStorage.removeItem("mamaki_admin_token");
+    showLogin();
+  }
+
+  return data;
+}
+
+function money(value) {
+  const n = Number(value || 0);
+
+  return "₦" + n.toLocaleString(
+    "en-NG",
+    {
+      maximumFractionDigits:2
+    }
+  );
+}
+
+function number(value) {
+  return Number(value || 0).toLocaleString(
+    "en-NG"
+  );
+}
+
+async function loadAll() {
+  if (!token) {
+    showLogin();
+    return;
+  }
+
+  try {
+    const analytics = await api(
+      "/api/admin/analytics"
+    );
+
+    if (!analytics.ok) {
+      setMessage(
+        analytics.message || "Admin session invalid.",
+        false
+      );
+      return;
+    }
+
+    const a = analytics.analytics || {};
+    const c = a.credits || {};
+    const f = a.finance || {};
+
+    $("users").textContent = number(a.users);
+    $("active").textContent = number(a.activeUsers);
+    $("newToday").textContent = number(a.newUsersToday);
+    $("videos").textContent = number(a.aiGenerations);
+    $("narrations").textContent = number(a.narrationJobs);
+    $("projects").textContent = number(a.projects);
+    $("credits").textContent = number(c.remaining);
+    $("profit").textContent = money(f.profit);
+
+    $("grossRevenue").textContent = money(f.grossRevenue);
+    $("refunds").textContent = money(f.refunds);
+    $("netRevenue").textContent = money(f.netRevenue);
+    $("costs").textContent = money(f.totalCosts);
+    $("margin").textContent =
+      Number(f.profitMargin || 0).toFixed(2) + "%";
+
+    $("provider").textContent =
+      JSON.stringify(
+        {
+          provider:a.provider,
+          system:a.system
+        },
+        null,
+        2
+      );
+
+    const results = await Promise.all([
+      api("/api/admin/users"),
+      api("/api/admin/jobs"),
+      api("/api/admin/errors"),
+      api("/api/admin/security")
+    ]);
+
+    const usersData = results[0];
+    const jobsData = results[1];
+    const errorsData = results[2];
+    const securityData = results[3];
+
+    const rows = $("userRows");
+    rows.innerHTML = "";
+
+    for (const user of (usersData.users || [])) {
+      const tr = document.createElement("tr");
+
+      const usage = user.usage || {};
+
+      tr.innerHTML =
+        "<td>" + escapeHtml(user.name || "") + "</td>" +
+        "<td>" + escapeHtml(user.email || "") + "</td>" +
+        "<td><span class='badge'>" + escapeHtml(user.role || "user") + "</span></td>" +
+        "<td>" + (user.disabled ? "Disabled" : "Active") + "</td>" +
+        "<td>" + number(user.credits) + "</td>" +
+        "<td>" + number(usage.aiGenerations) + "</td>" +
+        "<td>" + escapeHtml(user.lastActiveAt || "Never") + "</td>";
+
+      rows.appendChild(tr);
+    }
+
+    $("jobList").textContent =
+      JSON.stringify(
+        jobsData.jobs || [],
+        null,
+        2
+      );
+
+    $("errorList").textContent =
+      JSON.stringify(
+        errorsData.errors || [],
+        null,
+        2
+      );
+
+    $("securityList").textContent =
+      JSON.stringify(
+        securityData.events || [],
+        null,
+        2
+      );
+
+  } catch (error) {
+    setMessage(
+      "Unable to load administrator data.",
+      false
+    );
+  }
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#039;");
+}
+
+async function adjustCredits() {
+  const userId = $("creditUserId").value.trim();
+  const amount = Number($("creditAmount").value);
+  const bucket = $("creditBucket").value;
+  const reason = $("creditReason").value.trim();
+
+  if (!userId || !Number.isFinite(amount) || amount === 0) {
+    $("creditMessage").textContent =
+      "Enter a valid user ID and non-zero amount.";
+    return;
+  }
+
+  try {
+    const data = await api(
+      "/api/admin/users/" +
+        encodeURIComponent(userId) +
+        "/credits",
+      {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          ...authHeaders()
+        },
+        body:JSON.stringify({
+          amount,
+          bucket,
+          reason
+        })
+      }
+    );
+
+    $("creditMessage").textContent =
+      data.ok
+        ? "Credits updated successfully."
+        : (data.message || "Credit adjustment failed.");
+
+    if (data.ok) {
+      await loadAll();
+    }
+  } catch {
+    $("creditMessage").textContent =
+      "Unable to update credits.";
+  }
+}
+
+async function addFinance() {
+  const type = $("financeType").value;
+  const amount = Number($("financeAmount").value);
+  const category = $("financeCategory").value.trim();
+  const description = $("financeDescription").value.trim();
+  const userId = $("financeUserId").value.trim();
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    $("financeMessage").textContent =
+      "Enter a valid positive amount.";
+    return;
+  }
+
+  try {
+    const data = await api(
+      "/api/admin/finance",
+      {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          ...authHeaders()
+        },
+        body:JSON.stringify({
+          type,
+          amount,
+          category,
+          description,
+          userId:userId || null
+        })
+      }
+    );
+
+    $("financeMessage").textContent =
+      data.ok
+        ? "Finance transaction recorded."
+        : (data.message || "Finance transaction failed.");
+
+    if (data.ok) {
+      $("financeAmount").value = "";
+      $("financeCategory").value = "";
+      $("financeDescription").value = "";
+      $("financeUserId").value = "";
+      await loadAll();
+    }
+  } catch {
+    $("financeMessage").textContent =
+      "Unable to record finance transaction.";
+  }
+}
+
+async function logout() {
+  try {
+    await fetch(
+      "/api/auth/logout",
+      {
+        method:"POST",
+        headers:authHeaders()
+      }
+    );
+  } catch {}
+
+  token = "";
+
+  localStorage.removeItem(
+    "mamaki_admin_token"
+  );
+
+  showLogin();
+
+  setMessage(
+    "Administrator logged out.",
+    true
+  );
+}
+
+$("password").addEventListener(
+  "keydown",
+  function(event) {
+    if (event.key === "Enter") {
+      login();
+    }
+  }
 );
 
-let d = {};
-
-try{
-d = await r.json();
-}catch{}
-
-if(
-r.status === 401 ||
-r.status === 403
-){
-
-token = "";
-
-localStorage.removeItem(
-"mamaki_admin_token"
-);
-
-showLogin();
-
+if (token) {
+  showDashboard();
+  loadAll();
 }
-
-return d;
-
-}
-
-function showLogin(){
-
-$("login")
-.classList
-.remove("hidden");
-
-$("panel")
-.classList
-.add("hidden");
-
-$("logout")
-.classList
-.add("hidden");
-
-}
-
-function showPanel(){
-
-$("login")
-.classList
-.add("hidden");
-
-$("panel")
-.classList
-.remove("hidden");
-
-$("logout")
-.classList
-.remove("hidden");
-
-}
-
-async function login(){
-
-const r =
-await fetch(
-"/api/admin/login",
-{
-method:"POST",
-headers:{
-"Content-Type":
-"application/json"
-},
-body:
-JSON.stringify({
-email:
-$("email").value,
-password:
-$("password").value
-})
-}
-);
-
-const d =
-await r.json();
-
-if(d.ok){
-
-token =
-d.token;
-
-localStorage.setItem(
-"mamaki_admin_token",
-token
-);
-
-$("msg").textContent =
-"Administrator login successful";
-
-showPanel();
-
-load();
-
-}else{
-
-$("msg").textContent =
-d.message ||
-"Invalid administrator credentials";
-
-}
-
-}
-
-async function logout(){
-
-if(token){
-
-await fetch(
-"/api/auth/logout",
-{
-method:"POST",
-headers:
-headers()
-}
-);
-
-}
-
-token = "";
-
-localStorage.removeItem(
-"mamaki_admin_token"
-);
-
-showLogin();
-
-}
-
-async function load(){
-
-if(!token)
-return;
-
-const a =
-await api(
-"/api/admin/analytics"
-);
-
-if(!a.ok)
-return;
-
-const x =
-a.analytics;
-
-$("users").textContent =
-x.users;
-
-$("active").textContent =
-x.activeUsers;
-
-$("today").textContent =
-x.newUsersToday;
-
-$("gens").textContent =
-x.aiGenerations;
-
-$("narr").textContent =
-x.narrationJobs;
-
-$("projects").textContent =
-x.projects;
-
-$("credits").textContent =
-x.credits.remaining;
-
-$("profit").textContent =
-"₦" +
-Number(
-x.finance.profit
-).toLocaleString();
-
-$("revenue").textContent =
-"₦" +
-Number(
-x.finance.grossRevenue
-).toLocaleString();
-
-$("refunds").textContent =
-"₦" +
-Number(
-x.finance.refunds
-).toLocaleString();
-
-$("costs").textContent =
-"₦" +
-Number(
-x.finance.totalCosts
-).toLocaleString();
-
-$("margin").textContent =
-Number(
-x.finance.profitMargin
-).toFixed(1) +
-"%";
-
-$("health").textContent =
-JSON.stringify(
-x.provider,
-null,
-2
-) +
-"\\n\\n" +
-JSON.stringify(
-x.system,
-null,
-2
-);
-
-const [
-u,
-j,
-s,
-e
-] =
-await Promise.all([
-api(
-"/api/admin/users"
-),
-api(
-"/api/admin/jobs"
-),
-api(
-"/api/admin/security"
-),
-api(
-"/api/admin/errors"
-)
-]);
-
-$("userList").textContent =
-JSON.stringify(
-u.users || [],
-null,
-2
-);
-
-$("jobList").textContent =
-JSON.stringify(
-j.jobs || [],
-null,
-2
-);
-
-$("securityList").textContent =
-JSON.stringify(
-s.events || [],
-null,
-2
-);
-
-$("errorList").textContent =
-JSON.stringify(
-e.errors || [],
-null,
-2
-);
-
-}
-
-if(token){
-
-showPanel();
-
-load();
-
-}else{
-
-showLogin();
-
-}
-
-setInterval(
-() => {
-if(token)
-load();
-},
-30000
-);
-
 </script>
 
+</main>
 </body>
 </html>
 `);
@@ -6568,15 +6654,38 @@ app.get(
   (req, res) => {
     res.type("html").send(`
 <!doctype html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MAMAKI AI Account</title>
+<style>
+body{
+  margin:0;
+  background:#08080c;
+  color:#fff;
+  font-family:Arial,sans-serif;
+}
+main{
+  width:min(900px,92%);
+  margin:40px auto;
+}
+.card{
+  background:#15151d;
+  border:1px solid #292936;
+  border-radius:16px;
+  padding:24px;
+}
+</style>
 </head>
 <body>
+<main>
+<div class="card">
 <h1>✨ MAMAKI AI</h1>
-<p>Personal Account</p>
+<h2>Personal Account</h2>
+<p>Your MAMAKI account dashboard is available from the main application.</p>
+</div>
+</main>
 </body>
 </html>
 `);
@@ -6636,9 +6745,7 @@ app.use(
       }
     );
 
-    if (
-      res.headersSent
-    ) {
+    if (res.headersSent) {
       return next(error);
     }
 
@@ -6661,12 +6768,10 @@ setInterval(
     const now =
       Date.now();
 
-    for (
-      const [
-        id,
-        job,
-      ] of jobs.entries()
-    ) {
+    for (const [
+      id,
+      job,
+    ] of jobs.entries()) {
       const finished =
         job.status ===
           "completed" ||
@@ -6686,13 +6791,9 @@ setInterval(
           time
         ) &&
         now - time >
-          60 *
-            60 *
-            1000
+          60 * 60 * 1000
       ) {
-        jobs.delete(
-          id
-        );
+        jobs.delete(id);
       }
     }
   },
