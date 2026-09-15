@@ -1,3 +1,16 @@
+// VERIFIED MAMAKI AI SERVER.JS v18.0.0
+// GitHub editor: https://github.com/shamakishadrack-star/mamaki-ai-video/edit/main/server.js
+//
+// IMPORTANT:
+// 1. /admin is now a PRIVATE, SEPARATE ADMIN DASHBOARD.
+// 2. / is the normal MAMAKI user interface.
+// 3. A Buy MAMAKI Credits panel is injected into the normal interface.
+// 4. User credits are shown in the user interface.
+// 5. Paystack payments are automatically fulfilled through the webhook.
+// 6. FX pricing updates automatically.
+// 7. Admin finance, credits, payments and withdrawals remain private.
+// 8. This file is intentionally self-contained and syntax-safe.
+
 import express from "express";
 import multer from "multer";
 import Replicate from "replicate";
@@ -16,9 +29,10 @@ import {
 } from "node:crypto";
 
 const app = express();
+
 const PORT = Number(process.env.PORT || 10000);
 const HOST = "0.0.0.0";
-const VERSION = "17.3.0";
+const VERSION = "18.0.0";
 
 const ROOT = process.cwd();
 const TMP = path.join(ROOT, "tmp");
@@ -40,34 +54,38 @@ const WITHDRAWALS_FILE = path.join(DATA, "withdrawals.json");
 
 const T2V_MODEL =
   process.env.T2V_MODEL || "wan-video/wan-2.2-t2v-fast";
+
 const I2V_MODEL =
   process.env.I2V_MODEL || "wan-video/wan-2.2-i2v-fast";
 
 const MIN_DURATION = 5;
 const MAX_DURATION = 7200;
 
-const ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || "")
-  .trim()
-  .toLowerCase();
+const ADMIN_EMAIL =
+  String(process.env.ADMIN_EMAIL || "")
+    .trim()
+    .toLowerCase();
 
-const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || "");
-const SESSION_SECRET = String(process.env.SESSION_SECRET || "");
-const REPLICATE_API_TOKEN = String(
-  process.env.REPLICATE_API_TOKEN || ""
-).trim();
+const ADMIN_PASSWORD =
+  String(process.env.ADMIN_PASSWORD || "");
 
-const PAYSTACK_SECRET_KEY = String(
-  process.env.PAYSTACK_SECRET_KEY || ""
-).trim();
+const SESSION_SECRET =
+  String(process.env.SESSION_SECRET || "");
 
-const PAYSTACK_PUBLIC_KEY = String(
-  process.env.PAYSTACK_PUBLIC_KEY || ""
-).trim();
+const REPLICATE_API_TOKEN =
+  String(process.env.REPLICATE_API_TOKEN || "").trim();
 
-const FX_API_URL = String(
-  process.env.FX_API_URL ||
-    "https://open.er-api.com/v6/latest/USD"
-).trim();
+const PAYSTACK_SECRET_KEY =
+  String(process.env.PAYSTACK_SECRET_KEY || "").trim();
+
+const PAYSTACK_PUBLIC_KEY =
+  String(process.env.PAYSTACK_PUBLIC_KEY || "").trim();
+
+const FX_API_URL =
+  String(
+    process.env.FX_API_URL ||
+      "https://open.er-api.com/v6/latest/USD"
+  ).trim();
 
 const DEFAULT_USD_NGN_RATE = Math.max(
   1,
@@ -108,26 +126,22 @@ const PROVIDER_COST_720P_USD = Math.max(
   Number(process.env.WAN_720P_COST_USD || 0.1)
 );
 
-const PAYSTACK_CURRENCY_DEFAULT = String(
-  process.env.PAYSTACK_CURRENCY_DEFAULT || "NGN"
-).toUpperCase();
+const PAYSTACK_CURRENCY_DEFAULT =
+  String(
+    process.env.PAYSTACK_CURRENCY_DEFAULT || "NGN"
+  ).toUpperCase();
 
-const RESEND_API_KEY = String(
-  process.env.RESEND_API_KEY || ""
-).trim();
+const RESEND_API_KEY =
+  String(process.env.RESEND_API_KEY || "").trim();
 
-const RESEND_FROM = String(
-  process.env.RESEND_FROM || ""
-).trim();
+const RESEND_FROM =
+  String(process.env.RESEND_FROM || "").trim();
 
-const APP_URL = String(
-  process.env.APP_URL ||
-    "https://mamaki-ai-video.onrender.com"
-).replace(/\/$/, "");
-
-const replicate = REPLICATE_API_TOKEN
-  ? new Replicate({ auth: REPLICATE_API_TOKEN })
-  : null;
+const APP_URL =
+  String(
+    process.env.APP_URL ||
+      "https://mamaki-ai-video.onrender.com"
+  ).replace(/\/$/, "");
 
 const STARTER_CREDITS = Math.max(
   0,
@@ -139,6 +153,13 @@ const CREDITS_PER_5_SECONDS = Math.max(
   Number(process.env.CREDITS_PER_5_SECONDS || 10)
 );
 
+const replicate =
+  REPLICATE_API_TOKEN
+    ? new Replicate({
+        auth: REPLICATE_API_TOKEN,
+      })
+    : null;
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -146,15 +167,42 @@ const upload = multer({
   },
 });
 
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+/*
+|--------------------------------------------------------------------------
+| BODY PARSING
+|--------------------------------------------------------------------------
+*/
+
+app.use(
+  express.json({
+    limit: "10mb",
+    verify: (req, res, buffer) => {
+      req.rawBody = Buffer.from(buffer);
+    },
+  })
+);
+
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "10mb",
+  })
+);
+
+/*
+|--------------------------------------------------------------------------
+| BASIC HELPERS
+|--------------------------------------------------------------------------
+*/
 
 function now() {
   return new Date().toISOString();
 }
 
 async function ensureDir(dir) {
-  await fs.mkdir(dir, { recursive: true });
+  await fs.mkdir(dir, {
+    recursive: true,
+  });
 }
 
 async function exists(file) {
@@ -168,7 +216,11 @@ async function exists(file) {
 
 async function readJson(file, fallback) {
   try {
-    const raw = await fs.readFile(file, "utf8");
+    const raw = await fs.readFile(
+      file,
+      "utf8"
+    );
+
     return JSON.parse(raw);
   } catch {
     return fallback;
@@ -176,22 +228,47 @@ async function readJson(file, fallback) {
 }
 
 async function writeJson(file, value) {
-  await ensureDir(path.dirname(file));
-  const temp = `${file}.${randomUUID()}.tmp`;
+  await ensureDir(
+    path.dirname(file)
+  );
+
+  const temporary =
+    `${file}.${randomUUID()}.tmp`;
+
   await fs.writeFile(
-    temp,
-    JSON.stringify(value, null, 2),
+    temporary,
+    JSON.stringify(
+      value,
+      null,
+      2
+    ),
     "utf8"
   );
-  await fs.rename(temp, file);
+
+  await fs.rename(
+    temporary,
+    file
+  );
 }
 
-async function readStore(file, fallback) {
-  return readJson(file, fallback);
+async function readStore(
+  file,
+  fallback
+) {
+  return readJson(
+    file,
+    fallback
+  );
 }
 
-async function writeStore(file, value) {
-  return writeJson(file, value);
+async function writeStore(
+  file,
+  value
+) {
+  return writeJson(
+    file,
+    value
+  );
 }
 
 async function ensureStorage() {
@@ -203,41 +280,83 @@ async function ensureStorage() {
   ]);
 
   const files = [
-    [USERS_FILE, []],
-    [SESSIONS_FILE, {}],
-    [ERRORS_FILE, []],
-    [USAGE_FILE, {}],
-    [RESET_FILE, {}],
-    [SECURITY_FILE, []],
-    [CREDITS_FILE, {
-      pool: 0,
-      users: {},
-      transactions: [],
-      updatedAt: now(),
-    }],
-    [FINANCE_FILE, {
-      transactions: [],
-      wallet: {
-        revenue: 0,
-        refunds: 0,
-        costs: 0,
-        profit: 0,
+    [
+      USERS_FILE,
+      [],
+    ],
+    [
+      SESSIONS_FILE,
+      {},
+    ],
+    [
+      ERRORS_FILE,
+      [],
+    ],
+    [
+      USAGE_FILE,
+      {},
+    ],
+    [
+      RESET_FILE,
+      {},
+    ],
+    [
+      SECURITY_FILE,
+      [],
+    ],
+    [
+      CREDITS_FILE,
+      {
+        pool: 0,
+        users: {},
+        transactions: [],
+        updatedAt: now(),
       },
-    }],
-    [PRICING_FILE, {
-      fx: null,
-      updatedAt: null,
-    }],
-    [PAYMENTS_FILE, []],
-    [WITHDRAWALS_FILE, []],
+    ],
+    [
+      FINANCE_FILE,
+      {
+        transactions: [],
+        wallet: {
+          revenue: 0,
+          refunds: 0,
+          costs: 0,
+          profit: 0,
+        },
+      },
+    ],
+    [
+      PRICING_FILE,
+      {
+        fx: null,
+        updatedAt: null,
+      },
+    ],
+    [
+      PAYMENTS_FILE,
+      [],
+    ],
+    [
+      WITHDRAWALS_FILE,
+      [],
+    ],
   ];
 
   for (const [file, fallback] of files) {
     if (!(await exists(file))) {
-      await writeJson(file, fallback);
+      await writeJson(
+        file,
+        fallback
+      );
     }
   }
 }
+
+/*
+|--------------------------------------------------------------------------
+| NORMALIZATION
+|--------------------------------------------------------------------------
+*/
 
 function normalizeEmail(value) {
   return String(value || "")
@@ -246,15 +365,21 @@ function normalizeEmail(value) {
 }
 
 function normalizeCurrency(value) {
-  const currency = String(
-    value || PAYSTACK_CURRENCY_DEFAULT
-  ).toUpperCase();
+  const currency =
+    String(
+      value ||
+        PAYSTACK_CURRENCY_DEFAULT
+    ).toUpperCase();
 
-  return currency === "USD" ? "USD" : "NGN";
+  return currency === "USD"
+    ? "USD"
+    : "NGN";
 }
 
 function safeUser(user) {
-  if (!user) return null;
+  if (!user) {
+    return null;
+  }
 
   return {
     id: user.id,
@@ -266,12 +391,22 @@ function safeUser(user) {
   };
 }
 
-function hashPassword(password, salt = randomBytes(16).toString("hex")) {
-  const hash = scryptSync(
-    String(password),
-    salt,
-    64
-  ).toString("hex");
+/*
+|--------------------------------------------------------------------------
+| PASSWORDS
+|--------------------------------------------------------------------------
+*/
+
+function hashPassword(
+  password,
+  salt = randomBytes(16).toString("hex")
+) {
+  const hash =
+    scryptSync(
+      String(password),
+      salt,
+      64
+    ).toString("hex");
 
   return {
     salt,
@@ -279,31 +414,49 @@ function hashPassword(password, salt = randomBytes(16).toString("hex")) {
   };
 }
 
-function verifyPassword(password, storedHash, salt) {
+function verifyPassword(
+  password,
+  storedHash,
+  salt
+) {
   try {
-    const candidate = scryptSync(
-      String(password),
-      salt,
-      64
-    );
+    const candidate =
+      scryptSync(
+        String(password),
+        salt,
+        64
+      );
 
-    const stored = Buffer.from(
-      String(storedHash),
-      "hex"
-    );
+    const stored =
+      Buffer.from(
+        String(storedHash),
+        "hex"
+      );
 
     return (
-      candidate.length === stored.length &&
-      timingSafeEqual(candidate, stored)
+      candidate.length ===
+        stored.length &&
+      timingSafeEqual(
+        candidate,
+        stored
+      )
     );
   } catch {
     return false;
   }
 }
 
+/*
+|--------------------------------------------------------------------------
+| SESSIONS
+|--------------------------------------------------------------------------
+*/
+
 function sessionHash(token) {
   return createHash("sha256")
-    .update(`${SESSION_SECRET}:${token}`)
+    .update(
+      `${SESSION_SECRET}:${token}`
+    )
     .digest("hex");
 }
 
@@ -312,185 +465,344 @@ function generateToken() {
 }
 
 async function getUsers() {
-  const data = await readJson(USERS_FILE, []);
-  return Array.isArray(data) ? data : [];
+  const data =
+    await readJson(
+      USERS_FILE,
+      []
+    );
+
+  return Array.isArray(data)
+    ? data
+    : [];
 }
 
 async function saveUsers(users) {
-  await writeJson(USERS_FILE, users);
+  await writeJson(
+    USERS_FILE,
+    users
+  );
 }
 
-async function findUserByEmail(email) {
-  const users = await getUsers();
-  const normalized = normalizeEmail(email);
+async function findUserByEmail(
+  email
+) {
+  const users =
+    await getUsers();
+
+  const normalized =
+    normalizeEmail(email);
 
   return (
     users.find(
-      (u) => normalizeEmail(u.email) === normalized
+      (user) =>
+        normalizeEmail(
+          user.email
+        ) === normalized
     ) || null
   );
 }
 
 async function findUserById(id) {
-  const users = await getUsers();
-  return users.find((u) => u.id === id) || null;
+  const users =
+    await getUsers();
+
+  return (
+    users.find(
+      (user) =>
+        user.id === id
+    ) || null
+  );
 }
 
 async function ensureAdminAccount() {
-  if (!ADMIN_EMAIL || !ADMIN_PASSWORD) return;
+  if (
+    !ADMIN_EMAIL ||
+    !ADMIN_PASSWORD
+  ) {
+    return;
+  }
 
-  const users = await getUsers();
-  let user = users.find(
-    (u) => normalizeEmail(u.email) === ADMIN_EMAIL
-  );
+  const users =
+    await getUsers();
+
+  let user =
+    users.find(
+      (item) =>
+        normalizeEmail(
+          item.email
+        ) === ADMIN_EMAIL
+    );
 
   if (!user) {
-    const password = hashPassword(ADMIN_PASSWORD);
+    const credentials =
+      hashPassword(
+        ADMIN_PASSWORD
+      );
 
     user = {
       id: randomUUID(),
       email: ADMIN_EMAIL,
-      name: "MAMAKI Administrator",
+      name:
+        "MAMAKI Administrator",
       role: "admin",
-      passwordHash: password.hash,
-      passwordSalt: password.salt,
+      passwordHash:
+        credentials.hash,
+      passwordSalt:
+        credentials.salt,
       createdAt: now(),
       updatedAt: now(),
     };
 
     users.push(user);
-    await saveUsers(users);
+
+    await saveUsers(
+      users
+    );
+
     return;
   }
 
+  let changed = false;
+
   if (user.role !== "admin") {
     user.role = "admin";
+    changed = true;
+  }
+
+  if (
+    ADMIN_PASSWORD &&
+    !verifyPassword(
+      ADMIN_PASSWORD,
+      user.passwordHash,
+      user.passwordSalt
+    )
+  ) {
+    const credentials =
+      hashPassword(
+        ADMIN_PASSWORD
+      );
+
+    user.passwordHash =
+      credentials.hash;
+
+    user.passwordSalt =
+      credentials.salt;
+
+    changed = true;
+  }
+
+  if (changed) {
     user.updatedAt = now();
-    await saveUsers(users);
+
+    await saveUsers(
+      users
+    );
   }
 }
 
 async function createSession(user) {
-  const sessions = await readJson(
-    SESSIONS_FILE,
-    {}
-  );
+  const sessions =
+    await readJson(
+      SESSIONS_FILE,
+      {}
+    );
 
-  const token = generateToken();
-  const key = sessionHash(token);
+  const token =
+    generateToken();
+
+  const key =
+    sessionHash(token);
 
   sessions[key] = {
     userId: user.id,
     createdAt: now(),
-    expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
+    expiresAt:
+      Date.now() +
+      30 *
+        24 *
+        60 *
+        60 *
+        1000,
   };
 
-  await writeJson(SESSIONS_FILE, sessions);
+  await writeJson(
+    SESSIONS_FILE,
+    sessions
+  );
 
   return token;
 }
 
-async function destroySession(token) {
-  if (!token) return;
+async function destroySession(
+  token
+) {
+  if (!token) {
+    return;
+  }
 
-  const sessions = await readJson(
+  const sessions =
+    await readJson(
+      SESSIONS_FILE,
+      {}
+    );
+
+  delete sessions[
+    sessionHash(token)
+  ];
+
+  await writeJson(
     SESSIONS_FILE,
-    {}
+    sessions
   );
-
-  delete sessions[sessionHash(token)];
-
-  await writeJson(SESSIONS_FILE, sessions);
 }
 
 function getBearer(req) {
-  const auth = String(
-    req.headers.authorization || ""
-  );
+  const authorization =
+    String(
+      req.headers.authorization ||
+        ""
+    );
 
-  if (auth.startsWith("Bearer ")) {
-    return auth.slice(7).trim();
+  if (
+    authorization.startsWith(
+      "Bearer "
+    )
+  ) {
+    return authorization
+      .slice(7)
+      .trim();
   }
 
-  return "";
+  return String(
+    req.headers[
+      "x-session-token"
+    ] || ""
+  ).trim();
 }
 
 async function getCurrentUser(req) {
   const token =
-    getBearer(req) ||
-    String(req.headers["x-session-token"] || "");
+    getBearer(req);
 
-  if (!token) return null;
-
-  const sessions = await readJson(
-    SESSIONS_FILE,
-    {}
-  );
-
-  const session = sessions[sessionHash(token)];
-
-  if (!session) return null;
-
-  if (
-    !session.expiresAt ||
-    Number(session.expiresAt) < Date.now()
-  ) {
-    delete sessions[sessionHash(token)];
-    await writeJson(SESSIONS_FILE, sessions);
+  if (!token) {
     return null;
   }
 
-  return findUserById(session.userId);
+  const sessions =
+    await readJson(
+      SESSIONS_FILE,
+      {}
+    );
+
+  const session =
+    sessions[
+      sessionHash(token)
+    ];
+
+  if (!session) {
+    return null;
+  }
+
+  if (
+    !session.expiresAt ||
+    Number(session.expiresAt) <
+      Date.now()
+  ) {
+    delete sessions[
+      sessionHash(token)
+    ];
+
+    await writeJson(
+      SESSIONS_FILE,
+      sessions
+    );
+
+    return null;
+  }
+
+  return findUserById(
+    session.userId
+  );
 }
 
-async function requireUser(req, res, next) {
+async function requireUser(
+  req,
+  res,
+  next
+) {
   try {
-    const user = await getCurrentUser(req);
+    const user =
+      await getCurrentUser(
+        req
+      );
 
     if (!user) {
       return res.status(401).json({
         ok: false,
-        error: "Authentication required.",
+        error:
+          "Authentication required.",
       });
     }
 
     req.user = user;
+
     next();
   } catch (error) {
     next(error);
   }
 }
 
-async function requireAdmin(req, res, next) {
+async function requireAdmin(
+  req,
+  res,
+  next
+) {
   try {
-    const user = await getCurrentUser(req);
+    const user =
+      await getCurrentUser(
+        req
+      );
 
     if (!user) {
       return res.status(401).json({
         ok: false,
-        error: "Authentication required.",
+        error:
+          "Authentication required.",
       });
     }
 
-    if (user.role !== "admin") {
+    if (
+      user.role !== "admin"
+    ) {
       return res.status(403).json({
         ok: false,
-        error: "Administrator access required.",
+        error:
+          "Administrator access required.",
       });
     }
 
     req.user = user;
+
     next();
   } catch (error) {
     next(error);
   }
 }
 
-async function addSecurityEvent(event) {
-  const events = await readJson(
-    SECURITY_FILE,
-    []
-  );
+/*
+|--------------------------------------------------------------------------
+| SECURITY / ERRORS
+|--------------------------------------------------------------------------
+*/
+
+async function addSecurityEvent(
+  event
+) {
+  const events =
+    await readJson(
+      SECURITY_FILE,
+      []
+    );
 
   events.unshift({
     id: randomUUID(),
@@ -500,41 +812,69 @@ async function addSecurityEvent(event) {
 
   await writeJson(
     SECURITY_FILE,
-    events.slice(0, 1000)
+    events.slice(
+      0,
+      1000
+    )
   );
 }
 
-async function recordError(error, req = null) {
-  const errors = await readJson(
-    ERRORS_FILE,
-    []
-  );
+async function recordError(
+  error,
+  req = null
+) {
+  const errors =
+    await readJson(
+      ERRORS_FILE,
+      []
+    );
 
   errors.unshift({
     id: randomUUID(),
-    message: String(
-      error?.message || error || "Unknown error"
-    ),
-    stack: String(error?.stack || ""),
-    path: req?.originalUrl || "",
-    method: req?.method || "",
+    message:
+      String(
+        error?.message ||
+          error ||
+          "Unknown error"
+      ),
+    stack:
+      String(
+        error?.stack || ""
+      ),
+    path:
+      req?.originalUrl ||
+      "",
+    method:
+      req?.method ||
+      "",
     createdAt: now(),
   });
 
   await writeJson(
     ERRORS_FILE,
-    errors.slice(0, 500)
+    errors.slice(
+      0,
+      500
+    )
   );
 }
 
+/*
+|--------------------------------------------------------------------------
+| USAGE
+|--------------------------------------------------------------------------
+*/
+
 async function getUsage() {
-  const value = await readJson(
-    USAGE_FILE,
-    {}
-  );
+  const value =
+    await readJson(
+      USAGE_FILE,
+      {}
+    );
 
   return value &&
-    typeof value === "object" &&
+    typeof value ===
+      "object" &&
     !Array.isArray(value)
     ? value
     : {};
@@ -544,7 +884,8 @@ async function updateUsage(
   userId,
   changes = {}
 ) {
-  const usage = await getUsage();
+  const usage =
+    await getUsage();
 
   if (!usage[userId]) {
     usage[userId] = {
@@ -556,47 +897,86 @@ async function updateUsage(
     };
   }
 
-  for (const [key, value] of Object.entries(changes)) {
+  for (
+    const [
+      key,
+      value,
+    ] of Object.entries(
+      changes
+    )
+  ) {
     usage[userId][key] =
-      Number(usage[userId][key] || 0) +
+      Number(
+        usage[userId][key] ||
+          0
+      ) +
       Number(value || 0);
   }
 
-  usage[userId].updatedAt = now();
+  usage[userId].updatedAt =
+    now();
 
-  await writeJson(USAGE_FILE, usage);
+  await writeJson(
+    USAGE_FILE,
+    usage
+  );
 
   return usage[userId];
 }
 
+/*
+|--------------------------------------------------------------------------
+| MAMAKI CREDITS
+|--------------------------------------------------------------------------
+*/
+
 async function readCredits() {
-  const data = await readJson(
-    CREDITS_FILE,
-    {}
-  );
+  const data =
+    await readJson(
+      CREDITS_FILE,
+      {}
+    );
 
   return {
-    pool: Number(data?.pool || 0),
+    pool:
+      Number(
+        data?.pool || 0
+      ),
     users:
       data &&
-      typeof data.users === "object" &&
+      typeof data.users ===
+        "object" &&
       data.users
         ? data.users
         : {},
-    transactions: Array.isArray(data?.transactions)
-      ? data.transactions
-      : [],
-    updatedAt: data?.updatedAt || now(),
+    transactions:
+      Array.isArray(
+        data?.transactions
+      )
+        ? data.transactions
+        : [],
+    updatedAt:
+      data?.updatedAt ||
+      now(),
   };
 }
 
-async function writeCredits(data) {
+async function writeCredits(
+  data
+) {
   data.updatedAt = now();
-  await writeJson(CREDITS_FILE, data);
+
+  await writeJson(
+    CREDITS_FILE,
+    data
+  );
 }
 
-async function getUserCredits(userId) {
-  const data = await readCredits();
+async function getUserCredits(
+  userId
+) {
+  const data =
+    await readCredits();
 
   if (
     !Object.prototype.hasOwnProperty.call(
@@ -604,21 +984,27 @@ async function getUserCredits(userId) {
       userId
     )
   ) {
-    data.users[userId] = STARTER_CREDITS;
+    data.users[userId] =
+      STARTER_CREDITS;
 
     data.transactions.push({
       id: randomUUID(),
       type: "ISSUE",
       source: "STARTER",
       userId,
-      amount: STARTER_CREDITS,
+      amount:
+        STARTER_CREDITS,
       createdAt: now(),
     });
 
-    await writeCredits(data);
+    await writeCredits(
+      data
+    );
   }
 
-  return Number(data.users[userId] || 0);
+  return Number(
+    data.users[userId] || 0
+  );
 }
 
 async function addUserCredits(
@@ -626,18 +1012,27 @@ async function addUserCredits(
   amount,
   source = "ADMIN"
 ) {
-  const n = Math.floor(Number(amount || 0));
+  const n =
+    Math.floor(
+      Number(amount || 0)
+    );
 
-  if (!Number.isFinite(n) || n <= 0) {
+  if (
+    !Number.isFinite(n) ||
+    n <= 0
+  ) {
     throw new Error(
       "Credit amount must be greater than zero."
     );
   }
 
-  const data = await readCredits();
+  const data =
+    await readCredits();
 
   data.users[userId] =
-    Number(data.users[userId] || 0) + n;
+    Number(
+      data.users[userId] || 0
+    ) + n;
 
   data.transactions.push({
     id: randomUUID(),
@@ -648,7 +1043,9 @@ async function addUserCredits(
     createdAt: now(),
   });
 
-  await writeCredits(data);
+  await writeCredits(
+    data
+  );
 
   return data.users[userId];
 }
@@ -657,15 +1054,18 @@ async function consumeUserCredits(
   userId,
   seconds
 ) {
-  const cost = Math.max(
-    1,
-    Math.ceil(
-      Number(seconds || 5) /
-        5
-    ) * CREDITS_PER_5_SECONDS
-  );
+  const cost =
+    Math.max(
+      1,
+      Math.ceil(
+        Number(seconds || 5) /
+          5
+      ) *
+        CREDITS_PER_5_SECONDS
+    );
 
-  const data = await readCredits();
+  const data =
+    await readCredits();
 
   if (
     !Object.prototype.hasOwnProperty.call(
@@ -673,44 +1073,58 @@ async function consumeUserCredits(
       userId
     )
   ) {
-    data.users[userId] = STARTER_CREDITS;
+    data.users[userId] =
+      STARTER_CREDITS;
   }
 
-  const balance = Number(
-    data.users[userId] || 0
-  );
-
-  if (balance < cost) {
-    const error = new Error(
-      `Insufficient MAMAKI credits. Required ${cost}, available ${balance}.`
+  const balance =
+    Number(
+      data.users[userId] || 0
     );
+
+  if (
+    balance < cost
+  ) {
+    const error =
+      new Error(
+        `Insufficient MAMAKI credits. Required ${cost}, available ${balance}.`
+      );
 
     error.code =
       "MAMAKI_CREDITS_INSUFFICIENT";
 
-    error.requiredCredits = cost;
-    error.availableCredits = balance;
+    error.requiredCredits =
+      cost;
+
+    error.availableCredits =
+      balance;
 
     throw error;
   }
 
-  data.users[userId] = balance - cost;
+  data.users[userId] =
+    balance - cost;
 
   data.transactions.push({
     id: randomUUID(),
     type: "CONSUME",
-    source: "AI_GENERATION",
+    source:
+      "AI_GENERATION",
     userId,
     amount: -cost,
-    seconds: Number(seconds || 0),
+    seconds:
+      Number(seconds || 0),
     createdAt: now(),
   });
 
-  await writeCredits(data);
+  await writeCredits(
+    data
+  );
 
   return {
     cost,
-    balance: data.users[userId],
+    balance:
+      data.users[userId],
   };
 }
 
@@ -718,62 +1132,84 @@ async function refundUserCredits(
   userId,
   amount
 ) {
-  const n = Math.max(
-    0,
-    Number(amount || 0)
-  );
+  const n =
+    Math.max(
+      0,
+      Number(amount || 0)
+    );
 
-  if (!n) return;
+  if (!n) {
+    return;
+  }
 
-  const data = await readCredits();
+  const data =
+    await readCredits();
 
   data.users[userId] =
-    Number(data.users[userId] || 0) + n;
+    Number(
+      data.users[userId] || 0
+    ) + n;
 
   data.transactions.push({
     id: randomUUID(),
     type: "REFUND",
-    source: "AI_GENERATION_FAILED",
+    source:
+      "AI_GENERATION_FAILED",
     userId,
     amount: n,
     createdAt: now(),
   });
 
-  await writeCredits(data);
+  await writeCredits(
+    data
+  );
 }
 
-async function getFxRates() {
-  const current = Date.now();
+/*
+|--------------------------------------------------------------------------
+| FX + SMART PRICING
+|--------------------------------------------------------------------------
+*/
 
-  const store = await readStore(
-    PRICING_FILE,
-    {
-      fx: null,
-      updatedAt: null,
-    }
-  );
+async function getFxRates() {
+  const current =
+    Date.now();
+
+  const store =
+    await readStore(
+      PRICING_FILE,
+      {
+        fx: null,
+        updatedAt: null,
+      }
+    );
 
   if (
     store.fx &&
     store.fx.rates &&
     store.fx.updatedAt &&
     current -
-      Date.parse(store.fx.updatedAt) <
-      30 * 60 * 1000
+      Date.parse(
+        store.fx.updatedAt
+      ) <
+      30 *
+        60 *
+        1000
   ) {
     return store.fx;
   }
 
   try {
-    const response = await fetch(
-      FX_API_URL,
-      {
-        headers: {
-          Accept:
-            "application/json",
-        },
-      }
-    );
+    const response =
+      await fetch(
+        FX_API_URL,
+        {
+          headers: {
+            Accept:
+              "application/json",
+          },
+        }
+      );
 
     if (!response.ok) {
       throw new Error(
@@ -784,12 +1220,15 @@ async function getFxRates() {
     const data =
       await response.json();
 
-    const usdNgn = Number(
-      data?.rates?.NGN || 0
-    );
+    const usdNgn =
+      Number(
+        data?.rates?.NGN || 0
+      );
 
     if (
-      !Number.isFinite(usdNgn) ||
+      !Number.isFinite(
+        usdNgn
+      ) ||
       usdNgn <= 0
     ) {
       throw new Error(
@@ -803,7 +1242,8 @@ async function getFxRates() {
         USD: 1,
         NGN: usdNgn,
       },
-      source: FX_API_URL,
+      source:
+        FX_API_URL,
       updatedAt: now(),
       live: true,
     };
@@ -821,14 +1261,18 @@ async function getFxRates() {
       base: "USD",
       rates: {
         USD: 1,
-        NGN: DEFAULT_USD_NGN_RATE,
+        NGN:
+          DEFAULT_USD_NGN_RATE,
       },
-      source: "configured fallback",
+      source:
+        "configured fallback",
       updatedAt: now(),
       live: false,
-      error: String(
-        error?.message || error
-      ),
+      error:
+        String(
+          error?.message ||
+            error
+        ),
     };
 
     store.fx = fx;
@@ -846,17 +1290,20 @@ function providerCostForCredits(
   credits,
   quality = "Standard HD"
 ) {
-  const scenes = Math.max(
-    1,
-    Math.ceil(
-      Number(credits || 0) /
-        CREDITS_PER_5_SECONDS
-    )
-  );
+  const scenes =
+    Math.max(
+      1,
+      Math.ceil(
+        Number(credits || 0) /
+          CREDITS_PER_5_SECONDS
+      )
+    );
 
-  const q = String(
-    quality || "Standard HD"
-  ).toLowerCase();
+  const q =
+    String(
+      quality ||
+        "Standard HD"
+    ).toLowerCase();
 
   const providerCost =
     q.includes("high") ||
@@ -867,7 +1314,8 @@ function providerCostForCredits(
   return {
     scenes,
     providerCostUsd:
-      scenes * providerCost,
+      scenes *
+      providerCost,
   };
 }
 
@@ -876,13 +1324,18 @@ async function calculateCreditPrice(
   currency = PAYSTACK_CURRENCY_DEFAULT,
   quality = "Standard HD"
 ) {
-  const c = Math.max(
-    1,
-    Math.floor(Number(credits || 0))
-  );
+  const c =
+    Math.max(
+      1,
+      Math.floor(
+        Number(credits || 0)
+      )
+    );
 
   const cur =
-    normalizeCurrency(currency);
+    normalizeCurrency(
+      currency
+    );
 
   const fx =
     await getFxRates();
@@ -940,7 +1393,9 @@ async function calculateCreditPrice(
       ),
     usdPrice:
       Number(
-        customerUsd.toFixed(4)
+        customerUsd.toFixed(
+          4
+        )
       ),
     providerCostUsd:
       Number(
@@ -957,15 +1412,24 @@ async function calculateCreditPrice(
               DEFAULT_USD_NGN_RATE
           )
         : 1,
-    fxLive: Boolean(fx.live),
-    fxUpdatedAt: fx.updatedAt,
+    fxLive:
+      Boolean(fx.live),
+    fxUpdatedAt:
+      fx.updatedAt,
     marginTarget:
       TARGET_MARGIN,
     paymentFeeBuffer:
       PAYMENT_FEE_BUFFER,
-    fxBuffer: FX_BUFFER,
+    fxBuffer:
+      FX_BUFFER,
   };
 }
+
+/*
+|--------------------------------------------------------------------------
+| FINANCE
+|--------------------------------------------------------------------------
+*/
 
 async function addFinanceTransaction(
   transaction
@@ -989,7 +1453,8 @@ async function addFinanceTransaction(
       data.transactions
     )
   ) {
-    data.transactions = [];
+    data.transactions =
+      [];
   }
 
   if (!data.wallet) {
@@ -1007,27 +1472,50 @@ async function addFinanceTransaction(
     ...transaction,
   };
 
-  data.transactions.unshift(item);
+  data.transactions.unshift(
+    item
+  );
 
-  if (item.type === "REVENUE") {
+  if (
+    item.type ===
+    "REVENUE"
+  ) {
     data.wallet.revenue +=
-      Number(item.amount || 0);
+      Number(
+        item.amount || 0
+      );
   }
 
-  if (item.type === "REFUND") {
+  if (
+    item.type ===
+    "REFUND"
+  ) {
     data.wallet.refunds +=
-      Number(item.amount || 0);
+      Number(
+        item.amount || 0
+      );
   }
 
-  if (item.type === "COST") {
+  if (
+    item.type ===
+    "COST"
+  ) {
     data.wallet.costs +=
-      Number(item.amount || 0);
+      Number(
+        item.amount || 0
+      );
   }
 
   data.wallet.profit =
-    Number(data.wallet.revenue || 0) -
-    Number(data.wallet.refunds || 0) -
-    Number(data.wallet.costs || 0);
+    Number(
+      data.wallet.revenue || 0
+    ) -
+    Number(
+      data.wallet.refunds || 0
+    ) -
+    Number(
+      data.wallet.costs || 0
+    );
 
   await writeJson(
     FINANCE_FILE,
@@ -1084,6 +1572,12 @@ async function getFinance() {
   };
 }
 
+/*
+|--------------------------------------------------------------------------
+| PAYMENTS
+|--------------------------------------------------------------------------
+*/
+
 async function getPayments() {
   const data =
     await readJson(
@@ -1096,14 +1590,18 @@ async function getPayments() {
     : [];
 }
 
-async function savePayments(payments) {
+async function savePayments(
+  payments
+) {
   await writeJson(
     PAYMENTS_FILE,
     payments
   );
 }
 
-async function recordPayment(payment) {
+async function recordPayment(
+  payment
+) {
   const payments =
     await getPayments();
 
@@ -1133,16 +1631,29 @@ async function recordPayment(payment) {
   );
 }
 
-function wanFrames(seconds) {
+/*
+|--------------------------------------------------------------------------
+| VIDEO HELPERS
+|--------------------------------------------------------------------------
+*/
+
+function wanFrames(
+  seconds
+) {
   return Number(seconds) <= 5
     ? 81
     : 121;
 }
 
-function clampDuration(value) {
-  const n = Number(value);
+function clampDuration(
+  value
+) {
+  const n =
+    Number(value);
 
-  if (!Number.isFinite(n)) {
+  if (
+    !Number.isFinite(n)
+  ) {
     return MIN_DURATION;
   }
 
@@ -1155,9 +1666,13 @@ function clampDuration(value) {
   );
 }
 
-function validRatio(value) {
+function validRatio(
+  value
+) {
   const ratio =
-    String(value || "16:9");
+    String(
+      value || "16:9"
+    );
 
   return [
     "16:9",
@@ -1190,11 +1705,13 @@ function enhancePrompt(
   style = "Cinematic"
 ) {
   return [
-    String(prompt || "").trim(),
+    String(
+      prompt || ""
+    ).trim(),
     `Visual style: ${style}.`,
     "High quality cinematic composition.",
     "Strong visual continuity.",
-    "Natural motion.",
+    "Natural realistic motion.",
     "No subtitles.",
     "No captions.",
     "No logos.",
@@ -1238,7 +1755,8 @@ async function runReplicate(
         }
       );
 
-    providerBlocked = false;
+    providerBlocked =
+      false;
 
     return output;
   } catch (error) {
@@ -1253,7 +1771,8 @@ async function runReplicate(
         message
       )
     ) {
-      providerBlocked = true;
+      providerBlocked =
+        true;
     }
 
     throw error;
@@ -1311,7 +1830,9 @@ async function outputToUrl(
           item
         );
 
-      if (url) return url;
+      if (url) {
+        return url;
+      }
     }
   }
 
@@ -1335,7 +1856,9 @@ async function outputToUrl(
             output[key]
           );
 
-        if (url) return url;
+        if (url) {
+          return url;
+        }
       }
     }
   }
@@ -1459,7 +1982,7 @@ async function applyWatermark(
         "-i",
         input,
         "-vf",
-        "drawtext=text='MAMAKI ✨':fontcolor=white@0.85:fontsize=22:borderw=2:bordercolor=black@0.45:x=w-tw-24:y=h-th-24",
+        "drawtext=text='MAMAKI':fontcolor=white@0.85:fontsize=22:borderw=2:bordercolor=black@0.45:x=w-tw-24:y=h-th-24",
         "-c:v",
         "libx264",
         "-preset",
@@ -1477,6 +2000,12 @@ async function applyWatermark(
     return input;
   }
 }
+
+/*
+|--------------------------------------------------------------------------
+| GENERATION
+|--------------------------------------------------------------------------
+*/
 
 async function createGeneration(
   req,
@@ -1524,32 +2053,24 @@ async function createGeneration(
         "Standard HD"
     );
 
-  const providerCost =
-    providerCostForCredits(
-      Math.max(
-        1,
-        Math.ceil(
-          duration / 5
-        ) *
-          CREDITS_PER_5_SECONDS
-      ),
-      quality
+  const creditEstimate =
+    Math.max(
+      1,
+      Math.ceil(
+        duration / 5
+      ) *
+        CREDITS_PER_5_SECONDS
     );
 
-  const creditResult =
-    await consumeUserCredits(
-      user.id,
-      duration
+  const providerCost =
+    providerCostForCredits(
+      creditEstimate,
+      quality
     );
 
   if (
     providerBlocked
   ) {
-    await refundUserCredits(
-      user.id,
-      creditResult.cost
-    );
-
     const error =
       new Error(
         "Replicate currently has insufficient provider credit. Please restore provider credit before generating AI videos."
@@ -1561,38 +2082,29 @@ async function createGeneration(
     throw error;
   }
 
-  let imageUrl = null;
+  const creditResult =
+    await consumeUserCredits(
+      user.id,
+      duration
+    );
+
+  let imageUrl =
+    null;
 
   if (
     req.file &&
     mode === "image"
   ) {
-    const extension =
-      path.extname(
-        req.file.originalname ||
-          ".jpg"
-      ) || ".jpg";
-
-    const imagePath =
-      path.join(
-        TMP,
-        `${randomUUID()}${extension}`
-      );
-
-    await fs.writeFile(
-      imagePath,
-      req.file.buffer
-    );
-
     imageUrl =
       `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
   }
 
   const input = {
-    prompt: enhancePrompt(
-      prompt,
-      style
-    ),
+    prompt:
+      enhancePrompt(
+        prompt,
+        style
+      ),
     num_frames:
       wanFrames(
         duration
@@ -1605,9 +2117,7 @@ async function createGeneration(
       ),
   };
 
-  if (
-    imageUrl
-  ) {
+  if (imageUrl) {
     input.image =
       imageUrl;
   }
@@ -1659,68 +2169,94 @@ async function createGeneration(
       `${randomUUID()}.mp4`
     );
 
-  await downloadFile(
-    videoUrl,
-    rawFile
-  );
-
-  await applyWatermark(
-    rawFile,
-    finalFile
-  );
-
-  await updateUsage(
-    user.id,
-    {
-      aiGenerations: 1,
-      aiSeconds: duration,
-    }
-  );
-
-  await addFinanceTransaction({
-    type: "COST",
-    category:
-      "AI_PROVIDER",
-    provider:
-      "Replicate",
-    amount:
-      Number(
-        providerCost.providerCostUsd
-      ),
-    currency: "USD",
-    userId:
-      user.id,
-    seconds:
-      duration,
-  });
-
-  return {
-    ok: true,
-    videoUrl:
-      `${APP_URL}/outputs/${path.basename(finalFile)}`,
-    providerVideoUrl:
+  try {
+    await downloadFile(
       videoUrl,
-    duration,
-    ratio,
-    style,
-    quality,
-    creditsUsed:
-      creditResult.cost,
-    creditsRemaining:
-      creditResult.balance,
-    model:
-      mode === "image"
-        ? I2V_MODEL
-        : T2V_MODEL,
-  };
+      rawFile
+    );
+
+    await applyWatermark(
+      rawFile,
+      finalFile
+    );
+
+    await updateUsage(
+      user.id,
+      {
+        aiGenerations: 1,
+        aiSeconds:
+          duration,
+      }
+    );
+
+    await addFinanceTransaction({
+      type: "COST",
+      category:
+        "AI_PROVIDER",
+      provider:
+        "Replicate",
+      amount:
+        Number(
+          providerCost.providerCostUsd
+        ),
+      currency:
+        "USD",
+      userId:
+        user.id,
+      seconds:
+        duration,
+    });
+
+    return {
+      ok: true,
+      videoUrl:
+        `${APP_URL}/outputs/${path.basename(finalFile)}`,
+      providerVideoUrl:
+        videoUrl,
+      duration,
+      ratio,
+      style,
+      quality,
+      creditsUsed:
+        creditResult.cost,
+      creditsRemaining:
+        creditResult.balance,
+      model:
+        mode === "image"
+          ? I2V_MODEL
+          : T2V_MODEL,
+    };
+  } catch (error) {
+    await refundUserCredits(
+      user.id,
+      creditResult.cost
+    );
+
+    throw error;
+  }
 }
+
+/*
+|--------------------------------------------------------------------------
+| OUTPUTS
+|--------------------------------------------------------------------------
+*/
 
 app.use(
   "/outputs",
-  express.static(OUTPUTS, {
-    maxAge: "1h",
-  })
+  express.static(
+    OUTPUTS,
+    {
+      maxAge: "1h",
+    }
+  )
 );
+
+/*
+|--------------------------------------------------------------------------
+| HEALTH
+|--------------------------------------------------------------------------
+*/
 
 app.get(
   "/health",
@@ -1730,15 +2266,18 @@ app.get(
       status: "healthy",
       service:
         "MAMAKI AI Video Creative Studio",
-      version: VERSION,
+      version:
+        VERSION,
       uptime:
         process.uptime(),
-      timestamp: now(),
+      timestamp:
+        now(),
       checks: {
         server: true,
-        ffmpeg: Boolean(
-          ffmpegPath
-        ),
+        ffmpeg:
+          Boolean(
+            ffmpegPath
+          ),
         replicateConfigured:
           providerIsConfigured(),
         adminConfigured:
@@ -1763,13 +2302,21 @@ app.get(
       ok: true,
       service:
         "MAMAKI AI Video Creative Studio",
-      version: VERSION,
+      version:
+        VERSION,
       replicateConfigured:
         providerIsConfigured(),
-      timestamp: now(),
+      timestamp:
+        now(),
     });
   }
 );
+
+/*
+|--------------------------------------------------------------------------
+| AUTH
+|--------------------------------------------------------------------------
+*/
 
 app.post(
   "/api/auth/register",
@@ -1804,7 +2351,8 @@ app.post(
       }
 
       if (
-        password.length < 6
+        password.length <
+        6
       ) {
         return res.status(400).json({
           ok: false,
@@ -1846,8 +2394,10 @@ app.post(
           credentials.hash,
         passwordSalt:
           credentials.salt,
-        createdAt: now(),
-        updatedAt: now(),
+        createdAt:
+          now(),
+        updatedAt:
+          now(),
       };
 
       const users =
@@ -1936,29 +2486,35 @@ app.post(
 
       if (
         email ===
-        ADMIN_EMAIL &&
-        user.role !==
-          "admin"
+        ADMIN_EMAIL
       ) {
-        user.role =
-          "admin";
+        if (
+          user.role !==
+          "admin"
+        ) {
+          user.role =
+            "admin";
 
-        const users =
-          await getUsers();
+          const users =
+            await getUsers();
 
-        const index =
-          users.findIndex(
-            (item) =>
-              item.id ===
-              user.id
-          );
+          const index =
+            users.findIndex(
+              (item) =>
+                item.id ===
+                user.id
+            );
 
-        if (index >= 0) {
-          users[index] =
-            user;
-          await saveUsers(
-            users
-          );
+          if (
+            index >= 0
+          ) {
+            users[index] =
+              user;
+
+            await saveUsers(
+              users
+            );
+          }
         }
       }
 
@@ -1974,6 +2530,8 @@ app.post(
           user.id,
         email:
           user.email,
+        role:
+          user.role,
       });
 
       res.json({
@@ -2009,20 +2567,24 @@ app.get(
   "/api/auth/me",
   requireUser,
   async (req, res) => {
+    const credits =
+      await getUserCredits(
+        req.user.id
+      );
+
     res.json({
       ok: true,
       user:
-        safeUser(req.user),
-      credits:
-        await getUserCredits(
-          req.user.id
+        safeUser(
+          req.user
         ),
+      credits,
+      remainingCredits:
+        credits,
       usableCredits:
         providerIsConfigured() &&
         !providerBlocked
-          ? await getUserCredits(
-              req.user.id
-            )
+          ? credits
           : 0,
       providerConfigured:
         providerIsConfigured(),
@@ -2030,6 +2592,12 @@ app.get(
     });
   }
 );
+
+/*
+|--------------------------------------------------------------------------
+| BILLING / USER CREDIT PURCHASE
+|--------------------------------------------------------------------------
+*/
 
 app.get(
   "/api/billing/pricing",
@@ -2067,18 +2635,20 @@ app.get(
           )
         );
 
+      const currentCredits =
+        await getUserCredits(
+          req.user.id
+        );
+
       res.json({
         ok: true,
-        currentCredits:
-          await getUserCredits(
-            req.user.id
-          ),
+        currentCredits,
+        remainingCredits:
+          currentCredits,
         usableCredits:
           providerIsConfigured() &&
           !providerBlocked
-            ? await getUserCredits(
-                req.user.id
-              )
+            ? currentCredits
             : 0,
         currency,
         quality,
@@ -2091,6 +2661,8 @@ app.get(
           Boolean(
             PAYSTACK_SECRET_KEY
           ),
+        fxSource:
+          "Automatic FX pricing",
       });
     } catch (error) {
       next(error);
@@ -2158,33 +2730,34 @@ app.post(
               "Content-Type":
                 "application/json",
             },
-            body: JSON.stringify({
-              email:
-                req.user.email,
-              amount:
-                pricing.amountSubunit,
-              currency:
-                pricing.currency,
-              callback_url:
-                callbackUrl,
-              metadata: {
-                mamaki: true,
-                userId:
-                  req.user.id,
-                credits:
-                  pricing.credits,
+            body:
+              JSON.stringify({
+                email:
+                  req.user.email,
+                amount:
+                  pricing.amountSubunit,
                 currency:
                   pricing.currency,
-                usdPrice:
-                  pricing.usdPrice,
-                providerCostUsd:
-                  pricing.providerCostUsd,
-                fxRate:
-                  pricing.fxRate,
-                fxLive:
-                  pricing.fxLive,
-              },
-            }),
+                callback_url:
+                  callbackUrl,
+                metadata: {
+                  mamaki: true,
+                  userId:
+                    req.user.id,
+                  credits:
+                    pricing.credits,
+                  currency:
+                    pricing.currency,
+                  usdPrice:
+                    pricing.usdPrice,
+                  providerCostUsd:
+                    pricing.providerCostUsd,
+                  fxRate:
+                    pricing.fxRate,
+                  fxLive:
+                    pricing.fxLive,
+                },
+              }),
           }
         );
 
@@ -2193,7 +2766,8 @@ app.post(
 
       if (
         !response.ok ||
-        !data.status
+        !data.status ||
+        !data.data
       ) {
         throw new Error(
           data?.message ||
@@ -2218,9 +2792,26 @@ app.post(
           pricing.currency,
         status:
           "initialized",
+        fulfilled:
+          false,
         pricing,
         authorizationUrl:
           data.data.authorization_url,
+      });
+
+      await addSecurityEvent({
+        action:
+          "PAYMENT_INITIALIZED",
+        userId:
+          req.user.id,
+        reference:
+          data.data.reference,
+        credits:
+          pricing.credits,
+        amount:
+          pricing.amount,
+        currency:
+          pricing.currency,
       });
 
       res.json({
@@ -2257,7 +2848,7 @@ app.get(
         payments.find(
           (item) =>
             item.reference ===
-            reference &&
+              reference &&
             item.userId ===
               req.user.id
         );
@@ -2284,6 +2875,12 @@ app.get(
   }
 );
 
+/*
+|--------------------------------------------------------------------------
+| PAYSTACK WEBHOOK
+|--------------------------------------------------------------------------
+*/
+
 app.post(
   "/api/payments/paystack/webhook",
   async (req, res, next) => {
@@ -2304,8 +2901,11 @@ app.post(
         );
 
       const rawBody =
-        JSON.stringify(
-          req.body || {}
+        req.rawBody ||
+        Buffer.from(
+          JSON.stringify(
+            req.body || {}
+          )
         );
 
       const expected =
@@ -2313,12 +2913,28 @@ app.post(
           "sha512",
           PAYSTACK_SECRET_KEY
         )
-          .update(rawBody)
-          .digest("hex");
+          .update(
+            rawBody
+          )
+          .digest(
+            "hex"
+          );
+
+      const signaturesMatch =
+        signature.length ===
+          expected.length &&
+        timingSafeEqual(
+          Buffer.from(
+            signature
+          ),
+          Buffer.from(
+            expected
+          )
+        );
 
       if (
         !signature ||
-        signature !== expected
+        !signaturesMatch
       ) {
         return res.status(401).send(
           "Invalid signature"
@@ -2417,6 +3033,18 @@ app.post(
           "PAYSTACK"
         );
 
+      const paidAmount =
+        Number(
+          data.amount || 0
+        ) / 100;
+
+      const paidCurrency =
+        String(
+          data.currency ||
+            metadata.currency ||
+            "NGN"
+        ).toUpperCase();
+
       await recordPayment({
         reference,
         userId,
@@ -2424,15 +3052,9 @@ app.post(
           user.email,
         credits,
         amount:
-          Number(
-            data.amount || 0
-          ) / 100,
+          paidAmount,
         currency:
-          String(
-            data.currency ||
-              metadata.currency ||
-              "NGN"
-          ),
+          paidCurrency,
         status:
           "success",
         fulfilled:
@@ -2441,6 +3063,9 @@ app.post(
           now(),
         gateway:
           "Paystack",
+        gatewayStatus:
+          data.status ||
+          "success",
       });
 
       await addFinanceTransaction({
@@ -2450,15 +3075,9 @@ app.post(
         provider:
           "Paystack",
         amount:
-          Number(
-            data.amount || 0
-          ) / 100,
+          paidAmount,
         currency:
-          String(
-            data.currency ||
-              metadata.currency ||
-              "NGN"
-          ),
+          paidCurrency,
         userId,
         reference,
         credits,
@@ -2470,11 +3089,16 @@ app.post(
         userId,
         reference,
         credits,
+        amount:
+          paidAmount,
+        currency:
+          paidCurrency,
       });
 
       res.json({
         ok: true,
-        fulfilled: true,
+        fulfilled:
+          true,
         credits,
         balance:
           newBalance,
@@ -2484,10 +3108,17 @@ app.post(
         error,
         req
       );
+
       next(error);
     }
   }
 );
+
+/*
+|--------------------------------------------------------------------------
+| USER CREDITS
+|--------------------------------------------------------------------------
+*/
 
 app.get(
   "/api/credits",
@@ -2516,6 +3147,12 @@ app.get(
     });
   }
 );
+
+/*
+|--------------------------------------------------------------------------
+| VIDEO GENERATION
+|--------------------------------------------------------------------------
+*/
 
 app.post(
   "/api/generate/text",
@@ -2608,10 +3245,27 @@ app.post(
         });
       }
 
+      if (
+        error.code ===
+        "REPLICATE_PROVIDER_BLOCKED"
+      ) {
+        return res.status(402).json({
+          ok: false,
+          error:
+            error.message,
+        });
+      }
+
       next(error);
     }
   }
 );
+
+/*
+|--------------------------------------------------------------------------
+| FREE STUDIO - NARRATION
+|--------------------------------------------------------------------------
+*/
 
 app.post(
   "/api/studio/narration",
@@ -2678,10 +3332,17 @@ app.post(
         error,
         req
       );
+
       next(error);
     }
   }
 );
+
+/*
+|--------------------------------------------------------------------------
+| ADMIN STATS
+|--------------------------------------------------------------------------
+*/
 
 app.get(
   "/api/admin/stats",
@@ -2772,27 +3433,27 @@ app.get(
 
       const newToday =
         users.filter(
-          (u) =>
+          (user) =>
             Date.parse(
-              u.createdAt
+              user.createdAt
             ) >=
             startDay.getTime()
         ).length;
 
       const newWeek =
         users.filter(
-          (u) =>
+          (user) =>
             Date.parse(
-              u.createdAt
+              user.createdAt
             ) >=
             startWeek.getTime()
         ).length;
 
       const newMonth =
         users.filter(
-          (u) =>
+          (user) =>
             Date.parse(
-              u.createdAt
+              user.createdAt
             ) >=
             startMonth.getTime()
         ).length;
@@ -2807,9 +3468,10 @@ app.get(
         Object.values(
           sessions
         ).filter(
-          (s) =>
+          (session) =>
             Number(
-              s.expiresAt || 0
+              session.expiresAt ||
+                0
             ) >
             Date.now()
         ).length;
@@ -2820,9 +3482,72 @@ app.get(
           []
         );
 
+      const issued =
+        credits.transactions
+          .filter(
+            (item) =>
+              item.type ===
+              "ISSUE"
+          )
+          .reduce(
+            (sum, item) =>
+              sum +
+              Number(
+                item.amount || 0
+              ),
+            0
+          );
+
+      const consumed =
+        credits.transactions
+          .filter(
+            (item) =>
+              item.type ===
+              "CONSUME"
+          )
+          .reduce(
+            (sum, item) =>
+              sum +
+              Math.abs(
+                Number(
+                  item.amount || 0
+                )
+              ),
+            0
+          );
+
+      const refunded =
+        credits.transactions
+          .filter(
+            (item) =>
+              item.type ===
+              "REFUND"
+          )
+          .reduce(
+            (sum, item) =>
+              sum +
+              Number(
+                item.amount || 0
+              ),
+            0
+          );
+
+      const remaining =
+        Object.values(
+          credits.users
+        ).reduce(
+          (sum, value) =>
+            sum +
+            Number(
+              value || 0
+            ),
+          0
+        );
+
       res.json({
         ok: true,
-        version: VERSION,
+        version:
+          VERSION,
         users:
           users.length,
         active,
@@ -2831,8 +3556,9 @@ app.get(
         newMonth,
         admins:
           users.filter(
-            (u) =>
-              u.role === "admin"
+            (user) =>
+              user.role ===
+              "admin"
           ).length,
         videosGenerated:
           videos,
@@ -2847,16 +3573,28 @@ app.get(
         failedJobs:
           errors.length,
         mamakiCredits:
-          Object.values(
-            credits.users
-          ).reduce(
-            (a, b) =>
-              a +
-              Number(b || 0),
-            0
-          ),
+          remaining,
+        creditsIssued:
+          issued,
+        creditsConsumed:
+          consumed,
+        creditsRefunded:
+          refunded,
         profitNGN:
           finance.wallet.profit,
+        revenue:
+          finance.wallet.revenue,
+        refunds:
+          finance.wallet.refunds,
+        costs:
+          finance.wallet.costs,
+        providerConfigured:
+          providerIsConfigured(),
+        providerBlocked,
+        paystackConfigured:
+          Boolean(
+            PAYSTACK_SECRET_KEY
+          ),
         uptime:
           process.uptime(),
       });
@@ -2865,6 +3603,12 @@ app.get(
     }
   }
 );
+
+/*
+|--------------------------------------------------------------------------
+| ADMIN USERS
+|--------------------------------------------------------------------------
+*/
 
 app.get(
   "/api/admin/users",
@@ -2912,6 +3656,12 @@ app.get(
   }
 );
 
+/*
+|--------------------------------------------------------------------------
+| ADMIN JOBS
+|--------------------------------------------------------------------------
+*/
+
 app.get(
   "/api/admin/jobs",
   requireAdmin,
@@ -2941,6 +3691,12 @@ app.get(
   }
 );
 
+/*
+|--------------------------------------------------------------------------
+| ADMIN ERRORS
+|--------------------------------------------------------------------------
+*/
+
 app.get(
   "/api/admin/errors",
   requireAdmin,
@@ -2955,6 +3711,12 @@ app.get(
     });
   }
 );
+
+/*
+|--------------------------------------------------------------------------
+| ADMIN SECURITY
+|--------------------------------------------------------------------------
+*/
 
 app.get(
   "/api/admin/security",
@@ -2971,6 +3733,12 @@ app.get(
   }
 );
 
+/*
+|--------------------------------------------------------------------------
+| ADMIN CREDITS
+|--------------------------------------------------------------------------
+*/
+
 app.get(
   "/api/admin/credits",
   requireAdmin,
@@ -2985,15 +3753,15 @@ app.get(
       const issued =
         transactions
           .filter(
-            (t) =>
-              t.type ===
+            (item) =>
+              item.type ===
               "ISSUE"
           )
           .reduce(
-            (sum, t) =>
+            (sum, item) =>
               sum +
               Number(
-                t.amount || 0
+                item.amount || 0
               ),
             0
           );
@@ -3001,16 +3769,16 @@ app.get(
       const consumed =
         transactions
           .filter(
-            (t) =>
-              t.type ===
+            (item) =>
+              item.type ===
               "CONSUME"
           )
           .reduce(
-            (sum, t) =>
+            (sum, item) =>
               sum +
               Math.abs(
                 Number(
-                  t.amount || 0
+                  item.amount || 0
                 )
               ),
             0
@@ -3019,15 +3787,15 @@ app.get(
       const refunded =
         transactions
           .filter(
-            (t) =>
-              t.type ===
+            (item) =>
+              item.type ===
               "REFUND"
           )
           .reduce(
-            (sum, t) =>
+            (sum, item) =>
               sum +
               Number(
-                t.amount || 0
+                item.amount || 0
               ),
             0
           );
@@ -3060,15 +3828,11 @@ app.get(
           ),
         replicate: {
           configured:
-            Boolean(
-              REPLICATE_API_TOKEN
-            ),
+            providerIsConfigured(),
           balance: 0,
           balanceKnown: false,
           usable:
-            Boolean(
-              REPLICATE_API_TOKEN
-            ) &&
+            providerIsConfigured() &&
             !providerBlocked,
           note:
             providerBlocked
@@ -3091,7 +3855,7 @@ app.post(
         String(
           req.body?.userId ||
             ""
-        );
+        ).trim();
 
       const amount =
         Number(
@@ -3112,7 +3876,22 @@ app.post(
         });
       }
 
-      if (amount > 0) {
+      const user =
+        await findUserById(
+          userId
+        );
+
+      if (!user) {
+        return res.status(404).json({
+          ok: false,
+          error:
+            "User not found.",
+        });
+      }
+
+      if (
+        amount > 0
+      ) {
         const balance =
           await addUserCredits(
             userId,
@@ -3203,6 +3982,12 @@ app.post(
   }
 );
 
+/*
+|--------------------------------------------------------------------------
+| ADMIN FINANCE
+|--------------------------------------------------------------------------
+*/
+
 app.get(
   "/api/admin/finance",
   requireAdmin,
@@ -3220,6 +4005,12 @@ app.get(
     }
   }
 );
+
+/*
+|--------------------------------------------------------------------------
+| ADMIN BILLING
+|--------------------------------------------------------------------------
+*/
 
 app.get(
   "/api/admin/billing",
@@ -3345,6 +4136,12 @@ app.post(
   }
 );
 
+/*
+|--------------------------------------------------------------------------
+| OWNER PROFIT WITHDRAWAL
+|--------------------------------------------------------------------------
+*/
+
 app.post(
   "/api/admin/withdraw",
   requireAdmin,
@@ -3432,17 +4229,19 @@ app.post(
               "Content-Type":
                 "application/json",
             },
-            body: JSON.stringify({
-              type: "nuban",
-              name:
-                accountName ||
-                "MAMAKI Owner",
-              account_number:
-                accountNumber,
-              bank_code:
-                bankCode,
-              currency: "NGN",
-            }),
+            body:
+              JSON.stringify({
+                type: "nuban",
+                name:
+                  accountName ||
+                  "MAMAKI Owner",
+                account_number:
+                  accountNumber,
+                bank_code:
+                  bankCode,
+                currency:
+                  "NGN",
+              }),
           }
         );
 
@@ -3470,18 +4269,21 @@ app.post(
               "Content-Type":
                 "application/json",
             },
-            body: JSON.stringify({
-              source:
-                "balance",
-              amount:
-                Math.round(
-                  amount * 100
-                ),
-              recipient:
-                recipientData.data.recipient_code,
-              reason:
-                "MAMAKI AI profit withdrawal",
-            }),
+            body:
+              JSON.stringify({
+                source:
+                  "balance",
+                amount:
+                  Math.round(
+                    amount * 100
+                  ),
+                recipient:
+                  recipientData
+                    .data
+                    .recipient_code,
+                reason:
+                  "MAMAKI AI profit withdrawal",
+              }),
           }
         );
 
@@ -3509,7 +4311,9 @@ app.post(
           transferData.data.status ||
           "pending",
         accountNumber:
-          accountNumber.slice(-4),
+          accountNumber.slice(
+            -4
+          ),
         bankCode,
         createdAt:
           now(),
@@ -3564,6 +4368,7 @@ app.post(
         error,
         req
       );
+
       next(error);
     }
   }
@@ -3584,13 +4389,20 @@ app.get(
   }
 );
 
+/*
+|--------------------------------------------------------------------------
+| ADMIN CONFIG
+|--------------------------------------------------------------------------
+*/
+
 app.get(
   "/api/admin/config",
   requireAdmin,
   async (req, res) => {
     res.json({
       ok: true,
-      version: VERSION,
+      version:
+        VERSION,
       appUrl:
         APP_URL,
       models: {
@@ -3605,6 +4417,12 @@ app.get(
         maximumDuration:
           MAX_DURATION,
         uploadMB: 100,
+      },
+      credits: {
+        starter:
+          STARTER_CREDITS,
+        creditsPer5Seconds:
+          CREDITS_PER_5_SECONDS,
       },
       payments: {
         provider:
@@ -3624,6 +4442,997 @@ app.get(
     });
   }
 );
+
+/*
+|--------------------------------------------------------------------------
+| API INFORMATION
+|--------------------------------------------------------------------------
+*/
+
+app.get(
+  "/api",
+  async (req, res) => {
+    res.json({
+      ok: true,
+      service:
+        "MAMAKI AI Video Creative Studio",
+      version:
+        VERSION,
+      endpoints: {
+        health:
+          "/health",
+        login:
+          "/api/auth/login",
+        register:
+          "/api/auth/register",
+        me:
+          "/api/auth/me",
+        credits:
+          "/api/credits",
+        pricing:
+          "/api/billing/pricing",
+        paystack:
+          "/api/billing/paystack/initialize",
+        paymentStatus:
+          "/api/billing/payment/:reference",
+        textToVideo:
+          "/api/generate/text",
+        imageToVideo:
+          "/api/generate/image",
+        admin:
+          "/admin",
+      },
+    });
+  }
+);
+
+/*
+|--------------------------------------------------------------------------
+| PRIVATE ADMIN DASHBOARD
+|
+| THIS IS THE IMPORTANT FIX:
+| /admin NO LONGER SERVES THE NORMAL MAMAKI INTERFACE.
+|--------------------------------------------------------------------------
+*/
+
+const ADMIN_HTML = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>MAMAKI AI — Administrator Dashboard</title>
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;
+ background:#050509;
+ color:#f5f5f7;
+ font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+button,input,select{font:inherit}
+.top{
+ position:sticky;
+ top:0;
+ z-index:20;
+ background:rgba(5,5,9,.96);
+ border-bottom:1px solid #222;
+ padding:18px 22px;
+ display:flex;
+ justify-content:space-between;
+ align-items:center;
+ gap:12px;
+}
+.brand{font-size:20px;font-weight:800}
+.brand span{opacity:.65}
+.back{
+ color:#fff;
+ text-decoration:none;
+ border:1px solid #333;
+ border-radius:10px;
+ padding:9px 13px;
+}
+.wrap{max-width:1450px;margin:auto;padding:24px}
+.hidden{display:none!important}
+.notice{
+ padding:14px;
+ border:1px solid #30303a;
+ border-radius:12px;
+ background:#0c0c12;
+ margin-bottom:18px;
+}
+.grid{
+ display:grid;
+ grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+ gap:14px;
+ margin-bottom:18px;
+}
+.card{
+ background:#0d0d13;
+ border:1px solid #22232b;
+ border-radius:16px;
+ padding:18px;
+}
+.card small{color:#9d9da8}
+.value{font-size:27px;font-weight:800;margin-top:8px}
+.section{
+ background:#0b0b10;
+ border:1px solid #22232b;
+ border-radius:16px;
+ padding:18px;
+ margin-bottom:18px;
+ overflow:auto;
+}
+.section h2{margin-top:0}
+table{
+ width:100%;
+ border-collapse:collapse;
+ min-width:650px;
+}
+th,td{
+ text-align:left;
+ padding:11px;
+ border-bottom:1px solid #222;
+ font-size:13px;
+}
+th{color:#a9a9b3}
+.badge{
+ display:inline-block;
+ padding:5px 8px;
+ border-radius:999px;
+ background:#191923;
+ border:1px solid #30303b;
+}
+.controls{
+ display:flex;
+ flex-wrap:wrap;
+ gap:10px;
+ margin-bottom:15px;
+}
+.controls input,.controls select{
+ background:#09090d;
+ color:#fff;
+ border:1px solid #333;
+ padding:10px;
+ border-radius:10px;
+}
+.btn{
+ background:#fff;
+ color:#000;
+ border:0;
+ padding:10px 14px;
+ border-radius:10px;
+ cursor:pointer;
+ font-weight:700;
+}
+.btn.dark{
+ background:#17171f;
+ color:#fff;
+ border:1px solid #333;
+}
+.login{
+ max-width:430px;
+ margin:12vh auto;
+ background:#0d0d13;
+ border:1px solid #272731;
+ border-radius:18px;
+ padding:24px;
+}
+.login input{
+ width:100%;
+ padding:13px;
+ margin:7px 0;
+ background:#08080c;
+ color:#fff;
+ border:1px solid #333;
+ border-radius:10px;
+}
+.error{color:#ff7b7b;margin-top:10px}
+.success{color:#79e2a0;margin-top:10px}
+</style>
+</head>
+<body>
+
+<div id="loginBox" class="login">
+<h1>MAMAKI AI</h1>
+<p>Private Administrator Dashboard</p>
+<input id="adminEmail" type="email" placeholder="Administrator email">
+<input id="adminPassword" type="password" placeholder="Password">
+<button class="btn" style="width:100%;margin-top:8px" onclick="adminLogin()">Access Admin Dashboard</button>
+<div id="loginMessage"></div>
+</div>
+
+<div id="dashboard" class="hidden">
+<div class="top">
+ <div class="brand">✨ MAMAKI <span>ADMIN</span></div>
+ <div>
+  <a class="back" href="/">MAMAKI Interface</a>
+  <button class="back" onclick="adminLogout()" style="background:#0d0d13;color:#fff;cursor:pointer">Logout</button>
+ </div>
+</div>
+
+<div class="wrap">
+
+<div id="dashMessage" class="notice">Loading administrator data...</div>
+
+<div class="grid">
+ <div class="card"><small>Total Users</small><div id="users" class="value">0</div></div>
+ <div class="card"><small>Live / Active</small><div id="active" class="value">0</div></div>
+ <div class="card"><small>New Today</small><div id="newToday" class="value">0</div></div>
+ <div class="card"><small>New This Week</small><div id="newWeek" class="value">0</div></div>
+ <div class="card"><small>New This Month</small><div id="newMonth" class="value">0</div></div>
+ <div class="card"><small>Total Admins</small><div id="admins" class="value">0</div></div>
+ <div class="card"><small>Videos Generated</small><div id="videos" class="value">0</div></div>
+ <div class="card"><small>AI Seconds</small><div id="seconds" class="value">0</div></div>
+ <div class="card"><small>MAMAKI Credits</small><div id="credits" class="value">0</div></div>
+ <div class="card"><small>Profit</small><div id="profit" class="value">₦0</div></div>
+</div>
+
+<div class="section">
+<h2>Replicate & AI Provider</h2>
+<div class="grid">
+ <div class="card"><small>Configured</small><div id="replicateConfigured" class="value">—</div></div>
+ <div class="card"><small>Provider Capacity</small><div id="replicateUsable" class="value">—</div></div>
+ <div class="card"><small>Provider Balance</small><div class="value">$0.00</div></div>
+</div>
+<p style="color:#999">Replicate does not expose an authoritative prepaid balance through the public account API. MAMAKI will not fabricate a balance.</p>
+</div>
+
+<div class="section">
+<h2>Business & Finance</h2>
+<div class="grid">
+ <div class="card"><small>Gross Revenue</small><div id="revenue" class="value">₦0</div></div>
+ <div class="card"><small>Refunds</small><div id="refunds" class="value">₦0</div></div>
+ <div class="card"><small>Total Costs</small><div id="costs" class="value">₦0</div></div>
+ <div class="card"><small>Profit</small><div id="financeProfit" class="value">₦0</div></div>
+</div>
+</div>
+
+<div class="section">
+<h2>Smart Credit Pricing & FX</h2>
+<div id="pricingBox">Loading...</div>
+</div>
+
+<div class="section">
+<h2>Owner Profit Withdrawal</h2>
+<div class="controls">
+<input id="withdrawAmount" type="number" min="1" placeholder="Amount in NGN">
+<input id="withdrawAccount" placeholder="Bank account number">
+<input id="withdrawBankCode" placeholder="Bank code">
+<input id="withdrawName" placeholder="Account name">
+<button class="btn" onclick="withdrawProfit()">Withdraw Profit</button>
+</div>
+<div id="withdrawMessage"></div>
+</div>
+
+<div class="section">
+<h2>Users</h2>
+<table>
+<thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Credits</th><th>Videos</th><th>AI Seconds</th><th>Created</th></tr></thead>
+<tbody id="usersTable"></tbody>
+</table>
+</div>
+
+<div class="section">
+<h2>Payments</h2>
+<table>
+<thead><tr><th>Reference</th><th>Email</th><th>Credits</th><th>Amount</th><th>Currency</th><th>Status</th><th>Date</th></tr></thead>
+<tbody id="paymentsTable"></tbody>
+</table>
+</div>
+
+<div class="section">
+<h2>Security Activity</h2>
+<table>
+<thead><tr><th>Action</th><th>Email/User</th><th>Reference</th><th>Date</th></tr></thead>
+<tbody id="securityTable"></tbody>
+</table>
+</div>
+
+<div class="section">
+<h2>Errors</h2>
+<table>
+<thead><tr><th>Message</th><th>Path</th><th>Method</th><th>Date</th></tr></thead>
+<tbody id="errorsTable"></tbody>
+</table>
+</div>
+
+<div class="section">
+<h2>Withdrawal History</h2>
+<table>
+<thead><tr><th>Reference</th><th>Amount</th><th>Status</th><th>Account</th><th>Date</th></tr></thead>
+<tbody id="withdrawalsTable"></tbody>
+</table>
+</div>
+
+</div>
+</div>
+
+<script>
+let adminToken=localStorage.getItem("mamaki_token")||localStorage.getItem("mamakiToken")||localStorage.getItem("sessionToken")||localStorage.getItem("token")||"";
+
+function saveToken(token){
+ adminToken=token||"";
+ if(adminToken){
+  localStorage.setItem("mamaki_token",adminToken);
+ }
+}
+
+function headers(){
+ return {
+  "Content-Type":"application/json",
+  "Authorization":"Bearer "+adminToken
+ };
+}
+
+async function api(url,options={}){
+ options.headers={
+  ...(options.headers||{}),
+  ...headers()
+ };
+ const r=await fetch(url,options);
+ let d={};
+ try{d=await r.json()}catch{}
+ if(!r.ok)throw new Error(d.error||"Request failed");
+ return d;
+}
+
+async function adminLogin(){
+ const email=document.getElementById("adminEmail").value.trim();
+ const password=document.getElementById("adminPassword").value;
+ const msg=document.getElementById("loginMessage");
+ msg.className="";
+ msg.textContent="Signing in...";
+ try{
+  const r=await fetch("/api/auth/login",{
+   method:"POST",
+   headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({email,password})
+  });
+  const d=await r.json();
+  if(!r.ok)throw new Error(d.error||"Invalid credentials");
+  if(d.user.role!=="admin")throw new Error("This account is not an administrator.");
+  saveToken(d.token);
+  showDashboard();
+ }catch(e){
+  msg.className="error";
+  msg.textContent=e.message;
+ }
+}
+
+function showDashboard(){
+ document.getElementById("loginBox").classList.add("hidden");
+ document.getElementById("dashboard").classList.remove("hidden");
+ loadDashboard();
+}
+
+async function loadDashboard(){
+ try{
+  const me=await api("/api/auth/me");
+  if(me.user.role!=="admin")throw new Error("Administrator access required.");
+
+  const [stats,users,credits,billing,security,errors,withdrawals]=await Promise.all([
+   api("/api/admin/stats"),
+   api("/api/admin/users"),
+   api("/api/admin/credits"),
+   api("/api/admin/billing"),
+   api("/api/admin/security"),
+   api("/api/admin/errors"),
+   api("/api/admin/withdrawals")
+  ]);
+
+  document.getElementById("dashMessage").textContent="Administrator dashboard connected.";
+
+  document.getElementById("users").textContent=stats.users;
+  document.getElementById("active").textContent=stats.active;
+  document.getElementById("newToday").textContent=stats.newToday;
+  document.getElementById("newWeek").textContent=stats.newWeek;
+  document.getElementById("newMonth").textContent=stats.newMonth;
+  document.getElementById("admins").textContent=stats.admins;
+  document.getElementById("videos").textContent=stats.videosGenerated;
+  document.getElementById("seconds").textContent=stats.aiSeconds;
+  document.getElementById("credits").textContent=stats.mamakiCredits;
+  document.getElementById("profit").textContent=money(stats.profitNGN);
+
+  document.getElementById("replicateConfigured").textContent=stats.providerConfigured?"YES":"NO";
+  document.getElementById("replicateUsable").textContent=credits.replicate.usable?"AVAILABLE":"BLOCKED";
+
+  document.getElementById("revenue").textContent=money(billing.finance.wallet.revenue);
+  document.getElementById("refunds").textContent=money(billing.finance.wallet.refunds);
+  document.getElementById("costs").textContent=money(billing.finance.wallet.costs);
+  document.getElementById("financeProfit").textContent=money(billing.finance.wallet.profit);
+
+  document.getElementById("pricingBox").innerHTML=
+   "<p><b>USD → NGN:</b> "+Number(billing.fx.rates.NGN||0).toFixed(2)+"</p>"+
+   "<p><b>FX status:</b> "+(billing.fx.live?"LIVE":"FALLBACK")+"</p>"+
+   "<p><b>Last update:</b> "+new Date(billing.fx.updatedAt).toLocaleString()+"</p>"+
+   "<p><b>100 credits:</b> "+formatPrice(billing.pricing)+"</p>"+
+   "<p><b>Target margin:</b> "+(billing.pricing.marginTarget*100).toFixed(0)+"%</p>"+
+   "<p><b>Paystack:</b> "+(billing.configured?"CONFIGURED":"NOT CONFIGURED")+"</p>";
+
+  document.getElementById("usersTable").innerHTML=users.users.map(u=>
+   "<tr><td>"+esc(u.name)+"</td><td>"+esc(u.email)+"</td><td><span class='badge'>"+esc(u.role)+"</span></td><td>"+Number(u.credits||0)+"</td><td>"+Number(u.usage?.aiGenerations||0)+"</td><td>"+Number(u.usage?.aiSeconds||0)+"</td><td>"+date(u.createdAt)+"</td></tr>"
+  ).join("");
+
+  document.getElementById("paymentsTable").innerHTML=(billing.payments||[]).map(p=>
+   "<tr><td>"+esc(p.reference)+"</td><td>"+esc(p.email)+"</td><td>"+Number(p.credits||0)+"</td><td>"+Number(p.amount||0).toLocaleString()+"</td><td>"+esc(p.currency||"")+"</td><td><span class='badge'>"+esc(p.status||"")+"</span></td><td>"+date(p.createdAt||p.updatedAt)+"</td></tr>"
+  ).join("");
+
+  document.getElementById("securityTable").innerHTML=(security.events||[]).slice(0,100).map(e=>
+   "<tr><td>"+esc(e.action||"")+"</td><td>"+esc(e.email||e.userId||"")+"</td><td>"+esc(e.reference||"")+"</td><td>"+date(e.createdAt)+"</td></tr>"
+  ).join("");
+
+  document.getElementById("errorsTable").innerHTML=(errors.errors||[]).slice(0,100).map(e=>
+   "<tr><td>"+esc(e.message||"")+"</td><td>"+esc(e.path||"")+"</td><td>"+esc(e.method||"")+"</td><td>"+date(e.createdAt)+"</td></tr>"
+  ).join("");
+
+  document.getElementById("withdrawalsTable").innerHTML=(withdrawals.withdrawals||[]).map(w=>
+   "<tr><td>"+esc(w.reference||"")+"</td><td>"+money(w.amount||0)+"</td><td>"+esc(w.status||"")+"</td><td>****"+esc(w.accountNumber||"")+"</td><td>"+date(w.createdAt)+"</td></tr>"
+  ).join("");
+
+ }catch(e){
+  document.getElementById("dashMessage").className="notice error";
+  document.getElementById("dashMessage").textContent=e.message;
+ }
+}
+
+async function withdrawProfit(){
+ const msg=document.getElementById("withdrawMessage");
+ msg.className="";
+ msg.textContent="Processing...";
+ try{
+  const d=await api("/api/admin/withdraw",{
+   method:"POST",
+   body:JSON.stringify({
+    amount:Number(document.getElementById("withdrawAmount").value),
+    accountNumber:document.getElementById("withdrawAccount").value.trim(),
+    bankCode:document.getElementById("withdrawBankCode").value.trim(),
+    accountName:document.getElementById("withdrawName").value.trim()
+   })
+  });
+  msg.className="success";
+  msg.textContent="Withdrawal submitted: "+(d.withdrawal?.reference||"");
+  loadDashboard();
+ }catch(e){
+  msg.className="error";
+  msg.textContent=e.message;
+ }
+}
+
+async function adminLogout(){
+ try{
+  await api("/api/auth/logout",{method:"POST"});
+ }catch{}
+ localStorage.removeItem("mamaki_token");
+ localStorage.removeItem("mamakiToken");
+ localStorage.removeItem("sessionToken");
+ localStorage.removeItem("token");
+ location.reload();
+}
+
+function money(n){
+ return "₦"+Number(n||0).toLocaleString("en-NG",{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+function formatPrice(p){
+ return p.currency==="NGN"
+  ? "₦"+Number(p.amount||0).toLocaleString("en-NG")
+  : "$"+Number(p.amount||0).toFixed(2);
+}
+
+function date(v){
+ if(!v)return"";
+ try{return new Date(v).toLocaleString()}catch{return String(v)}
+}
+
+function esc(v){
+ return String(v??"").replace(/[&<>"']/g,m=>({
+  "&":"&amp;",
+  "<":"&lt;",
+  ">":"&gt;",
+  '"':"&quot;",
+  "'":"&#39;"
+ }[m]));
+}
+
+if(adminToken){
+ showDashboard();
+}
+</script>
+</body>
+</html>
+`;
+
+app.get(
+  "/admin",
+  async (req, res) => {
+    res.setHeader(
+      "Cache-Control",
+      "no-store"
+    );
+
+    res.setHeader(
+      "X-Robots-Tag",
+      "noindex, nofollow"
+    );
+
+    res.type("html").send(
+      ADMIN_HTML
+    );
+  }
+);
+
+app.get(
+  "/admin/",
+  async (req, res) => {
+    res.setHeader(
+      "Cache-Control",
+      "no-store"
+    );
+
+    res.setHeader(
+      "X-Robots-Tag",
+      "noindex, nofollow"
+    );
+
+    res.type("html").send(
+      ADMIN_HTML
+    );
+  }
+);
+
+/*
+|--------------------------------------------------------------------------
+| USER BILLING WIDGET
+|
+| This is injected into the normal MAMAKI interface.
+| It gives users:
+| - Available credits
+| - Remaining credits
+| - Buy credits button
+| - Current automatically calculated prices
+| - Paystack checkout
+|--------------------------------------------------------------------------
+*/
+
+function injectBillingWidget(
+  html
+) {
+  if (
+    !html ||
+    html.includes(
+      "MAMAKI-CREDITS-WIDGET"
+    )
+  ) {
+    return html;
+  }
+
+  const widget = `
+<!-- MAMAKI-CREDITS-WIDGET -->
+<style>
+#mamakicreditbox{
+ position:fixed;
+ right:18px;
+ bottom:18px;
+ z-index:999999;
+ font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+#mamakicreditbutton{
+ border:1px solid rgba(255,255,255,.18);
+ background:rgba(10,10,15,.94);
+ color:#fff;
+ border-radius:14px;
+ padding:12px 16px;
+ cursor:pointer;
+ box-shadow:0 12px 35px rgba(0,0,0,.35);
+ font-weight:800;
+}
+#mamakicreditbutton:hover{transform:translateY(-1px)}
+#mamakicreditmodal{
+ display:none;
+ position:fixed;
+ inset:0;
+ background:rgba(0,0,0,.72);
+ backdrop-filter:blur(7px);
+ align-items:center;
+ justify-content:center;
+ padding:18px;
+}
+#mamakicreditpanel{
+ width:min(470px,100%);
+ max-height:90vh;
+ overflow:auto;
+ background:#0d0d13;
+ color:#fff;
+ border:1px solid #292934;
+ border-radius:20px;
+ padding:22px;
+ box-shadow:0 30px 80px rgba(0,0,0,.55);
+}
+#mamakicreditpanel h2{margin-top:0}
+.mcpBalance{
+ display:grid;
+ grid-template-columns:1fr 1fr;
+ gap:10px;
+ margin:15px 0;
+}
+.mcpCard{
+ background:#15151d;
+ border:1px solid #292934;
+ border-radius:13px;
+ padding:13px;
+}
+.mcpCard small{color:#aaa}
+.mcpCard strong{
+ display:block;
+ font-size:24px;
+ margin-top:5px;
+}
+.mcpPackages{
+ display:grid;
+ grid-template-columns:1fr 1fr;
+ gap:10px;
+ margin:14px 0;
+}
+.mcpPackage{
+ background:#121219;
+ border:1px solid #292934;
+ border-radius:13px;
+ padding:13px;
+ cursor:pointer;
+ color:#fff;
+ text-align:left;
+}
+.mcpPackage:hover{
+ border-color:#fff;
+}
+.mcpPackage.selected{
+ border-color:#fff;
+}
+.mcpPackage strong{display:block;font-size:18px}
+.mcpPackage span{color:#aaa}
+#mcpPay{
+ width:100%;
+ padding:13px;
+ border:0;
+ border-radius:12px;
+ background:#fff;
+ color:#000;
+ font-weight:800;
+ cursor:pointer;
+}
+#mcpClose{
+ width:100%;
+ margin-top:9px;
+ padding:11px;
+ border:1px solid #333;
+ border-radius:12px;
+ background:#111117;
+ color:#fff;
+ cursor:pointer;
+}
+#mcpStatus{
+ margin-top:12px;
+ font-size:13px;
+ color:#aaa;
+}
+@media(max-width:600px){
+ #mamakicreditbox{right:10px;bottom:10px}
+ .mcpPackages{grid-template-columns:1fr}
+}
+</style>
+
+<div id="mamakicreditbox">
+<button id="mamakicreditbutton">✨ Buy MAMAKI Credits</button>
+</div>
+
+<div id="mamakicreditmodal">
+<div id="mamakicreditpanel">
+<h2>✨ MAMAKI Credits</h2>
+<p style="color:#aaa">Use MAMAKI credits to create AI videos.</p>
+
+<div class="mcpBalance">
+<div class="mcpCard">
+<small>Available Credits</small>
+<strong id="mcpAvailable">—</strong>
+</div>
+<div class="mcpCard">
+<small>Remaining Credits</small>
+<strong id="mcpRemaining">—</strong>
+</div>
+</div>
+
+<div id="mcpProvider" style="color:#aaa;font-size:13px;margin-bottom:12px"></div>
+
+<div style="display:flex;gap:8px;margin-bottom:10px">
+<select id="mcpCurrency" style="flex:1;padding:11px;border-radius:10px;background:#111117;color:#fff;border:1px solid #333">
+<option value="NGN">NGN ₦</option>
+<option value="USD">USD $</option>
+</select>
+
+<select id="mcpQuality" style="flex:1;padding:11px;border-radius:10px;background:#111117;color:#fff;border:1px solid #333">
+<option>Standard HD</option>
+<option>High</option>
+<option>Cinematic</option>
+</select>
+</div>
+
+<div id="mcpPackages" class="mcpPackages"></div>
+
+<button id="mcpPay">Continue to Secure Payment</button>
+<button id="mcpClose">Close</button>
+
+<div id="mcpStatus"></div>
+</div>
+</div>
+
+<script>
+(function(){
+
+let mcpToken=
+ localStorage.getItem("mamaki_token")||
+ localStorage.getItem("mamakiToken")||
+ localStorage.getItem("sessionToken")||
+ localStorage.getItem("token")||
+ "";
+
+let selectedCredits=100;
+
+function mcpHeaders(){
+ return {
+  "Content-Type":"application/json",
+  "Authorization":"Bearer "+mcpToken
+ };
+}
+
+async function mcpFetch(url,options={}){
+ options.headers={
+  ...(options.headers||{}),
+  ...mcpHeaders()
+ };
+ const r=await fetch(url,options);
+ let d={};
+ try{d=await r.json()}catch{}
+ if(!r.ok)throw new Error(d.error||"Request failed");
+ return d;
+}
+
+function mcpOpen(){
+ document.getElementById("mamakicreditmodal").style.display="flex";
+ loadMcp();
+}
+
+function mcpClose(){
+ document.getElementById("mamakicreditmodal").style.display="none";
+}
+
+async function loadMcp(){
+ const status=document.getElementById("mcpStatus");
+
+ mcpToken=
+  localStorage.getItem("mamaki_token")||
+  localStorage.getItem("mamakiToken")||
+  localStorage.getItem("sessionToken")||
+  localStorage.getItem("token")||
+  "";
+
+ if(!mcpToken){
+  status.textContent="Please log in to your MAMAKI account before purchasing credits.";
+  return;
+ }
+
+ try{
+  const me=await mcpFetch("/api/auth/me");
+
+  document.getElementById("mcpAvailable").textContent=Number(me.credits||0).toLocaleString();
+  document.getElementById("mcpRemaining").textContent=Number(me.remainingCredits||0).toLocaleString();
+
+  document.getElementById("mcpProvider").textContent=
+   me.providerBlocked
+    ? "AI provider capacity is currently unavailable. Your credits remain safe."
+    : me.providerConfigured
+      ? "AI provider connected."
+      : "AI provider is not configured.";
+
+  await loadPrices();
+
+ }catch(e){
+  status.textContent=e.message;
+ }
+}
+
+async function loadPrices(){
+ const currency=document.getElementById("mcpCurrency").value;
+ const quality=document.getElementById("mcpQuality").value;
+
+ const data=await mcpFetch(
+  "/api/billing/pricing?currency="+encodeURIComponent(currency)+"&quality="+encodeURIComponent(quality)
+ );
+
+ const box=document.getElementById("mcpPackages");
+
+ box.innerHTML="";
+
+ (data.packages||[]).forEach(p=>{
+  const button=document.createElement("button");
+  button.className="mcpPackage"+(p.credits===selectedCredits?" selected":"");
+
+  const price=
+   p.currency==="NGN"
+    ? "₦"+Number(p.amount||0).toLocaleString("en-NG")
+    : "$"+Number(p.amount||0).toFixed(2);
+
+  button.innerHTML=
+   "<strong>"+Number(p.credits).toLocaleString()+" credits</strong>"+
+   "<span>"+price+"</span>";
+
+  button.onclick=()=>{
+   selectedCredits=p.credits;
+
+   document.querySelectorAll(".mcpPackage").forEach(x=>{
+    x.classList.remove("selected");
+   });
+
+   button.classList.add("selected");
+  };
+
+  box.appendChild(button);
+ });
+}
+
+async function buyCredits(){
+ const status=document.getElementById("mcpStatus");
+
+ if(!mcpToken){
+  status.textContent="Please log in first.";
+  return;
+ }
+
+ try{
+  status.textContent="Preparing secure payment...";
+
+  const currency=
+   document.getElementById("mcpCurrency").value;
+
+  const quality=
+   document.getElementById("mcpQuality").value;
+
+  const data=await mcpFetch(
+   "/api/billing/paystack/initialize",
+   {
+    method:"POST",
+    body:JSON.stringify({
+     credits:selectedCredits,
+     currency,
+     quality,
+     callbackUrl:
+      location.origin+
+      location.pathname+
+      "?payment=complete"
+    })
+   }
+  );
+
+  if(data.authorizationUrl){
+   location.href=data.authorizationUrl;
+   return;
+  }
+
+  throw new Error("Payment page was not returned.");
+
+ }catch(e){
+  status.textContent=e.message;
+ }
+}
+
+document.getElementById("mamakicreditbutton").onclick=mcpOpen;
+document.getElementById("mcpClose").onclick=mcpClose;
+document.getElementById("mcpPay").onclick=buyCredits;
+document.getElementById("mcpCurrency").onchange=loadPrices;
+document.getElementById("mcpQuality").onchange=loadPrices;
+
+})();
+</script>
+`;
+
+  if (
+    html.includes(
+      "</body>"
+    )
+  ) {
+    return html.replace(
+      "</body>",
+      widget +
+        "</body>"
+    );
+  }
+
+  return html +
+    widget;
+}
+
+/*
+|--------------------------------------------------------------------------
+| NORMAL MAMAKI FRONTEND
+|
+| /admin is handled above.
+| Every other normal page continues to use index.html.
+|--------------------------------------------------------------------------
+*/
+
+async function serveFrontend(
+  req,
+  res,
+  next
+) {
+  if (
+    req.path.startsWith(
+      "/api"
+    ) ||
+    req.path.startsWith(
+      "/outputs"
+    ) ||
+    req.path ===
+      "/health" ||
+    req.path ===
+      "/admin" ||
+    req.path ===
+      "/admin/"
+  ) {
+    return next();
+  }
+
+  const indexPath =
+    path.join(
+      ROOT,
+      "index.html"
+    );
+
+  if (
+    await exists(
+      indexPath
+    )
+  ) {
+    try {
+      let html =
+        await fs.readFile(
+          indexPath,
+          "utf8"
+        );
+
+      html =
+        injectBillingWidget(
+          html
+        );
+
+      res.setHeader(
+        "Cache-Control",
+        "no-store"
+      );
+
+      return res
+        .type("html")
+        .send(html);
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  res.status(404).send(
+    "MAMAKI AI interface not found."
+  );
+}
+
+app.use(
+  serveFrontend
+);
+
+/*
+|--------------------------------------------------------------------------
+| FINAL ERROR HANDLER
+|--------------------------------------------------------------------------
+*/
 
 app.use(
   async (
@@ -3647,18 +5456,29 @@ app.use(
       );
     }
 
-    const status =
+    let status =
       Number(
         error?.status ||
           error?.statusCode ||
           500
       );
 
+    if (
+      error?.code ===
+      "MAMAKI_CREDITS_INSUFFICIENT"
+    ) {
+      status = 402;
+    }
+
+    if (
+      status < 400 ||
+      status >= 600
+    ) {
+      status = 500;
+    }
+
     res.status(
-      status >= 400 &&
-        status < 600
-        ? status
-        : 500
+      status
     ).json({
       ok: false,
       error:
@@ -3672,80 +5492,11 @@ app.use(
   }
 );
 
-app.get(
-  "/api",
-  async (req, res) => {
-    res.json({
-      ok: true,
-      service:
-        "MAMAKI AI Video Creative Studio",
-      version: VERSION,
-      endpoints: {
-        health:
-          "/health",
-        login:
-          "/api/auth/login",
-        register:
-          "/api/auth/register",
-        credits:
-          "/api/credits",
-        pricing:
-          "/api/billing/pricing",
-        paystack:
-          "/api/billing/paystack/initialize",
-        textToVideo:
-          "/api/generate/text",
-        imageToVideo:
-          "/api/generate/image",
-        admin:
-          "/admin",
-      },
-    });
-  }
-);
-
-async function serveFrontend(
-  req,
-  res,
-  next
-) {
-  if (
-    req.path.startsWith(
-      "/api"
-    ) ||
-    req.path.startsWith(
-      "/outputs"
-    ) ||
-    req.path ===
-      "/health"
-  ) {
-    return next();
-  }
-
-  const indexPath =
-    path.join(
-      ROOT,
-      "index.html"
-    );
-
-  if (
-    await exists(
-      indexPath
-    )
-  ) {
-    return res.sendFile(
-      indexPath
-    );
-  }
-
-  res.status(404).send(
-    "MAMAKI AI interface not found."
-  );
-}
-
-app.use(
-  serveFrontend
-);
+/*
+|--------------------------------------------------------------------------
+| START
+|--------------------------------------------------------------------------
+*/
 
 await ensureStorage();
 await ensureAdminAccount();
@@ -3757,14 +5508,21 @@ app.listen(
     console.log(
       `MAMAKI AI ${VERSION} running on ${HOST}:${PORT}`
     );
+
     console.log(
       `Replicate configured: ${providerIsConfigured()}`
     );
+
     console.log(
       `Paystack configured: ${Boolean(PAYSTACK_SECRET_KEY)}`
     );
+
     console.log(
       `Admin configured: ${Boolean(ADMIN_EMAIL && ADMIN_PASSWORD)}`
+    );
+
+    console.log(
+      `Private admin dashboard: ${APP_URL}/admin`
     );
   }
 );
