@@ -1,15 +1,9 @@
-// VERIFIED MAMAKI AI SERVER.JS v18.0.0
 // GitHub editor: https://github.com/shamakishadrack-star/mamaki-ai-video/edit/main/server.js
-//
-// IMPORTANT:
-// 1. /admin is now a PRIVATE, SEPARATE ADMIN DASHBOARD.
-// 2. / is the normal MAMAKI user interface.
-// 3. A Buy MAMAKI Credits panel is injected into the normal interface.
-// 4. User credits are shown in the user interface.
-// 5. Paystack payments are automatically fulfilled through the webhook.
-// 6. FX pricing updates automatically.
-// 7. Admin finance, credits, payments and withdrawals remain private.
-// 8. This file is intentionally self-contained and syntax-safe.
+// MAMAKI AI VIDEO — COMPLETE SERVER
+// Billing model: LIVE USD/NGN RATE + FIXED ₦200 MAMAKI MARKUP PER USD
+// Customer never sees the FX rate or markup.
+// 100 MAMAKI credits = 1 MAMAKI USD unit.
+// Video generation cost is calculated automatically and enforced server-side.
 
 import express from "express";
 import multer from "multer";
@@ -25,26 +19,24 @@ import {
   scryptSync,
   timingSafeEqual,
   createHash,
-  createHmac,
+  createHmac
 } from "node:crypto";
 
 const app = express();
 
 const PORT = Number(process.env.PORT || 10000);
 const HOST = "0.0.0.0";
-const VERSION = "18.0.0";
 
 const ROOT = process.cwd();
+const DATA = path.join(ROOT, "data");
 const TMP = path.join(ROOT, "tmp");
 const OUTPUTS = path.join(ROOT, "outputs");
 const PROJECTS = path.join(ROOT, "projects");
-const DATA = path.join(ROOT, "data");
 
 const USERS_FILE = path.join(DATA, "users.json");
 const SESSIONS_FILE = path.join(DATA, "sessions.json");
 const ERRORS_FILE = path.join(DATA, "errors.json");
 const USAGE_FILE = path.join(DATA, "usage.json");
-const RESET_FILE = path.join(DATA, "password-resets.json");
 const SECURITY_FILE = path.join(DATA, "security.json");
 const CREDITS_FILE = path.join(DATA, "credits.json");
 const FINANCE_FILE = path.join(DATA, "finance.json");
@@ -52,840 +44,363 @@ const PRICING_FILE = path.join(DATA, "pricing.json");
 const PAYMENTS_FILE = path.join(DATA, "payments.json");
 const WITHDRAWALS_FILE = path.join(DATA, "withdrawals.json");
 
-const T2V_MODEL =
-  process.env.T2V_MODEL || "wan-video/wan-2.2-t2v-fast";
-
-const I2V_MODEL =
-  process.env.I2V_MODEL || "wan-video/wan-2.2-i2v-fast";
-
-const MIN_DURATION = 5;
-const MAX_DURATION = 7200;
+const VERSION = "18.0.0";
 
 const ADMIN_EMAIL =
-  String(process.env.ADMIN_EMAIL || "")
+  String(process.env.ADMIN_EMAIL || "shamakishadrack@gmail.com")
     .trim()
     .toLowerCase();
 
-const ADMIN_PASSWORD =
-  String(process.env.ADMIN_PASSWORD || "");
+const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || "");
 
 const SESSION_SECRET =
-  String(process.env.SESSION_SECRET || "");
+  process.env.SESSION_SECRET ||
+  createHash("sha256")
+    .update(`${ADMIN_EMAIL}:${process.env.RENDER_SERVICE_NAME || "mamaki"}:${ROOT}`)
+    .digest("hex");
 
-const REPLICATE_API_TOKEN =
-  String(process.env.REPLICATE_API_TOKEN || "").trim();
+const REPLICATE_TOKEN =
+  process.env.REPLICATE_API_TOKEN ||
+  process.env.REPLICATE_API_KEY ||
+  "";
 
 const PAYSTACK_SECRET_KEY =
-  String(process.env.PAYSTACK_SECRET_KEY || "").trim();
+  process.env.PAYSTACK_SECRET_KEY ||
+  "";
 
 const PAYSTACK_PUBLIC_KEY =
-  String(process.env.PAYSTACK_PUBLIC_KEY || "").trim();
+  process.env.PAYSTACK_PUBLIC_KEY ||
+  "";
 
 const FX_API_URL =
-  String(
-    process.env.FX_API_URL ||
-      "https://open.er-api.com/v6/latest/USD"
-  ).trim();
+  process.env.FX_API_URL ||
+  "https://open.er-api.com/v6/latest/USD";
 
-const DEFAULT_USD_NGN_RATE = Math.max(
-  1,
-  Number(process.env.DEFAULT_USD_NGN_RATE || 1600)
-);
+const DEFAULT_USD_NGN_RATE =
+  Number(process.env.DEFAULT_USD_NGN_RATE || 1600);
 
-const TARGET_MARGIN = Math.min(
-  0.9,
-  Math.max(
-    0.05,
-    Number(process.env.MAMAKI_TARGET_MARGIN || 0.4)
-  )
-);
+const MAMAKI_MARKUP_NGN =
+  Number(process.env.MAMAKI_MARKUP_NGN || 200);
 
-const PAYMENT_FEE_BUFFER = Math.min(
-  0.3,
-  Math.max(
-    0,
-    Number(process.env.MAMAKI_PAYMENT_FEE_BUFFER || 0.04)
-  )
-);
+const FX_CACHE_MS =
+  Number(process.env.FX_CACHE_MS || 30 * 60 * 1000);
 
-const FX_BUFFER = Math.min(
-  0.3,
-  Math.max(
-    0,
-    Number(process.env.MAMAKI_FX_BUFFER || 0.05)
-  )
-);
+const STARTER_CREDITS =
+  Number(process.env.STARTER_CREDITS || 100);
 
-const PROVIDER_COST_480P_USD = Math.max(
-  0.0001,
-  Number(process.env.WAN_480P_COST_USD || 0.05)
-);
+const T2V_MODEL =
+  process.env.REPLICATE_T2V_MODEL ||
+  "wan-video/wan-2.2-t2v-fast";
 
-const PROVIDER_COST_720P_USD = Math.max(
-  PROVIDER_COST_480P_USD,
-  Number(process.env.WAN_720P_COST_USD || 0.1)
-);
+const I2V_MODEL =
+  process.env.REPLICATE_I2V_MODEL ||
+  "wan-video/wan-2.2-i2v-fast";
 
-const PAYSTACK_CURRENCY_DEFAULT =
-  String(
-    process.env.PAYSTACK_CURRENCY_DEFAULT || "NGN"
-  ).toUpperCase();
+const STYLE_DEFAULT = "Cinematic";
 
-const RESEND_API_KEY =
-  String(process.env.RESEND_API_KEY || "").trim();
+let providerBlocked = false;
 
-const RESEND_FROM =
-  String(process.env.RESEND_FROM || "").trim();
+let fxCache = {
+  rate: null,
+  updatedAt: 0,
+  source: "none"
+};
 
-const APP_URL =
-  String(
-    process.env.APP_URL ||
-      "https://mamaki-ai-video.onrender.com"
-  ).replace(/\/$/, "");
+const replicate = REPLICATE_TOKEN
+  ? new Replicate({ auth: REPLICATE_TOKEN })
+  : null;
 
-const STARTER_CREDITS = Math.max(
-  0,
-  Number(process.env.STARTER_CREDITS || 100)
-);
-
-const CREDITS_PER_5_SECONDS = Math.max(
-  1,
-  Number(process.env.CREDITS_PER_5_SECONDS || 10)
-);
-
-const replicate =
-  REPLICATE_API_TOKEN
-    ? new Replicate({
-        auth: REPLICATE_API_TOKEN,
-      })
-    : null;
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 100 * 1024 * 1024,
-  },
-});
-
-/*
-|--------------------------------------------------------------------------
-| BODY PARSING
-|--------------------------------------------------------------------------
-*/
+app.disable("x-powered-by");
 
 app.use(
   express.json({
     limit: "10mb",
-    verify: (req, res, buffer) => {
-      req.rawBody = Buffer.from(buffer);
-    },
+    verify(req, res, buf) {
+      req.rawBody = Buffer.from(buf);
+    }
   })
 );
 
 app.use(
   express.urlencoded({
     extended: true,
-    limit: "10mb",
+    limit: "10mb"
   })
 );
 
-/*
-|--------------------------------------------------------------------------
-| BASIC HELPERS
-|--------------------------------------------------------------------------
-*/
+app.use((req, res, next) => {
+  res.setHeader("X-MAMAKI-Version", VERSION);
+  next();
+});
 
-function now() {
-  return new Date().toISOString();
-}
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 100 * 1024 * 1024
+  }
+});
 
-async function ensureDir(dir) {
-  await fs.mkdir(dir, {
-    recursive: true,
-  });
-}
+/* =========================================================
+   STORAGE
+========================================================= */
 
-async function exists(file) {
-  try {
-    await fs.access(file);
-    return true;
-  } catch {
-    return false;
+async function ensureStorage() {
+  await Promise.all([
+    fs.mkdir(DATA, { recursive: true }),
+    fs.mkdir(TMP, { recursive: true }),
+    fs.mkdir(OUTPUTS, { recursive: true }),
+    fs.mkdir(PROJECTS, { recursive: true })
+  ]);
+
+  const defaults = [
+    [USERS_FILE, []],
+    [SESSIONS_FILE, []],
+    [ERRORS_FILE, []],
+    [USAGE_FILE, {}],
+    [SECURITY_FILE, []],
+    [CREDITS_FILE, {}],
+    [FINANCE_FILE, []],
+    [PRICING_FILE, {}],
+    [PAYMENTS_FILE, []],
+    [WITHDRAWALS_FILE, []]
+  ];
+
+  for (const [file, value] of defaults) {
+    try {
+      await fs.access(file);
+    } catch {
+      await writeJSON(file, value);
+    }
   }
 }
 
-async function readJson(file, fallback) {
+async function readJSON(file, fallback) {
   try {
-    const raw = await fs.readFile(
-      file,
-      "utf8"
-    );
-
-    return JSON.parse(raw);
+    const text = await fs.readFile(file, "utf8");
+    if (!text.trim()) return fallback;
+    return JSON.parse(text);
   } catch {
     return fallback;
   }
 }
 
-async function writeJson(file, value) {
-  await ensureDir(
-    path.dirname(file)
-  );
-
-  const temporary =
-    `${file}.${randomUUID()}.tmp`;
-
-  await fs.writeFile(
-    temporary,
-    JSON.stringify(
-      value,
-      null,
-      2
-    ),
-    "utf8"
-  );
-
-  await fs.rename(
-    temporary,
-    file
-  );
+async function writeJSON(file, data) {
+  const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
+  await fs.writeFile(temp, JSON.stringify(data, null, 2), "utf8");
+  await fs.rename(temp, file);
 }
 
-async function readStore(
-  file,
-  fallback
-) {
-  return readJson(
-    file,
-    fallback
-  );
+async function updateJSON(file, fallback, updater) {
+  const data = await readJSON(file, fallback);
+  const result = await updater(data);
+  await writeJSON(file, result === undefined ? data : result);
+  return result === undefined ? data : result;
 }
 
-async function writeStore(
-  file,
-  value
-) {
-  return writeJson(
-    file,
-    value
-  );
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function now() {
+  return new Date().toISOString();
 }
 
-async function ensureStorage() {
-  await Promise.all([
-    ensureDir(TMP),
-    ensureDir(OUTPUTS),
-    ensureDir(PROJECTS),
-    ensureDir(DATA),
-  ]);
-
-  const files = [
-    [
-      USERS_FILE,
-      [],
-    ],
-    [
-      SESSIONS_FILE,
-      {},
-    ],
-    [
-      ERRORS_FILE,
-      [],
-    ],
-    [
-      USAGE_FILE,
-      {},
-    ],
-    [
-      RESET_FILE,
-      {},
-    ],
-    [
-      SECURITY_FILE,
-      [],
-    ],
-    [
-      CREDITS_FILE,
-      {
-        pool: 0,
-        users: {},
-        transactions: [],
-        updatedAt: now(),
-      },
-    ],
-    [
-      FINANCE_FILE,
-      {
-        transactions: [],
-        wallet: {
-          revenue: 0,
-          refunds: 0,
-          costs: 0,
-          profit: 0,
-        },
-      },
-    ],
-    [
-      PRICING_FILE,
-      {
-        fx: null,
-        updatedAt: null,
-      },
-    ],
-    [
-      PAYMENTS_FILE,
-      [],
-    ],
-    [
-      WITHDRAWALS_FILE,
-      [],
-    ],
-  ];
-
-  for (const [file, fallback] of files) {
-    if (!(await exists(file))) {
-      await writeJson(
-        file,
-        fallback
-      );
-    }
-  }
+function clampNumber(value, min, max, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
 }
 
-/*
-|--------------------------------------------------------------------------
-| NORMALIZATION
-|--------------------------------------------------------------------------
-*/
-
-function normalizeEmail(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase();
+function safeEmail(email) {
+  return String(email || "").trim().toLowerCase();
 }
 
-function normalizeCurrency(value) {
-  const currency =
-    String(
-      value ||
-        PAYSTACK_CURRENCY_DEFAULT
-    ).toUpperCase();
-
-  return currency === "USD"
-    ? "USD"
-    : "NGN";
-}
-
-function safeUser(user) {
-  if (!user) {
-    return null;
-  }
+function publicUser(user) {
+  if (!user) return null;
 
   return {
     id: user.id,
+    name: user.name,
     email: user.email,
-    name: user.name || "",
     role: user.role || "user",
-    createdAt: user.createdAt,
-    updatedAt: user.updatedAt,
+    createdAt: user.createdAt
   };
 }
 
-/*
-|--------------------------------------------------------------------------
-| PASSWORDS
-|--------------------------------------------------------------------------
-*/
+function hashPassword(password, salt = randomBytes(16).toString("hex")) {
+  const hash = scryptSync(
+    String(password),
+    salt,
+    64
+  ).toString("hex");
 
-function hashPassword(
-  password,
-  salt = randomBytes(16).toString("hex")
-) {
-  const hash =
-    scryptSync(
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, stored) {
+  try {
+    const [salt, expected] = String(stored).split(":");
+
+    if (!salt || !expected) return false;
+
+    const actual = scryptSync(
       String(password),
       salt,
       64
     ).toString("hex");
 
-  return {
-    salt,
-    hash,
-  };
-}
-
-function verifyPassword(
-  password,
-  storedHash,
-  salt
-) {
-  try {
-    const candidate =
-      scryptSync(
-        String(password),
-        salt,
-        64
-      );
-
-    const stored =
-      Buffer.from(
-        String(storedHash),
-        "hex"
-      );
-
-    return (
-      candidate.length ===
-        stored.length &&
-      timingSafeEqual(
-        candidate,
-        stored
-      )
+    return timingSafeEqual(
+      Buffer.from(actual, "hex"),
+      Buffer.from(expected, "hex")
     );
   } catch {
     return false;
   }
 }
 
-/*
-|--------------------------------------------------------------------------
-| SESSIONS
-|--------------------------------------------------------------------------
-*/
+function createSessionToken(userId) {
+  const payload = `${userId}.${Date.now()}.${randomBytes(24).toString("hex")}`;
 
-function sessionHash(token) {
-  return createHash("sha256")
-    .update(
-      `${SESSION_SECRET}:${token}`
-    )
+  const signature = createHmac(
+    "sha256",
+    SESSION_SECRET
+  )
+    .update(payload)
     .digest("hex");
+
+  return `${payload}.${signature}`;
 }
 
-function generateToken() {
-  return randomBytes(48).toString("hex");
-}
+function validateTokenFormat(token) {
+  if (!token || typeof token !== "string") return false;
 
-async function getUsers() {
-  const data =
-    await readJson(
-      USERS_FILE,
-      []
+  const parts = token.split(".");
+
+  if (parts.length < 4) return false;
+
+  const signature = parts.pop();
+  const payload = parts.join(".");
+
+  const expected = createHmac(
+    "sha256",
+    SESSION_SECRET
+  )
+    .update(payload)
+    .digest("hex");
+
+  try {
+    return timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expected)
     );
-
-  return Array.isArray(data)
-    ? data
-    : [];
-}
-
-async function saveUsers(users) {
-  await writeJson(
-    USERS_FILE,
-    users
-  );
-}
-
-async function findUserByEmail(
-  email
-) {
-  const users =
-    await getUsers();
-
-  const normalized =
-    normalizeEmail(email);
-
-  return (
-    users.find(
-      (user) =>
-        normalizeEmail(
-          user.email
-        ) === normalized
-    ) || null
-  );
-}
-
-async function findUserById(id) {
-  const users =
-    await getUsers();
-
-  return (
-    users.find(
-      (user) =>
-        user.id === id
-    ) || null
-  );
-}
-
-async function ensureAdminAccount() {
-  if (
-    !ADMIN_EMAIL ||
-    !ADMIN_PASSWORD
-  ) {
-    return;
-  }
-
-  const users =
-    await getUsers();
-
-  let user =
-    users.find(
-      (item) =>
-        normalizeEmail(
-          item.email
-        ) === ADMIN_EMAIL
-    );
-
-  if (!user) {
-    const credentials =
-      hashPassword(
-        ADMIN_PASSWORD
-      );
-
-    user = {
-      id: randomUUID(),
-      email: ADMIN_EMAIL,
-      name:
-        "MAMAKI Administrator",
-      role: "admin",
-      passwordHash:
-        credentials.hash,
-      passwordSalt:
-        credentials.salt,
-      createdAt: now(),
-      updatedAt: now(),
-    };
-
-    users.push(user);
-
-    await saveUsers(
-      users
-    );
-
-    return;
-  }
-
-  let changed = false;
-
-  if (user.role !== "admin") {
-    user.role = "admin";
-    changed = true;
-  }
-
-  if (
-    ADMIN_PASSWORD &&
-    !verifyPassword(
-      ADMIN_PASSWORD,
-      user.passwordHash,
-      user.passwordSalt
-    )
-  ) {
-    const credentials =
-      hashPassword(
-        ADMIN_PASSWORD
-      );
-
-    user.passwordHash =
-      credentials.hash;
-
-    user.passwordSalt =
-      credentials.salt;
-
-    changed = true;
-  }
-
-  if (changed) {
-    user.updatedAt = now();
-
-    await saveUsers(
-      users
-    );
+  } catch {
+    return false;
   }
 }
 
-async function createSession(user) {
-  const sessions =
-    await readJson(
-      SESSIONS_FILE,
-      {}
-    );
+async function getSessionUser(token) {
+  if (!validateTokenFormat(token)) return null;
 
-  const token =
-    generateToken();
-
-  const key =
-    sessionHash(token);
-
-  sessions[key] = {
-    userId: user.id,
-    createdAt: now(),
-    expiresAt:
-      Date.now() +
-      30 *
-        24 *
-        60 *
-        60 *
-        1000,
-  };
-
-  await writeJson(
-    SESSIONS_FILE,
-    sessions
+  const sessions = await readJSON(SESSIONS_FILE, []);
+  const session = sessions.find(
+    x =>
+      x.token === token &&
+      Number(x.expiresAt) > Date.now()
   );
 
-  return token;
-}
+  if (!session) return null;
 
-async function destroySession(
-  token
-) {
-  if (!token) {
-    return;
-  }
+  const users = await readJSON(USERS_FILE, []);
 
-  const sessions =
-    await readJson(
-      SESSIONS_FILE,
-      {}
-    );
-
-  delete sessions[
-    sessionHash(token)
-  ];
-
-  await writeJson(
-    SESSIONS_FILE,
-    sessions
-  );
+  return users.find(
+    u => u.id === session.userId
+  ) || null;
 }
 
 function getBearer(req) {
-  const authorization =
-    String(
-      req.headers.authorization ||
-        ""
-    );
+  const header = String(
+    req.headers.authorization || ""
+  );
 
-  if (
-    authorization.startsWith(
-      "Bearer "
-    )
-  ) {
-    return authorization
-      .slice(7)
-      .trim();
+  if (header.toLowerCase().startsWith("bearer ")) {
+    return header.slice(7).trim();
   }
 
-  return String(
-    req.headers[
-      "x-session-token"
-    ] || ""
-  ).trim();
-}
-
-async function getCurrentUser(req) {
-  const token =
-    getBearer(req);
-
-  if (!token) {
-    return null;
-  }
-
-  const sessions =
-    await readJson(
-      SESSIONS_FILE,
-      {}
-    );
-
-  const session =
-    sessions[
-      sessionHash(token)
-    ];
-
-  if (!session) {
-    return null;
-  }
-
-  if (
-    !session.expiresAt ||
-    Number(session.expiresAt) <
-      Date.now()
-  ) {
-    delete sessions[
-      sessionHash(token)
-    ];
-
-    await writeJson(
-      SESSIONS_FILE,
-      sessions
-    );
-
-    return null;
-  }
-
-  return findUserById(
-    session.userId
+  return (
+    req.headers["x-session-token"] ||
+    req.body?.token ||
+    req.query?.token ||
+    null
   );
 }
 
-async function requireUser(
-  req,
-  res,
-  next
-) {
-  try {
-    const user =
-      await getCurrentUser(
-        req
-      );
+async function requireUser(req, res, next) {
+  const user = await getSessionUser(getBearer(req));
 
-    if (!user) {
-      return res.status(401).json({
-        ok: false,
-        error:
-          "Authentication required.",
-      });
-    }
-
-    req.user = user;
-
-    next();
-  } catch (error) {
-    next(error);
+  if (!user) {
+    return res.status(401).json({
+      ok: false,
+      error: "Authentication required."
+    });
   }
+
+  req.user = user;
+  next();
 }
 
-async function requireAdmin(
-  req,
-  res,
-  next
-) {
-  try {
-    const user =
-      await getCurrentUser(
-        req
-      );
+async function requireAdmin(req, res, next) {
+  const user = await getSessionUser(getBearer(req));
 
-    if (!user) {
-      return res.status(401).json({
-        ok: false,
-        error:
-          "Authentication required.",
-      });
-    }
-
-    if (
-      user.role !== "admin"
-    ) {
-      return res.status(403).json({
-        ok: false,
-        error:
-          "Administrator access required.",
-      });
-    }
-
-    req.user = user;
-
-    next();
-  } catch (error) {
-    next(error);
+  if (!user || user.role !== "admin") {
+    return res.status(403).json({
+      ok: false,
+      error: "Administrator access required."
+    });
   }
+
+  req.user = user;
+  next();
 }
 
-/*
-|--------------------------------------------------------------------------
-| SECURITY / ERRORS
-|--------------------------------------------------------------------------
-*/
+async function recordSecurity(action, user, reference = "", meta = {}) {
+  const rows = await readJSON(SECURITY_FILE, []);
 
-async function addSecurityEvent(
-  event
-) {
-  const events =
-    await readJson(
-      SECURITY_FILE,
-      []
-    );
-
-  events.unshift({
+  rows.unshift({
     id: randomUUID(),
-    createdAt: now(),
-    ...event,
+    action,
+    email: user?.email || meta.email || "",
+    userId: user?.id || meta.userId || "",
+    reference,
+    date: now(),
+    ip: meta.ip || "",
+    meta
   });
 
-  await writeJson(
+  await writeJSON(
     SECURITY_FILE,
-    events.slice(
-      0,
-      1000
-    )
+    rows.slice(0, 1000)
   );
 }
 
-async function recordError(
-  error,
-  req = null
-) {
-  const errors =
-    await readJson(
-      ERRORS_FILE,
-      []
-    );
+async function recordError(error, req = null) {
+  const rows = await readJSON(ERRORS_FILE, []);
 
-  errors.unshift({
+  rows.unshift({
     id: randomUUID(),
-    message:
-      String(
-        error?.message ||
-          error ||
-          "Unknown error"
-      ),
-    stack:
-      String(
-        error?.stack || ""
-      ),
-    path:
-      req?.originalUrl ||
-      "",
-    method:
-      req?.method ||
-      "",
-    createdAt: now(),
+    message: String(error?.message || error),
+    path: req?.path || "",
+    method: req?.method || "",
+    date: now()
   });
 
-  await writeJson(
+  await writeJSON(
     ERRORS_FILE,
-    errors.slice(
-      0,
-      500
-    )
+    rows.slice(0, 500)
   );
 }
 
-/*
-|--------------------------------------------------------------------------
-| USAGE
-|--------------------------------------------------------------------------
-*/
-
-async function getUsage() {
-  const value =
-    await readJson(
-      USAGE_FILE,
-      {}
-    );
-
-  return value &&
-    typeof value ===
-      "object" &&
-    !Array.isArray(value)
-    ? value
-    : {};
-}
-
-async function updateUsage(
-  userId,
-  changes = {}
-) {
-  const usage =
-    await getUsage();
+async function getUsage(userId) {
+  const usage = await readJSON(USAGE_FILE, {});
 
   if (!usage[userId]) {
     usage[userId] = {
@@ -893,982 +408,1239 @@ async function updateUsage(
       aiSeconds: 0,
       studioJobs: 0,
       narrationJobs: 0,
-      updatedAt: now(),
+      updatedAt: now()
     };
+
+    await writeJSON(USAGE_FILE, usage);
   }
-
-  for (
-    const [
-      key,
-      value,
-    ] of Object.entries(
-      changes
-    )
-  ) {
-    usage[userId][key] =
-      Number(
-        usage[userId][key] ||
-          0
-      ) +
-      Number(value || 0);
-  }
-
-  usage[userId].updatedAt =
-    now();
-
-  await writeJson(
-    USAGE_FILE,
-    usage
-  );
 
   return usage[userId];
 }
 
-/*
-|--------------------------------------------------------------------------
-| MAMAKI CREDITS
-|--------------------------------------------------------------------------
-*/
+async function addUsage(userId, field, amount = 1) {
+  const usage = await readJSON(USAGE_FILE, {});
 
-async function readCredits() {
-  const data =
-    await readJson(
-      CREDITS_FILE,
-      {}
-    );
-
-  return {
-    pool:
-      Number(
-        data?.pool || 0
-      ),
-    users:
-      data &&
-      typeof data.users ===
-        "object" &&
-      data.users
-        ? data.users
-        : {},
-    transactions:
-      Array.isArray(
-        data?.transactions
-      )
-        ? data.transactions
-        : [],
-    updatedAt:
-      data?.updatedAt ||
-      now(),
-  };
-}
-
-async function writeCredits(
-  data
-) {
-  data.updatedAt = now();
-
-  await writeJson(
-    CREDITS_FILE,
-    data
-  );
-}
-
-async function getUserCredits(
-  userId
-) {
-  const data =
-    await readCredits();
-
-  if (
-    !Object.prototype.hasOwnProperty.call(
-      data.users,
-      userId
-    )
-  ) {
-    data.users[userId] =
-      STARTER_CREDITS;
-
-    data.transactions.push({
-      id: randomUUID(),
-      type: "ISSUE",
-      source: "STARTER",
-      userId,
-      amount:
-        STARTER_CREDITS,
-      createdAt: now(),
-    });
-
-    await writeCredits(
-      data
-    );
+  if (!usage[userId]) {
+    usage[userId] = {
+      aiGenerations: 0,
+      aiSeconds: 0,
+      studioJobs: 0,
+      narrationJobs: 0,
+      updatedAt: now()
+    };
   }
 
-  return Number(
-    data.users[userId] || 0
-  );
+  usage[userId][field] =
+    Number(usage[userId][field] || 0) + Number(amount);
+
+  usage[userId].updatedAt = now();
+
+  await writeJSON(USAGE_FILE, usage);
 }
 
-async function addUserCredits(
-  userId,
-  amount,
-  source = "ADMIN"
-) {
-  const n =
-    Math.floor(
-      Number(amount || 0)
-    );
+/* =========================================================
+   FX + MAMAKI SELLING RATE
+========================================================= */
 
-  if (
-    !Number.isFinite(n) ||
-    n <= 0
-  ) {
-    throw new Error(
-      "Credit amount must be greater than zero."
-    );
-  }
+async function getLiveFX() {
+  const fresh =
+    fxCache.rate &&
+    Date.now() - fxCache.updatedAt < FX_CACHE_MS;
 
-  const data =
-    await readCredits();
-
-  data.users[userId] =
-    Number(
-      data.users[userId] || 0
-    ) + n;
-
-  data.transactions.push({
-    id: randomUUID(),
-    type: "ISSUE",
-    source,
-    userId,
-    amount: n,
-    createdAt: now(),
-  });
-
-  await writeCredits(
-    data
-  );
-
-  return data.users[userId];
-}
-
-async function consumeUserCredits(
-  userId,
-  seconds
-) {
-  const cost =
-    Math.max(
-      1,
-      Math.ceil(
-        Number(seconds || 5) /
-          5
-      ) *
-        CREDITS_PER_5_SECONDS
-    );
-
-  const data =
-    await readCredits();
-
-  if (
-    !Object.prototype.hasOwnProperty.call(
-      data.users,
-      userId
-    )
-  ) {
-    data.users[userId] =
-      STARTER_CREDITS;
-  }
-
-  const balance =
-    Number(
-      data.users[userId] || 0
-    );
-
-  if (
-    balance < cost
-  ) {
-    const error =
-      new Error(
-        `Insufficient MAMAKI credits. Required ${cost}, available ${balance}.`
-      );
-
-    error.code =
-      "MAMAKI_CREDITS_INSUFFICIENT";
-
-    error.requiredCredits =
-      cost;
-
-    error.availableCredits =
-      balance;
-
-    throw error;
-  }
-
-  data.users[userId] =
-    balance - cost;
-
-  data.transactions.push({
-    id: randomUUID(),
-    type: "CONSUME",
-    source:
-      "AI_GENERATION",
-    userId,
-    amount: -cost,
-    seconds:
-      Number(seconds || 0),
-    createdAt: now(),
-  });
-
-  await writeCredits(
-    data
-  );
-
-  return {
-    cost,
-    balance:
-      data.users[userId],
-  };
-}
-
-async function refundUserCredits(
-  userId,
-  amount
-) {
-  const n =
-    Math.max(
-      0,
-      Number(amount || 0)
-    );
-
-  if (!n) {
-    return;
-  }
-
-  const data =
-    await readCredits();
-
-  data.users[userId] =
-    Number(
-      data.users[userId] || 0
-    ) + n;
-
-  data.transactions.push({
-    id: randomUUID(),
-    type: "REFUND",
-    source:
-      "AI_GENERATION_FAILED",
-    userId,
-    amount: n,
-    createdAt: now(),
-  });
-
-  await writeCredits(
-    data
-  );
-}
-
-/*
-|--------------------------------------------------------------------------
-| FX + SMART PRICING
-|--------------------------------------------------------------------------
-*/
-
-async function getFxRates() {
-  const current =
-    Date.now();
-
-  const store =
-    await readStore(
-      PRICING_FILE,
-      {
-        fx: null,
-        updatedAt: null,
-      }
-    );
-
-  if (
-    store.fx &&
-    store.fx.rates &&
-    store.fx.updatedAt &&
-    current -
-      Date.parse(
-        store.fx.updatedAt
-      ) <
-      30 *
-        60 *
-        1000
-  ) {
-    return store.fx;
+  if (fresh) {
+    return fxCache;
   }
 
   try {
-    const response =
-      await fetch(
-        FX_API_URL,
-        {
-          headers: {
-            Accept:
-              "application/json",
-          },
-        }
-      );
+    const response = await fetch(FX_API_URL, {
+      signal: AbortSignal.timeout(8000)
+    });
 
     if (!response.ok) {
-      throw new Error(
-        `FX provider HTTP ${response.status}`
-      );
+      throw new Error(`FX HTTP ${response.status}`);
     }
 
-    const data =
-      await response.json();
+    const data = await response.json();
 
-    const usdNgn =
-      Number(
-        data?.rates?.NGN || 0
-      );
-
-    if (
-      !Number.isFinite(
-        usdNgn
-      ) ||
-      usdNgn <= 0
-    ) {
-      throw new Error(
-        "FX provider returned no NGN rate."
-      );
-    }
-
-    const fx = {
-      base: "USD",
-      rates: {
-        USD: 1,
-        NGN: usdNgn,
-      },
-      source:
-        FX_API_URL,
-      updatedAt: now(),
-      live: true,
-    };
-
-    store.fx = fx;
-
-    await writeStore(
-      PRICING_FILE,
-      store
+    const rate = Number(
+      data?.rates?.NGN
     );
 
-    return fx;
+    if (!Number.isFinite(rate) || rate <= 0) {
+      throw new Error("Invalid NGN FX rate.");
+    }
+
+    fxCache = {
+      rate,
+      updatedAt: Date.now(),
+      source: "live"
+    };
+
+    return fxCache;
   } catch (error) {
-    const fx = {
-      base: "USD",
-      rates: {
-        USD: 1,
-        NGN:
-          DEFAULT_USD_NGN_RATE,
-      },
-      source:
-        "configured fallback",
-      updatedAt: now(),
-      live: false,
-      error:
-        String(
-          error?.message ||
-            error
-        ),
+    await recordError(error);
+
+    fxCache = {
+      rate: DEFAULT_USD_NGN_RATE,
+      updatedAt: Date.now(),
+      source: "fallback"
     };
 
-    store.fx = fx;
-
-    await writeStore(
-      PRICING_FILE,
-      store
-    );
-
-    return fx;
+    return fxCache;
   }
 }
 
-function providerCostForCredits(
-  credits,
-  quality = "Standard HD"
-) {
-  const scenes =
-    Math.max(
-      1,
-      Math.ceil(
-        Number(credits || 0) /
-          CREDITS_PER_5_SECONDS
-      )
-    );
+function mamakiSellingRate(fxRate) {
+  return Number(fxRate) + MAMAKI_MARKUP_NGN;
+}
 
-  const q =
-    String(
-      quality ||
-        "Standard HD"
-    ).toLowerCase();
+function roundPrice(value) {
+  const n = Math.max(0, Number(value) || 0);
 
-  const providerCost =
-    q.includes("high") ||
-    q.includes("cinematic")
-      ? PROVIDER_COST_720P_USD
-      : PROVIDER_COST_480P_USD;
+  // Professional customer-facing rounding.
+  // Examples: 1547 -> 1550, 1549 -> 1550.
+  return Math.ceil(n / 50) * 50;
+}
+
+function creditsToUSD(credits) {
+  return Number(credits) / 100;
+}
+
+function packagePriceNGN(credits, sellingRate) {
+  return roundPrice(
+    creditsToUSD(credits) * sellingRate
+  );
+}
+
+const CREDIT_PACKAGES = [
+  { credits: 100, label: "100 credits" },
+  { credits: 500, label: "500 credits" },
+  { credits: 1000, label: "1,000 credits" },
+  { credits: 2500, label: "2,500 credits" },
+  { credits: 5000, label: "5,000 credits" }
+];
+
+/* =========================================================
+   VIDEO CREDIT CALCULATOR
+========================================================= */
+
+// 100 credits = 1 USD-equivalent MAMAKI unit.
+// 5 seconds = 10 credits.
+// Therefore:
+// 5 sec = 10
+// 10 sec = 20
+// 30 sec = 60
+// 60 sec = 120
+// 2 min = 240
+// etc.
+
+function calculateVideoCredits(seconds, quality = "Standard HD") {
+  const duration = clampNumber(
+    seconds,
+    5,
+    7200,
+    5
+  );
+
+  const qualityMultiplier = {
+    "Standard HD": 1,
+    "High": 1.5,
+    "Cinematic": 2
+  };
+
+  const multiplier =
+    qualityMultiplier[quality] || 1;
+
+  const base =
+    Math.ceil(duration / 5) * 10;
+
+  return Math.max(
+    10,
+    Math.ceil(base * multiplier)
+  );
+}
+
+function calculateVideoCost(seconds, quality) {
+  const credits = calculateVideoCredits(
+    seconds,
+    quality
+  );
 
   return {
-    scenes,
-    providerCostUsd:
-      scenes *
-      providerCost,
+    credits,
+    usdEquivalent: creditsToUSD(credits)
   };
 }
 
-async function calculateCreditPrice(
-  credits,
-  currency = PAYSTACK_CURRENCY_DEFAULT,
-  quality = "Standard HD"
+/* =========================================================
+   CREDIT STORAGE
+========================================================= */
+
+async function getCreditRecord(userId) {
+  const credits = await readJSON(CREDITS_FILE, {});
+
+  if (!credits[userId]) {
+    credits[userId] = {
+      balance: STARTER_CREDITS,
+      issued: STARTER_CREDITS,
+      consumed: 0,
+      refunded: 0,
+      purchased: 0,
+      updatedAt: now()
+    };
+
+    await writeJSON(CREDITS_FILE, credits);
+  }
+
+  return credits[userId];
+}
+
+async function changeCredits(
+  userId,
+  amount,
+  reason = "adjustment",
+  reference = ""
 ) {
-  const c =
+  const credits = await readJSON(CREDITS_FILE, {});
+
+  if (!credits[userId]) {
+    credits[userId] = {
+      balance: STARTER_CREDITS,
+      issued: STARTER_CREDITS,
+      consumed: 0,
+      refunded: 0,
+      purchased: 0,
+      updatedAt: now()
+    };
+  }
+
+  const n = Number(amount);
+
+  credits[userId].balance =
     Math.max(
-      1,
-      Math.floor(
-        Number(credits || 0)
+      0,
+      Number(credits[userId].balance || 0) + n
+    );
+
+  if (n > 0) {
+    credits[userId].issued =
+      Number(credits[userId].issued || 0) + n;
+
+    if (reason === "purchase") {
+      credits[userId].purchased =
+        Number(credits[userId].purchased || 0) + n;
+    }
+
+    if (reason === "refund") {
+      credits[userId].refunded =
+        Number(credits[userId].refunded || 0) + n;
+    }
+  }
+
+  if (n < 0) {
+    credits[userId].consumed =
+      Number(credits[userId].consumed || 0) + Math.abs(n);
+  }
+
+  credits[userId].updatedAt = now();
+
+  await writeJSON(
+    CREDITS_FILE,
+    credits
+  );
+
+  return credits[userId];
+}
+
+/* =========================================================
+   PROJECT STORAGE
+========================================================= */
+
+async function userProjectDir(userId) {
+  const dir = path.join(
+    PROJECTS,
+    String(userId)
+  );
+
+  await fs.mkdir(dir, { recursive: true });
+
+  return dir;
+}
+
+async function readUserProjects(userId) {
+  const dir = await userProjectDir(userId);
+
+  const files = await fs.readdir(
+    dir,
+    { withFileTypes: true }
+  );
+
+  const projects = [];
+
+  for (const entry of files) {
+    if (!entry.isFile()) continue;
+
+    if (!entry.name.endsWith(".json")) continue;
+
+    try {
+      const item = await readJSON(
+        path.join(dir, entry.name),
+        null
+      );
+
+      if (item) projects.push(item);
+    } catch {}
+  }
+
+  projects.sort(
+    (a, b) =>
+      new Date(b.createdAt || 0) -
+      new Date(a.createdAt || 0)
+  );
+
+  return projects;
+}
+
+async function saveProject(userId, project) {
+  const dir = await userProjectDir(userId);
+
+  await writeJSON(
+    path.join(dir, `${project.id}.json`),
+    project
+  );
+
+  return project;
+}
+
+/* =========================================================
+   HEALTH
+========================================================= */
+
+app.get("/health", async (req, res) => {
+  let ffmpegOK = false;
+
+  try {
+    ffmpegOK = Boolean(
+      ffmpegPath &&
+      await fs.access(ffmpegPath).then(() => true)
+    );
+  } catch {}
+
+  res.json({
+    ok: true,
+    status: "healthy",
+    service: "MAMAKI AI Video Creative Studio",
+    version: VERSION,
+    uptime: process.uptime(),
+    timestamp: now(),
+    checks: {
+      server: true,
+      ffmpeg: ffmpegOK,
+      replicateConfigured: Boolean(REPLICATE_TOKEN),
+      adminConfigured: Boolean(ADMIN_EMAIL && ADMIN_PASSWORD),
+      recoveryConfigured: false,
+      paystackConfigured: Boolean(PAYSTACK_SECRET_KEY)
+    }
+  });
+});
+
+/* =========================================================
+   AUTH
+========================================================= */
+
+app.post("/api/auth/register", async (req, res) => {
+  try {
+    const name =
+      String(req.body?.name || "").trim();
+
+    const email =
+      safeEmail(req.body?.email);
+
+    const password =
+      String(req.body?.password || "");
+
+    if (!name || !email || password.length < 6) {
+      return res.status(400).json({
+        ok: false,
+        error: "Name, valid email and password of at least 6 characters are required."
+      });
+    }
+
+    const users =
+      await readJSON(USERS_FILE, []);
+
+    if (
+      users.some(
+        u => safeEmail(u.email) === email
+      )
+    ) {
+      return res.status(409).json({
+        ok: false,
+        error: "An account with this email already exists."
+      });
+    }
+
+    const user = {
+      id: randomUUID(),
+      name,
+      email,
+      passwordHash: hashPassword(password),
+      role:
+        email === ADMIN_EMAIL
+          ? "admin"
+          : "user",
+      createdAt: now()
+    };
+
+    users.push(user);
+
+    await writeJSON(
+      USERS_FILE,
+      users
+    );
+
+    await getCreditRecord(user.id);
+
+    const token =
+      createSessionToken(user.id);
+
+    const sessions =
+      await readJSON(SESSIONS_FILE, []);
+
+    sessions.push({
+      token,
+      userId: user.id,
+      createdAt: Date.now(),
+      expiresAt:
+        Date.now() +
+        30 * 24 * 60 * 60 * 1000
+    });
+
+    await writeJSON(
+      SESSIONS_FILE,
+      sessions.slice(-2000)
+    );
+
+    await recordSecurity(
+      "REGISTER_SUCCESS",
+      user
+    );
+
+    res.json({
+      ok: true,
+      token,
+      user: publicUser(user),
+      credits: STARTER_CREDITS
+    });
+  } catch (error) {
+    await recordError(error, req);
+
+    res.status(500).json({
+      ok: false,
+      error: "Registration failed."
+    });
+  }
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const email =
+      safeEmail(req.body?.email);
+
+    const password =
+      String(req.body?.password || "");
+
+    const users =
+      await readJSON(USERS_FILE, []);
+
+    const user =
+      users.find(
+        u => safeEmail(u.email) === email
+      );
+
+    if (!user) {
+      await recordSecurity(
+        "LOGIN_FAILED",
+        null,
+        "",
+        { email }
+      );
+
+      return res.status(401).json({
+        ok: false,
+        error: "Invalid credentials."
+      });
+    }
+
+    if (
+      !verifyPassword(
+        password,
+        user.passwordHash
+      )
+    ) {
+      await recordSecurity(
+        "LOGIN_FAILED",
+        user
+      );
+
+      return res.status(401).json({
+        ok: false,
+        error: "Invalid credentials."
+      });
+    }
+
+    // Automatically preserve the owner administrator account.
+    if (
+      safeEmail(user.email) === ADMIN_EMAIL &&
+      user.role !== "admin"
+    ) {
+      user.role = "admin";
+
+      const index =
+        users.findIndex(
+          u => u.id === user.id
+        );
+
+      if (index >= 0) {
+        users[index] = user;
+        await writeJSON(
+          USERS_FILE,
+          users
+        );
+      }
+    }
+
+    const token =
+      createSessionToken(user.id);
+
+    const sessions =
+      await readJSON(SESSIONS_FILE, []);
+
+    sessions.push({
+      token,
+      userId: user.id,
+      createdAt: Date.now(),
+      expiresAt:
+        Date.now() +
+        30 * 24 * 60 * 60 * 1000
+    });
+
+    await writeJSON(
+      SESSIONS_FILE,
+      sessions.slice(-2000)
+    );
+
+    await getCreditRecord(user.id);
+
+    await recordSecurity(
+      "LOGIN_SUCCESS",
+      user
+    );
+
+    res.json({
+      ok: true,
+      token,
+      user: publicUser(user),
+      credits:
+        (await getCreditRecord(user.id)).balance
+    });
+  } catch (error) {
+    await recordError(error, req);
+
+    res.status(500).json({
+      ok: false,
+      error: "Login failed."
+    });
+  }
+});
+
+app.post("/api/auth/logout", async (req, res) => {
+  const token = getBearer(req);
+
+  if (token) {
+    const sessions =
+      await readJSON(SESSIONS_FILE, []);
+
+    await writeJSON(
+      SESSIONS_FILE,
+      sessions.filter(
+        s => s.token !== token
       )
     );
+  }
 
-  const cur =
-    normalizeCurrency(
-      currency
+  res.json({ ok: true });
+});
+
+app.get("/api/auth/me", requireUser, async (req, res) => {
+  const credits =
+    await getCreditRecord(req.user.id);
+
+  res.json({
+    ok: true,
+    user: publicUser(req.user),
+    credits: credits.balance
+  });
+});
+
+/* =========================================================
+   CREDIT API
+========================================================= */
+
+app.get("/api/credits", requireUser, async (req, res) => {
+  const record =
+    await getCreditRecord(req.user.id);
+
+  res.json({
+    ok: true,
+    credits: {
+      available: Number(record.balance || 0),
+      remaining: Number(record.balance || 0),
+      issued: Number(record.issued || 0),
+      consumed: Number(record.consumed || 0),
+      refunded: Number(record.refunded || 0),
+      purchased: Number(record.purchased || 0)
+    }
+  });
+});
+
+app.get("/api/video/cost", requireUser, async (req, res) => {
+  const seconds =
+    clampNumber(
+      req.query.seconds,
+      5,
+      7200,
+      5
     );
 
-  const fx =
-    await getFxRates();
+  const quality =
+    String(
+      req.query.quality ||
+      "Standard HD"
+    );
 
-  const base =
-    providerCostForCredits(
-      c,
+  const cost =
+    calculateVideoCost(
+      seconds,
       quality
     );
 
-  const denominator =
-    Math.max(
-      0.05,
-      1 -
-        TARGET_MARGIN -
-        PAYMENT_FEE_BUFFER -
-        FX_BUFFER
+  const balance =
+    (await getCreditRecord(
+      req.user.id
+    )).balance;
+
+  res.json({
+    ok: true,
+    seconds,
+    quality,
+    requiredCredits: cost.credits,
+    availableCredits: balance,
+    sufficient: balance >= cost.credits,
+    // Customer does not need FX details here.
+    message:
+      balance >= cost.credits
+        ? `This video costs ${cost.credits} MAMAKI credits.`
+        : `You need ${cost.credits} MAMAKI credits to generate this video.`
+  });
+});
+
+/* =========================================================
+   BILLING PRICING
+========================================================= */
+
+app.get("/api/billing/pricing", requireUser, async (req, res) => {
+  const fx =
+    await getLiveFX();
+
+  const sellingRate =
+    mamakiSellingRate(fx.rate);
+
+  const packages =
+    CREDIT_PACKAGES.map(pkg => ({
+      credits: pkg.credits,
+      label: pkg.label,
+      currency: "NGN",
+      amount: packagePriceNGN(
+        pkg.credits,
+        sellingRate
+      ),
+      amountNGN: packagePriceNGN(
+        pkg.credits,
+        sellingRate
+      )
+    }));
+
+  // Do NOT expose the FX rate or markup to customers.
+  res.json({
+    ok: true,
+    currency: "NGN",
+    packages,
+    paymentConfigured:
+      Boolean(PAYSTACK_SECRET_KEY),
+    paymentMessage:
+      PAYSTACK_SECRET_KEY
+        ? "Secure payment available."
+        : "Online payment is temporarily unavailable."
+  });
+});
+
+/* =========================================================
+   PAYSTACK
+========================================================= */
+
+async function paystackRequest(
+  endpoint,
+  options = {}
+) {
+  if (!PAYSTACK_SECRET_KEY) {
+    throw new Error(
+      "Paystack is not configured."
+    );
+  }
+
+  const response =
+    await fetch(
+      `https://api.paystack.co${endpoint}`,
+      {
+        ...options,
+        headers: {
+          Authorization:
+            `Bearer ${PAYSTACK_SECRET_KEY}`,
+          "Content-Type":
+            "application/json",
+          ...(options.headers || {})
+        }
+      }
     );
 
-  const customerUsd =
-    base.providerCostUsd /
-    denominator;
+  const data =
+    await response.json();
 
-  const amount =
-    cur === "NGN"
-      ? customerUsd *
-        Number(
-          fx.rates.NGN ||
-            DEFAULT_USD_NGN_RATE
-        )
-      : customerUsd;
+  if (!response.ok || !data.status) {
+    throw new Error(
+      data?.message ||
+      `Paystack request failed (${response.status})`
+    );
+  }
 
-  const rounded =
-    cur === "NGN"
-      ? Math.max(
-          100,
-          Math.ceil(
-            amount / 50
-          ) * 50
-        )
-      : Math.max(
-          1,
-          Math.ceil(
-            amount * 100
-          ) / 100
+  return data;
+}
+
+app.post(
+  "/api/billing/paystack/initialize",
+  requireUser,
+  async (req, res) => {
+    try {
+      if (!PAYSTACK_SECRET_KEY) {
+        return res.status(503).json({
+          ok: false,
+          configured: false,
+          error:
+            "Online payment is temporarily unavailable. Paystack has not been connected yet."
+        });
+      }
+
+      const credits =
+        Number(req.body?.credits);
+
+      const pkg =
+        CREDIT_PACKAGES.find(
+          x => x.credits === credits
         );
 
-  return {
-    credits: c,
-    currency: cur,
-    amount: rounded,
-    amountSubunit:
-      Math.round(
-        rounded * 100
-      ),
-    usdPrice:
-      Number(
-        customerUsd.toFixed(
-          4
-        )
-      ),
-    providerCostUsd:
-      Number(
-        base.providerCostUsd.toFixed(
-          4
-        )
-      ),
-    providerScenes:
-      base.scenes,
-    fxRate:
-      cur === "NGN"
-        ? Number(
-            fx.rates.NGN ||
-              DEFAULT_USD_NGN_RATE
-          )
-        : 1,
-    fxLive:
-      Boolean(fx.live),
-    fxUpdatedAt:
-      fx.updatedAt,
-    marginTarget:
-      TARGET_MARGIN,
-    paymentFeeBuffer:
-      PAYMENT_FEE_BUFFER,
-    fxBuffer:
-      FX_BUFFER,
-  };
-}
+      if (!pkg) {
+        return res.status(400).json({
+          ok: false,
+          error: "Invalid credit package."
+        });
+      }
 
-/*
-|--------------------------------------------------------------------------
-| FINANCE
-|--------------------------------------------------------------------------
-*/
+      const fx =
+        await getLiveFX();
 
-async function addFinanceTransaction(
-  transaction
+      const sellingRate =
+        mamakiSellingRate(fx.rate);
+
+      const amountNGN =
+        packagePriceNGN(
+          credits,
+          sellingRate
+        );
+
+      const reference =
+        `MAMAKI-${Date.now()}-${randomBytes(5).toString("hex")}`;
+
+      const payment = {
+        id: randomUUID(),
+        reference,
+        userId: req.user.id,
+        email: req.user.email,
+        credits,
+        amount: amountNGN,
+        currency: "NGN",
+        status: "pending",
+        createdAt: now(),
+        paidAt: null,
+        fxSource: fx.source,
+        internalRate: sellingRate
+      };
+
+      const payments =
+        await readJSON(
+          PAYMENTS_FILE,
+          []
+        );
+
+      payments.unshift(payment);
+
+      await writeJSON(
+        PAYMENTS_FILE,
+        payments.slice(0, 5000)
+      );
+
+      const callbackUrl =
+        process.env.PAYSTACK_CALLBACK_URL ||
+        `${req.protocol}://${req.get("host")}/api/billing/paystack/callback`;
+
+      const result =
+        await paystackRequest(
+          "/transaction/initialize",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              email: req.user.email,
+              amount: Math.round(
+                amountNGN * 100
+              ),
+              currency: "NGN",
+              reference,
+              callback_url: callbackUrl,
+              metadata: {
+                mamakiUserId:
+                  req.user.id,
+                credits,
+                mamakiPaymentId:
+                  payment.id
+              }
+            })
+          }
+        );
+
+      res.json({
+        ok: true,
+        authorization_url:
+          result.data.authorization_url,
+        access_code:
+          result.data.access_code,
+        reference
+      });
+    } catch (error) {
+      await recordError(error, req);
+
+      res.status(500).json({
+        ok: false,
+        error:
+          error.message ||
+          "Unable to initialize payment."
+      });
+    }
+  }
+);
+
+async function fulfillPayment(
+  reference
 ) {
-  const data =
-    await readJson(
-      FINANCE_FILE,
-      {
-        transactions: [],
-        wallet: {
-          revenue: 0,
-          refunds: 0,
-          costs: 0,
-          profit: 0,
-        },
-      }
-    );
-
-  if (
-    !Array.isArray(
-      data.transactions
-    )
-  ) {
-    data.transactions =
-      [];
-  }
-
-  if (!data.wallet) {
-    data.wallet = {
-      revenue: 0,
-      refunds: 0,
-      costs: 0,
-      profit: 0,
-    };
-  }
-
-  const item = {
-    id: randomUUID(),
-    createdAt: now(),
-    ...transaction,
-  };
-
-  data.transactions.unshift(
-    item
-  );
-
-  if (
-    item.type ===
-    "REVENUE"
-  ) {
-    data.wallet.revenue +=
-      Number(
-        item.amount || 0
-      );
-  }
-
-  if (
-    item.type ===
-    "REFUND"
-  ) {
-    data.wallet.refunds +=
-      Number(
-        item.amount || 0
-      );
-  }
-
-  if (
-    item.type ===
-    "COST"
-  ) {
-    data.wallet.costs +=
-      Number(
-        item.amount || 0
-      );
-  }
-
-  data.wallet.profit =
-    Number(
-      data.wallet.revenue || 0
-    ) -
-    Number(
-      data.wallet.refunds || 0
-    ) -
-    Number(
-      data.wallet.costs || 0
-    );
-
-  await writeJson(
-    FINANCE_FILE,
-    data
-  );
-
-  return item;
-}
-
-async function getFinance() {
-  const data =
-    await readJson(
-      FINANCE_FILE,
-      {
-        transactions: [],
-        wallet: {
-          revenue: 0,
-          refunds: 0,
-          costs: 0,
-          profit: 0,
-        },
-      }
-    );
-
-  return {
-    transactions:
-      Array.isArray(
-        data.transactions
-      )
-        ? data.transactions
-        : [],
-    wallet: {
-      revenue:
-        Number(
-          data?.wallet?.revenue ||
-            0
-        ),
-      refunds:
-        Number(
-          data?.wallet?.refunds ||
-            0
-        ),
-      costs:
-        Number(
-          data?.wallet?.costs ||
-            0
-        ),
-      profit:
-        Number(
-          data?.wallet?.profit ||
-            0
-        ),
-    },
-  };
-}
-
-/*
-|--------------------------------------------------------------------------
-| PAYMENTS
-|--------------------------------------------------------------------------
-*/
-
-async function getPayments() {
-  const data =
-    await readJson(
+  const payments =
+    await readJSON(
       PAYMENTS_FILE,
       []
     );
 
-  return Array.isArray(data)
-    ? data
-    : [];
-}
+  const payment =
+    payments.find(
+      p => p.reference === reference
+    );
 
-async function savePayments(
-  payments
-) {
-  await writeJson(
-    PAYMENTS_FILE,
-    payments
-  );
-}
+  if (!payment) {
+    throw new Error(
+      "MAMAKI payment reference not found."
+    );
+  }
 
-async function recordPayment(
-  payment
-) {
-  const payments =
-    await getPayments();
+  if (payment.status === "success") {
+    return payment;
+  }
+
+  const verification =
+    await paystackRequest(
+      `/transaction/verify/${encodeURIComponent(reference)}`,
+      {
+        method: "GET"
+      }
+    );
+
+  const transaction =
+    verification?.data;
+
+  if (
+    transaction?.status !== "success"
+  ) {
+    throw new Error(
+      "Payment has not been confirmed."
+    );
+  }
+
+  if (
+    String(transaction.currency || "")
+      .toUpperCase() !== "NGN"
+  ) {
+    throw new Error(
+      "Payment currency mismatch."
+    );
+  }
+
+  const expectedAmount =
+    Number(payment.amount) * 100;
+
+  if (
+    Number(transaction.amount) !==
+    expectedAmount
+  ) {
+    throw new Error(
+      "Payment amount mismatch."
+    );
+  }
 
   const index =
     payments.findIndex(
-      (item) =>
-        item.reference ===
-        payment.reference
+      p => p.reference === reference
     );
 
+  payment.status = "success";
+  payment.paidAt = now();
+  payment.gatewayReference =
+    transaction.reference;
+
   if (index >= 0) {
-    payments[index] = {
-      ...payments[index],
-      ...payment,
-      updatedAt: now(),
-    };
-  } else {
-    payments.unshift({
-      id: randomUUID(),
-      createdAt: now(),
-      ...payment,
-    });
+    payments[index] = payment;
   }
 
-  await savePayments(
+  await writeJSON(
+    PAYMENTS_FILE,
     payments
   );
+
+  await changeCredits(
+    payment.userId,
+    payment.credits,
+    "purchase",
+    payment.reference
+  );
+
+  await recordSecurity(
+    "CREDIT_PURCHASE_SUCCESS",
+    {
+      id: payment.userId,
+      email: payment.email
+    },
+    payment.reference
+  );
+
+  await addFinanceTransaction({
+    type: "revenue",
+    reference: payment.reference,
+    description:
+      `MAMAKI credit purchase: ${payment.credits} credits`,
+    amount: payment.amount,
+    currency: "NGN",
+    userId: payment.userId,
+    email: payment.email
+  });
+
+  return payment;
 }
 
-/*
-|--------------------------------------------------------------------------
-| VIDEO HELPERS
-|--------------------------------------------------------------------------
-*/
+app.get(
+  "/api/billing/paystack/callback",
+  async (req, res) => {
+    const reference =
+      String(
+        req.query.reference ||
+        req.query.trxref ||
+        ""
+      );
 
-function wanFrames(
-  seconds
-) {
-  return Number(seconds) <= 5
+    if (!reference) {
+      return res.status(400).send(
+        "Missing payment reference."
+      );
+    }
+
+    try {
+      const payment =
+        await fulfillPayment(
+          reference
+        );
+
+      res.send(`
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MAMAKI Payment</title>
+<style>
+body{
+  margin:0;
+  min-height:100vh;
+  display:grid;
+  place-items:center;
+  background:#050509;
+  color:white;
+  font-family:Arial,sans-serif;
+}
+.box{
+  max-width:520px;
+  padding:35px;
+  border:1px solid #27272f;
+  border-radius:20px;
+  background:#111116;
+  text-align:center;
+}
+a{
+  display:inline-block;
+  margin-top:20px;
+  padding:13px 20px;
+  border-radius:10px;
+  background:#fff;
+  color:#000;
+  text-decoration:none;
+}
+</style>
+</head>
+<body>
+<div class="box">
+<h1>✨ MAMAKI</h1>
+<h2>Payment Successful</h2>
+<p>${Number(payment.credits)} MAMAKI credits have been added to your account.</p>
+<a href="/">Return to MAMAKI</a>
+</div>
+</body>
+</html>
+      `);
+    } catch (error) {
+      await recordError(error, req);
+
+      res.status(400).send(`
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MAMAKI Payment</title>
+</head>
+<body style="font-family:Arial;text-align:center;padding:50px">
+<h2>MAMAKI Payment</h2>
+<p>Payment could not be confirmed yet.</p>
+<p>Please return to MAMAKI and check your credit balance.</p>
+<a href="/">Return to MAMAKI</a>
+</body>
+</html>
+      `);
+    }
+  }
+);
+
+app.post(
+  "/api/billing/paystack/webhook",
+  async (req, res) => {
+    try {
+      if (!PAYSTACK_SECRET_KEY) {
+        return res.sendStatus(200);
+      }
+
+      const signature =
+        String(
+          req.headers["x-paystack-signature"] ||
+          ""
+        );
+
+      const raw =
+        req.rawBody ||
+        Buffer.from(
+          JSON.stringify(req.body || {})
+        );
+
+      const expected =
+        createHmac(
+          "sha512",
+          PAYSTACK_SECRET_KEY
+        )
+          .update(raw)
+          .digest("hex");
+
+      if (
+        !signature ||
+        signature.length !== expected.length ||
+        !timingSafeEqual(
+          Buffer.from(signature),
+          Buffer.from(expected)
+        )
+      ) {
+        return res.sendStatus(401);
+      }
+
+      if (
+        req.body?.event ===
+        "charge.success"
+      ) {
+        const reference =
+          req.body?.data?.reference;
+
+        if (reference) {
+          try {
+            await fulfillPayment(
+              reference
+            );
+          } catch (error) {
+            await recordError(
+              error,
+              req
+            );
+          }
+        }
+      }
+
+      res.sendStatus(200);
+    } catch (error) {
+      await recordError(error, req);
+      res.sendStatus(200);
+    }
+  }
+);
+
+app.get(
+  "/api/billing/payment/:reference",
+  requireUser,
+  async (req, res) => {
+    const payments =
+      await readJSON(
+        PAYMENTS_FILE,
+        []
+      );
+
+    const payment =
+      payments.find(
+        p =>
+          p.reference ===
+            req.params.reference &&
+          p.userId ===
+            req.user.id
+      );
+
+    if (!payment) {
+      return res.status(404).json({
+        ok: false,
+        error: "Payment not found."
+      });
+    }
+
+    res.json({
+      ok: true,
+      payment: {
+        reference: payment.reference,
+        credits: payment.credits,
+        amount: payment.amount,
+        currency: payment.currency,
+        status: payment.status,
+        createdAt: payment.createdAt,
+        paidAt: payment.paidAt
+      }
+    });
+  }
+);
+
+/* =========================================================
+   AI GENERATION
+========================================================= */
+
+function normalizeRatio(ratio) {
+  if (
+    ["16:9", "9:16", "1:1"].includes(
+      ratio
+    )
+  ) {
+    return ratio;
+  }
+
+  return "16:9";
+}
+
+function dimensionsForRatio(ratio) {
+  return {
+    "16:9": {
+      width: 1920,
+      height: 1080
+    },
+    "9:16": {
+      width: 1080,
+      height: 1920
+    },
+    "1:1": {
+      width: 1080,
+      height: 1080
+    }
+  }[ratio];
+}
+
+function wanFrames(seconds) {
+  return seconds <= 5
     ? 81
     : 121;
 }
 
-function clampDuration(
-  value
-) {
-  const n =
-    Number(value);
-
-  if (
-    !Number.isFinite(n)
-  ) {
-    return MIN_DURATION;
-  }
-
-  return Math.min(
-    MAX_DURATION,
-    Math.max(
-      MIN_DURATION,
-      Math.round(n)
-    )
-  );
-}
-
-function validRatio(
-  value
-) {
-  const ratio =
-    String(
-      value || "16:9"
-    );
-
-  return [
-    "16:9",
-    "9:16",
-    "1:1",
-  ].includes(ratio)
-    ? ratio
-    : "16:9";
-}
-
-function dimensionsForRatio(
-  ratio
-) {
-  switch (
-    validRatio(ratio)
-  ) {
-    case "9:16":
-      return "1080x1920";
-
-    case "1:1":
-      return "1080x1080";
-
-    default:
-      return "1920x1080";
-  }
-}
-
-function enhancePrompt(
+function enhancedPrompt(
   prompt,
-  style = "Cinematic"
+  style
 ) {
   return [
-    String(
-      prompt || ""
-    ).trim(),
-    `Visual style: ${style}.`,
+    String(prompt || "").trim(),
+    `Visual style: ${style || STYLE_DEFAULT}.`,
     "High quality cinematic composition.",
-    "Strong visual continuity.",
-    "Natural realistic motion.",
+    "Natural motion and coherent camera movement.",
+    "Strong subject continuity.",
     "No subtitles.",
-    "No captions.",
+    "No text overlays.",
     "No logos.",
-    "No watermarks.",
-  ]
-    .filter(Boolean)
-    .join(" ");
+    "No watermarks except the final MAMAKI branding."
+  ].join(" ");
 }
 
-function providerIsConfigured() {
-  return Boolean(
-    REPLICATE_API_TOKEN &&
-      replicate
-  );
-}
-
-let providerBlocked = false;
-
-async function runReplicate(
-  model,
-  input
+async function saveBuffer(
+  buffer,
+  extension
 ) {
-  if (!replicate) {
-    const error =
-      new Error(
-        "Replicate is not configured."
-      );
+  const filename =
+    `${randomUUID()}${extension}`;
 
-    error.code =
-      "REPLICATE_NOT_CONFIGURED";
-
-    throw error;
-  }
-
-  try {
-    const output =
-      await replicate.run(
-        model,
-        {
-          input,
-        }
-      );
-
-    providerBlocked =
-      false;
-
-    return output;
-  } catch (error) {
-    const message =
-      String(
-        error?.message ||
-          error
-      );
-
-    if (
-      /402|insufficient|credit|billing|payment required/i.test(
-        message
-      )
-    ) {
-      providerBlocked =
-        true;
-    }
-
-    throw error;
-  }
-}
-
-async function outputToUrl(
-  output
-) {
-  if (!output) {
-    return null;
-  }
-
-  if (
-    typeof output ===
-    "string"
-  ) {
-    return output;
-  }
-
-  if (
-    typeof output.url ===
-    "function"
-  ) {
-    try {
-      return String(
-        output.url()
-      );
-    } catch {}
-  }
-
-  if (
-    typeof output.url ===
-    "string"
-  ) {
-    return output.url;
-  }
-
-  if (
-    output instanceof URL
-  ) {
-    return String(
-      output
+  const full =
+    path.join(
+      TMP,
+      filename
     );
-  }
 
-  if (
-    Array.isArray(output)
-  ) {
-    for (
-      const item of output
-    ) {
-      const url =
-        await outputToUrl(
-          item
-        );
+  await fs.writeFile(
+    full,
+    buffer
+  );
 
-      if (url) {
-        return url;
-      }
-    }
-  }
-
-  if (
-    typeof output ===
-    "object"
-  ) {
-    for (
-      const key of [
-        "video",
-        "output",
-        "url",
-      ]
-    ) {
-      if (
-        output[key] !==
-        undefined
-      ) {
-        const url =
-          await outputToUrl(
-            output[key]
-          );
-
-        if (url) {
-          return url;
-        }
-      }
-    }
-  }
-
-  return null;
+  return full;
 }
 
-async function downloadFile(
+async function downloadURLToFile(
   url,
-  destination
+  outputPath
 ) {
   const response =
     await fetch(url);
@@ -1885,50 +1657,56 @@ async function downloadFile(
     );
 
   await fs.writeFile(
-    destination,
+    outputPath,
     buffer
   );
 
-  return destination;
+  return outputPath;
 }
 
-function runCommand(
-  command,
-  args,
-  options = {}
+async function watermarkVideo(
+  inputPath,
+  outputPath
 ) {
+  if (!ffmpegPath) {
+    throw new Error(
+      "FFmpeg is not available."
+    );
+  }
+
   return new Promise(
     (resolve, reject) => {
+      const args = [
+        "-y",
+        "-i",
+        inputPath,
+        "-vf",
+        "drawtext=text='MAMAKI ✨':x=w-tw-28:y=h-th-24:fontsize=24:fontcolor=white@0.88:box=1:boxcolor=black@0.35:boxborderw=8",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "23",
+        "-c:a",
+        "aac",
+        "-movflags",
+        "+faststart",
+        outputPath
+      ];
+
       const child =
         spawn(
-          command,
-          args,
-          {
-            stdio: [
-              "ignore",
-              "pipe",
-              "pipe",
-            ],
-            ...options,
-          }
+          ffmpegPath,
+          args
         );
 
-      let stdout = "";
       let stderr = "";
-
-      child.stdout.on(
-        "data",
-        (chunk) => {
-          stdout +=
-            chunk.toString();
-        }
-      );
 
       child.stderr.on(
         "data",
-        (chunk) => {
-          stderr +=
-            chunk.toString();
+        data => {
+          stderr += data.toString();
         }
       );
 
@@ -1939,26 +1717,17 @@ function runCommand(
 
       child.on(
         "close",
-        (code) => {
-          if (
-            code === 0
-          ) {
-            resolve({
-              stdout,
-              stderr,
-            });
+        code => {
+          if (code === 0) {
+            resolve(
+              outputPath
+            );
           } else {
-            const error =
+            reject(
               new Error(
-                stderr ||
-                  stdout ||
-                  `Command failed with code ${code}`
-              );
-
-            error.code =
-              code;
-
-            reject(error);
+                `FFmpeg failed: ${stderr.slice(-2000)}`
+              )
+            );
           }
         }
       );
@@ -1966,1142 +1735,423 @@ function runCommand(
   );
 }
 
-async function applyWatermark(
-  input,
-  output
-) {
-  if (!ffmpegPath) {
-    return input;
-  }
-
-  try {
-    await runCommand(
-      ffmpegPath,
-      [
-        "-y",
-        "-i",
-        input,
-        "-vf",
-        "drawtext=text='MAMAKI':fontcolor=white@0.85:fontsize=22:borderw=2:bordercolor=black@0.45:x=w-tw-24:y=h-th-24",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-c:a",
-        "aac",
-        "-movflags",
-        "+faststart",
-        output,
-      ]
-    );
-
-    return output;
-  } catch {
-    return input;
-  }
-}
-
-/*
-|--------------------------------------------------------------------------
-| GENERATION
-|--------------------------------------------------------------------------
-*/
-
-async function createGeneration(
-  req,
-  mode
-) {
-  const user =
-    req.user;
-
-  const body =
-    req.body || {};
-
-  const prompt =
-    String(
-      body.prompt || ""
-    ).trim();
-
-  if (
-    mode === "text" &&
-    !prompt
-  ) {
+async function createReplicateVideo({
+  prompt,
+  imagePath,
+  seconds,
+  ratio,
+  quality,
+  style
+}) {
+  if (!replicate) {
     throw new Error(
-      "A video prompt is required."
+      "AI provider is not configured. Add REPLICATE_API_TOKEN."
     );
   }
 
-  const duration =
-    clampDuration(
-      body.duration
+  if (providerBlocked) {
+    throw new Error(
+      "AI provider is temporarily unavailable."
     );
-
-  const ratio =
-    validRatio(
-      body.ratio
-    );
-
-  const style =
-    String(
-      body.style ||
-        "Cinematic"
-    );
-
-  const quality =
-    String(
-      body.quality ||
-        "Standard HD"
-    );
-
-  const creditEstimate =
-    Math.max(
-      1,
-      Math.ceil(
-        duration / 5
-      ) *
-        CREDITS_PER_5_SECONDS
-    );
-
-  const providerCost =
-    providerCostForCredits(
-      creditEstimate,
-      quality
-    );
-
-  if (
-    providerBlocked
-  ) {
-    const error =
-      new Error(
-        "Replicate currently has insufficient provider credit. Please restore provider credit before generating AI videos."
-      );
-
-    error.code =
-      "REPLICATE_PROVIDER_BLOCKED";
-
-    throw error;
   }
 
-  const creditResult =
-    await consumeUserCredits(
-      user.id,
-      duration
+  const dimensions =
+    dimensionsForRatio(
+      ratio
     );
 
-  let imageUrl =
-    null;
+  const frames =
+    wanFrames(seconds);
 
-  if (
-    req.file &&
-    mode === "image"
-  ) {
-    imageUrl =
-      `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
-  }
+  const enhanced =
+    enhancedPrompt(
+      prompt,
+      style
+    );
 
   const input = {
-    prompt:
-      enhancePrompt(
-        prompt,
-        style
-      ),
-    num_frames:
-      wanFrames(
-        duration
-      ),
-    aspect_ratio:
-      ratio,
-    size:
-      dimensionsForRatio(
-        ratio
-      ),
+    prompt: enhanced,
+    width: dimensions.width,
+    height: dimensions.height,
+    num_frames: frames
   };
 
-  if (imageUrl) {
+  if (
+    quality === "High"
+  ) {
+    input.go_fast = true;
+  }
+
+  if (
+    quality === "Cinematic"
+  ) {
+    input.go_fast = false;
+  }
+
+  if (imagePath) {
     input.image =
-      imageUrl;
-  }
-
-  let output;
-
-  try {
-    output =
-      await runReplicate(
-        mode === "image"
-          ? I2V_MODEL
-          : T2V_MODEL,
-        input
+      await fs.readFile(
+        imagePath
       );
-  } catch (error) {
-    await refundUserCredits(
-      user.id,
-      creditResult.cost
-    );
 
-    throw error;
-  }
+    const result =
+      await replicate.run(
+        I2V_MODEL,
+        { input }
+      );
 
-  const videoUrl =
-    await outputToUrl(
-      output
-    );
-
-  if (!videoUrl) {
-    await refundUserCredits(
-      user.id,
-      creditResult.cost
-    );
-
-    throw new Error(
-      "Replicate completed but returned no video file."
+    return extractReplicateURL(
+      result
     );
   }
 
-  const rawFile =
-    path.join(
-      TMP,
-      `${randomUUID()}.mp4`
+  const result =
+    await replicate.run(
+      T2V_MODEL,
+      { input }
     );
 
-  const finalFile =
-    path.join(
-      OUTPUTS,
-      `${randomUUID()}.mp4`
-    );
-
-  try {
-    await downloadFile(
-      videoUrl,
-      rawFile
-    );
-
-    await applyWatermark(
-      rawFile,
-      finalFile
-    );
-
-    await updateUsage(
-      user.id,
-      {
-        aiGenerations: 1,
-        aiSeconds:
-          duration,
-      }
-    );
-
-    await addFinanceTransaction({
-      type: "COST",
-      category:
-        "AI_PROVIDER",
-      provider:
-        "Replicate",
-      amount:
-        Number(
-          providerCost.providerCostUsd
-        ),
-      currency:
-        "USD",
-      userId:
-        user.id,
-      seconds:
-        duration,
-    });
-
-    return {
-      ok: true,
-      videoUrl:
-        `${APP_URL}/outputs/${path.basename(finalFile)}`,
-      providerVideoUrl:
-        videoUrl,
-      duration,
-      ratio,
-      style,
-      quality,
-      creditsUsed:
-        creditResult.cost,
-      creditsRemaining:
-        creditResult.balance,
-      model:
-        mode === "image"
-          ? I2V_MODEL
-          : T2V_MODEL,
-    };
-  } catch (error) {
-    await refundUserCredits(
-      user.id,
-      creditResult.cost
-    );
-
-    throw error;
-  }
+  return extractReplicateURL(
+    result
+  );
 }
 
-/*
-|--------------------------------------------------------------------------
-| OUTPUTS
-|--------------------------------------------------------------------------
-*/
+function extractReplicateURL(
+  result
+) {
+  if (typeof result === "string") {
+    return result;
+  }
 
-app.use(
-  "/outputs",
-  express.static(
-    OUTPUTS,
-    {
-      maxAge: "1h",
+  if (
+    result &&
+    typeof result.url === "function"
+  ) {
+    const value =
+      result.url();
+
+    if (value) return String(value);
+  }
+
+  if (
+    result &&
+    typeof result === "object"
+  ) {
+    if (
+      typeof result.url === "string"
+    ) {
+      return result.url;
     }
-  )
-);
 
-/*
-|--------------------------------------------------------------------------
-| HEALTH
-|--------------------------------------------------------------------------
-*/
+    if (
+      Array.isArray(result) &&
+      result.length
+    ) {
+      return extractReplicateURL(
+        result[0]
+      );
+    }
 
-app.get(
-  "/health",
-  async (req, res) => {
-    res.json({
-      ok: true,
-      status: "healthy",
-      service:
-        "MAMAKI AI Video Creative Studio",
-      version:
-        VERSION,
-      uptime:
-        process.uptime(),
-      timestamp:
-        now(),
-      checks: {
-        server: true,
-        ffmpeg:
-          Boolean(
-            ffmpegPath
-          ),
-        replicateConfigured:
-          providerIsConfigured(),
-        adminConfigured:
-          Boolean(
-            ADMIN_EMAIL &&
-              ADMIN_PASSWORD
-          ),
-        recoveryConfigured:
-          Boolean(
-            RESEND_API_KEY &&
-              RESEND_FROM
-          ),
-      },
-    });
+    for (
+      const key of [
+        "video",
+        "output",
+        "file",
+        "url"
+      ]
+    ) {
+      if (result[key]) {
+        try {
+          return extractReplicateURL(
+            result[key]
+          );
+        } catch {}
+      }
+    }
   }
-);
 
-app.get(
-  "/api/health",
-  async (req, res) => {
-    res.json({
-      ok: true,
-      service:
-        "MAMAKI AI Video Creative Studio",
-      version:
-        VERSION,
-      replicateConfigured:
-        providerIsConfigured(),
-      timestamp:
-        now(),
-    });
-  }
-);
-
-/*
-|--------------------------------------------------------------------------
-| AUTH
-|--------------------------------------------------------------------------
-*/
+  throw new Error(
+    "Replicate completed but no video file was returned."
+  );
+}
 
 app.post(
-  "/api/auth/register",
-  async (req, res, next) => {
+  "/api/generate",
+  requireUser,
+  upload.single("image"),
+  async (req, res) => {
+    let inputPath = null;
+    let rawPath = null;
+
     try {
-      const email =
-        normalizeEmail(
-          req.body?.email
-        );
-
-      const password =
+      const prompt =
         String(
-          req.body?.password ||
-            ""
-        );
-
-      const name =
-        String(
-          req.body?.name ||
-            ""
+          req.body?.prompt ||
+          req.body?.description ||
+          ""
         ).trim();
 
-      if (
-        !email ||
-        !password
-      ) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "Email and password are required.",
-        });
-      }
-
-      if (
-        password.length <
-        6
-      ) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "Password must be at least 6 characters.",
-        });
-      }
-
-      const existing =
-        await findUserByEmail(
-          email
-        );
-
-      if (existing) {
-        return res.status(409).json({
-          ok: false,
-          error:
-            "An account with this email already exists.",
-        });
-      }
-
-      const credentials =
-        hashPassword(
-          password
-        );
-
-      const user = {
-        id: randomUUID(),
-        email,
-        name:
-          name ||
-          email.split("@")[0],
-        role:
-          email ===
-          ADMIN_EMAIL
-            ? "admin"
-            : "user",
-        passwordHash:
-          credentials.hash,
-        passwordSalt:
-          credentials.salt,
-        createdAt:
-          now(),
-        updatedAt:
-          now(),
-      };
-
-      const users =
-        await getUsers();
-
-      users.push(user);
-
-      await saveUsers(
-        users
-      );
-
-      await getUserCredits(
-        user.id
-      );
-
-      await addSecurityEvent({
-        action:
-          "REGISTER",
-        userId:
-          user.id,
-        email:
-          user.email,
-      });
-
-      const token =
-        await createSession(
-          user
-        );
-
-      res.json({
-        ok: true,
-        token,
-        user:
-          safeUser(user),
-        credits:
-          await getUserCredits(
-            user.id
-          ),
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-app.post(
-  "/api/auth/login",
-  async (req, res, next) => {
-    try {
-      const email =
-        normalizeEmail(
-          req.body?.email
-        );
-
-      const password =
-        String(
-          req.body?.password ||
-            ""
-        );
-
-      const user =
-        await findUserByEmail(
-          email
-        );
-
-      if (
-        !user ||
-        !verifyPassword(
-          password,
-          user.passwordHash,
-          user.passwordSalt
-        )
-      ) {
-        await addSecurityEvent({
-          action:
-            "LOGIN_FAILED",
-          email,
-        });
-
-        return res.status(401).json({
-          ok: false,
-          error:
-            "Invalid credentials.",
-        });
-      }
-
-      if (
-        email ===
-        ADMIN_EMAIL
-      ) {
-        if (
-          user.role !==
-          "admin"
-        ) {
-          user.role =
-            "admin";
-
-          const users =
-            await getUsers();
-
-          const index =
-            users.findIndex(
-              (item) =>
-                item.id ===
-                user.id
-            );
-
-          if (
-            index >= 0
-          ) {
-            users[index] =
-              user;
-
-            await saveUsers(
-              users
-            );
-          }
-        }
-      }
-
-      const token =
-        await createSession(
-          user
-        );
-
-      await addSecurityEvent({
-        action:
-          "LOGIN_SUCCESS",
-        userId:
-          user.id,
-        email:
-          user.email,
-        role:
-          user.role,
-      });
-
-      res.json({
-        ok: true,
-        token,
-        user:
-          safeUser(user),
-        credits:
-          await getUserCredits(
-            user.id
-          ),
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-app.post(
-  "/api/auth/logout",
-  async (req, res) => {
-    await destroySession(
-      getBearer(req)
-    );
-
-    res.json({
-      ok: true,
-    });
-  }
-);
-
-app.get(
-  "/api/auth/me",
-  requireUser,
-  async (req, res) => {
-    const credits =
-      await getUserCredits(
-        req.user.id
-      );
-
-    res.json({
-      ok: true,
-      user:
-        safeUser(
-          req.user
-        ),
-      credits,
-      remainingCredits:
-        credits,
-      usableCredits:
-        providerIsConfigured() &&
-        !providerBlocked
-          ? credits
-          : 0,
-      providerConfigured:
-        providerIsConfigured(),
-      providerBlocked,
-    });
-  }
-);
-
-/*
-|--------------------------------------------------------------------------
-| BILLING / USER CREDIT PURCHASE
-|--------------------------------------------------------------------------
-*/
-
-app.get(
-  "/api/billing/pricing",
-  requireUser,
-  async (req, res, next) => {
-    try {
-      const currency =
-        normalizeCurrency(
-          req.query.currency
-        );
-
-      const quality =
-        String(
-          req.query.quality ||
-            "Standard HD"
-        );
-
-      const packages = [
-        100,
-        500,
-        1000,
-        2500,
-        5000,
-      ];
-
-      const prices =
-        await Promise.all(
-          packages.map(
-            (credits) =>
-              calculateCreditPrice(
-                credits,
-                currency,
-                quality
-              )
-          )
-        );
-
-      const currentCredits =
-        await getUserCredits(
-          req.user.id
-        );
-
-      res.json({
-        ok: true,
-        currentCredits,
-        remainingCredits:
-          currentCredits,
-        usableCredits:
-          providerIsConfigured() &&
-          !providerBlocked
-            ? currentCredits
-            : 0,
-        currency,
-        quality,
-        packages: prices,
-        paymentProvider:
-          PAYSTACK_SECRET_KEY
-            ? "Paystack"
-            : null,
-        paymentConfigured:
-          Boolean(
-            PAYSTACK_SECRET_KEY
-          ),
-        fxSource:
-          "Automatic FX pricing",
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-app.post(
-  "/api/billing/paystack/initialize",
-  requireUser,
-  async (req, res, next) => {
-    try {
-      if (
-        !PAYSTACK_SECRET_KEY
-      ) {
-        return res.status(503).json({
-          ok: false,
-          error:
-            "Paystack is not configured.",
-        });
-      }
-
-      const credits =
-        Math.max(
-          1,
-          Math.floor(
-            Number(
-              req.body?.credits
-            )
-          )
-        );
-
-      const currency =
-        normalizeCurrency(
-          req.body?.currency
+      const seconds =
+        clampNumber(
+          req.body?.duration ||
+          req.body?.seconds,
+          5,
+          7200,
+          5
         );
 
       const quality =
         String(
           req.body?.quality ||
-            "Standard HD"
+          "Standard HD"
         );
 
-      const pricing =
-        await calculateCreditPrice(
-          credits,
-          currency,
+      const style =
+        String(
+          req.body?.style ||
+          STYLE_DEFAULT
+        );
+
+      const ratio =
+        normalizeRatio(
+          String(
+            req.body?.ratio ||
+            "16:9"
+          )
+        );
+
+      if (!prompt) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "Please describe the video you want to create."
+        });
+      }
+
+      const requiredCredits =
+        calculateVideoCredits(
+          seconds,
           quality
         );
 
-      const callbackUrl =
-        String(
-          req.body?.callbackUrl ||
-            `${APP_URL}/?payment=complete`
+      const creditRecord =
+        await getCreditRecord(
+          req.user.id
         );
 
-      const response =
-        await fetch(
-          "https://api.paystack.co/transaction/initialize",
-          {
-            method: "POST",
-            headers: {
-              Authorization:
-                `Bearer ${PAYSTACK_SECRET_KEY}`,
-              "Content-Type":
-                "application/json",
-            },
-            body:
-              JSON.stringify({
-                email:
-                  req.user.email,
-                amount:
-                  pricing.amountSubunit,
-                currency:
-                  pricing.currency,
-                callback_url:
-                  callbackUrl,
-                metadata: {
-                  mamaki: true,
-                  userId:
-                    req.user.id,
-                  credits:
-                    pricing.credits,
-                  currency:
-                    pricing.currency,
-                  usdPrice:
-                    pricing.usdPrice,
-                  providerCostUsd:
-                    pricing.providerCostUsd,
-                  fxRate:
-                    pricing.fxRate,
-                  fxLive:
-                    pricing.fxLive,
-                },
-              }),
-          }
+      const available =
+        Number(
+          creditRecord.balance || 0
         );
 
-      const data =
-        await response.json();
-
+      // HARD SERVER-SIDE CREDIT PROTECTION.
       if (
-        !response.ok ||
-        !data.status ||
-        !data.data
+        available <
+        requiredCredits
       ) {
-        throw new Error(
-          data?.message ||
-            "Paystack initialization failed."
-        );
-      }
-
-      await recordPayment({
-        reference:
-          data.data.reference,
-        userId:
-          req.user.id,
-        email:
-          req.user.email,
-        credits:
-          pricing.credits,
-        amount:
-          pricing.amount,
-        amountSubunit:
-          pricing.amountSubunit,
-        currency:
-          pricing.currency,
-        status:
-          "initialized",
-        fulfilled:
-          false,
-        pricing,
-        authorizationUrl:
-          data.data.authorization_url,
-      });
-
-      await addSecurityEvent({
-        action:
-          "PAYMENT_INITIALIZED",
-        userId:
-          req.user.id,
-        reference:
-          data.data.reference,
-        credits:
-          pricing.credits,
-        amount:
-          pricing.amount,
-        currency:
-          pricing.currency,
-      });
-
-      res.json({
-        ok: true,
-        reference:
-          data.data.reference,
-        authorizationUrl:
-          data.data.authorization_url,
-        accessCode:
-          data.data.access_code,
-        pricing,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-app.get(
-  "/api/billing/payment/:reference",
-  requireUser,
-  async (req, res, next) => {
-    try {
-      const reference =
-        String(
-          req.params.reference ||
-            ""
-        ).trim();
-
-      const payments =
-        await getPayments();
-
-      const payment =
-        payments.find(
-          (item) =>
-            item.reference ===
-              reference &&
-            item.userId ===
-              req.user.id
-        );
-
-      if (!payment) {
-        return res.status(404).json({
+        return res.status(402).json({
           ok: false,
+          code: "INSUFFICIENT_CREDITS",
           error:
-            "Payment not found.",
+            "You do not have enough MAMAKI credits for this video.",
+          requiredCredits,
+          availableCredits: available,
+          topUpRequired: true
         });
       }
 
-      res.json({
-        ok: true,
-        payment,
-        credits:
-          await getUserCredits(
-            req.user.id
-          ),
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
+      // Reserve credits before generation.
+      await changeCredits(
+        req.user.id,
+        -requiredCredits,
+        "generation",
+        ""
+      );
 
-/*
-|--------------------------------------------------------------------------
-| PAYSTACK WEBHOOK
-|--------------------------------------------------------------------------
-*/
+      const started =
+        Date.now();
 
-app.post(
-  "/api/payments/paystack/webhook",
-  async (req, res, next) => {
-    try {
-      if (
-        !PAYSTACK_SECRET_KEY
-      ) {
-        return res.status(503).send(
-          "Paystack not configured"
-        );
-      }
+      try {
+        if (req.file) {
+          inputPath =
+            await saveBuffer(
+              req.file.buffer,
+              path.extname(
+                req.file.originalname ||
+                ".jpg"
+              ) || ".jpg"
+            );
+        }
 
-      const signature =
-        String(
-          req.headers[
-            "x-paystack-signature"
-          ] || ""
-        );
+        const sourceURL =
+          await createReplicateVideo({
+            prompt,
+            imagePath: inputPath,
+            seconds,
+            ratio,
+            quality,
+            style
+          });
 
-      const rawBody =
-        req.rawBody ||
-        Buffer.from(
-          JSON.stringify(
-            req.body || {}
-          )
-        );
+        const rawFilename =
+          `${randomUUID()}-raw.mp4`;
 
-      const expected =
-        createHmac(
-          "sha512",
-          PAYSTACK_SECRET_KEY
-        )
-          .update(
-            rawBody
-          )
-          .digest(
-            "hex"
+        rawPath =
+          path.join(
+            TMP,
+            rawFilename
           );
 
-      const signaturesMatch =
-        signature.length ===
-          expected.length &&
-        timingSafeEqual(
-          Buffer.from(
-            signature
-          ),
-          Buffer.from(
-            expected
-          )
+        await downloadURLToFile(
+          sourceURL,
+          rawPath
         );
 
-      if (
-        !signature ||
-        !signaturesMatch
-      ) {
-        return res.status(401).send(
-          "Invalid signature"
-        );
-      }
+        const finalFilename =
+          `${randomUUID()}.mp4`;
 
-      const event =
-        req.body || {};
+        const finalPath =
+          path.join(
+            OUTPUTS,
+            finalFilename
+          );
 
-      if (
-        event.event !==
-        "charge.success"
-      ) {
-        return res.json({
-          ok: true,
-          ignored: true,
-        });
-      }
-
-      const data =
-        event.data || {};
-
-      const reference =
-        String(
-          data.reference || ""
+        await watermarkVideo(
+          rawPath,
+          finalPath
         );
 
-      const metadata =
-        data.metadata || {};
+        const project = {
+          id: randomUUID(),
+          userId: req.user.id,
+          title:
+            prompt.slice(0, 80),
+          prompt,
+          style,
+          ratio,
+          quality,
+          duration: seconds,
+          creditsUsed:
+            requiredCredits,
+          videoUrl:
+            `/outputs/${finalFilename}`,
+          createdAt: now(),
+          generationMs:
+            Date.now() - started,
+          status: "completed"
+        };
 
-      const userId =
-        String(
-          metadata.userId || ""
+        await saveProject(
+          req.user.id,
+          project
         );
 
-      const credits =
-        Math.max(
-          0,
-          Math.floor(
-            Number(
-              metadata.credits ||
-                0
+        await addUsage(
+          req.user.id,
+          "aiGenerations",
+          1
+        );
+
+        await addUsage(
+          req.user.id,
+          "aiSeconds",
+          seconds
+        );
+
+        await recordSecurity(
+          "AI_GENERATION_SUCCESS",
+          req.user,
+          project.id
+        );
+
+        const remaining =
+          (
+            await getCreditRecord(
+              req.user.id
             )
-          )
-        );
+          ).balance;
 
-      if (
-        !reference ||
-        !userId ||
-        credits <= 0
-      ) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "Invalid payment metadata.",
-        });
-      }
-
-      const payments =
-        await getPayments();
-
-      const existing =
-        payments.find(
-          (item) =>
-            item.reference ===
-            reference
-        );
-
-      if (
-        existing?.fulfilled
-      ) {
-        return res.json({
+        res.json({
           ok: true,
-          alreadyFulfilled:
-            true,
+          project,
+          videoUrl:
+            project.videoUrl,
+          requiredCredits,
+          usedCredits:
+            requiredCredits,
+          remainingCredits:
+            remaining
         });
-      }
-
-      const user =
-        await findUserById(
-          userId
+      } catch (generationError) {
+        // AUTOMATIC REFUND if provider generation fails.
+        await changeCredits(
+          req.user.id,
+          requiredCredits,
+          "refund",
+          ""
         );
 
-      if (!user) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "Payment user not found.",
-        });
+        throw generationError;
       }
+    } catch (error) {
+      await recordError(
+        error,
+        req
+      );
 
-      const newBalance =
-        await addUserCredits(
-          userId,
-          credits,
-          "PAYSTACK"
-        );
-
-      const paidAmount =
-        Number(
-          data.amount || 0
-        ) / 100;
-
-      const paidCurrency =
+      const message =
         String(
-          data.currency ||
-            metadata.currency ||
-            "NGN"
-        ).toUpperCase();
+          error?.message ||
+          error
+        );
 
-      await recordPayment({
-        reference,
-        userId,
-        email:
-          user.email,
-        credits,
-        amount:
-          paidAmount,
-        currency:
-          paidCurrency,
-        status:
-          "success",
-        fulfilled:
-          true,
-        fulfilledAt:
-          now(),
-        gateway:
-          "Paystack",
-        gatewayStatus:
-          data.status ||
-          "success",
-      });
+      if (
+        /credit|billing|payment|required/i.test(
+          message
+        )
+      ) {
+        providerBlocked = true;
+      }
 
-      await addFinanceTransaction({
-        type: "REVENUE",
-        category:
-          "CREDIT_PURCHASE",
-        provider:
-          "Paystack",
-        amount:
-          paidAmount,
-        currency:
-          paidCurrency,
-        userId,
-        reference,
-        credits,
+      res.status(500).json({
+        ok: false,
+        error: message,
+        creditsRefunded: true
       });
+    } finally {
+      for (
+        const file of [
+          inputPath,
+          rawPath
+        ]
+      ) {
+        if (file) {
+          try {
+            await fs.unlink(file);
+          } catch {}
+        }
+      }
+    }
+  }
+);
 
-      await addSecurityEvent({
-        action:
-          "PAYMENT_FULFILLED",
-        userId,
-        reference,
-        credits,
-        amount:
-          paidAmount,
-        currency:
-          paidCurrency,
-      });
+/* =========================================================
+   PROJECTS
+========================================================= */
+
+app.get(
+  "/api/projects",
+  requireUser,
+  async (req, res) => {
+    try {
+      const projects =
+        await readUserProjects(
+          req.user.id
+        );
 
       res.json({
         ok: true,
-        fulfilled:
-          true,
-        credits,
-        balance:
-          newBalance,
+        projects
       });
     } catch (error) {
       await recordError(
@@ -3109,180 +2159,93 @@ app.post(
         req
       );
 
-      next(error);
+      res.status(500).json({
+        ok: false,
+        error:
+          "Unable to load projects."
+      });
     }
   }
 );
 
-/*
-|--------------------------------------------------------------------------
-| USER CREDITS
-|--------------------------------------------------------------------------
-*/
-
 app.get(
-  "/api/credits",
+  "/api/projects/:id",
   requireUser,
   async (req, res) => {
-    const credits =
-      await getUserCredits(
+    const projects =
+      await readUserProjects(
         req.user.id
       );
 
+    const project =
+      projects.find(
+        p => p.id === req.params.id
+      );
+
+    if (!project) {
+      return res.status(404).json({
+        ok: false,
+        error: "Project not found."
+      });
+    }
+
     res.json({
       ok: true,
-      credits,
-      remainingCredits:
-        credits,
-      usableCredits:
-        providerIsConfigured() &&
-        !providerBlocked
-          ? credits
-          : 0,
-      providerConfigured:
-        providerIsConfigured(),
-      providerBlocked,
-      creditsPer5Seconds:
-        CREDITS_PER_5_SECONDS,
+      project
     });
   }
 );
 
-/*
-|--------------------------------------------------------------------------
-| VIDEO GENERATION
-|--------------------------------------------------------------------------
-*/
-
-app.post(
-  "/api/generate/text",
+app.delete(
+  "/api/projects/:id",
   requireUser,
-  async (req, res, next) => {
-    try {
-      const result =
-        await createGeneration(
-          req,
-          "text"
-        );
-
-      res.json(result);
-    } catch (error) {
-      await recordError(
-        error,
-        req
+  async (req, res) => {
+    const dir =
+      await userProjectDir(
+        req.user.id
       );
 
-      if (
-        error.code ===
-        "MAMAKI_CREDITS_INSUFFICIENT"
-      ) {
-        return res.status(402).json({
-          ok: false,
-          error:
-            error.message,
-          requiredCredits:
-            error.requiredCredits,
-          availableCredits:
-            error.availableCredits,
-        });
-      }
+    const file =
+      path.join(
+        dir,
+        `${req.params.id}.json`
+      );
 
-      if (
-        error.code ===
-        "REPLICATE_PROVIDER_BLOCKED"
-      ) {
-        return res.status(402).json({
-          ok: false,
-          error:
-            error.message,
-        });
-      }
+    try {
+      await fs.unlink(file);
 
-      next(error);
+      res.json({
+        ok: true
+      });
+    } catch {
+      res.status(404).json({
+        ok: false,
+        error:
+          "Project not found."
+      });
     }
   }
 );
 
-app.post(
-  "/api/generate/image",
-  requireUser,
-  upload.single("image"),
-  async (req, res, next) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "Reference image is required.",
-        });
-      }
-
-      const result =
-        await createGeneration(
-          req,
-          "image"
-        );
-
-      res.json(result);
-    } catch (error) {
-      await recordError(
-        error,
-        req
-      );
-
-      if (
-        error.code ===
-        "MAMAKI_CREDITS_INSUFFICIENT"
-      ) {
-        return res.status(402).json({
-          ok: false,
-          error:
-            error.message,
-          requiredCredits:
-            error.requiredCredits,
-          availableCredits:
-            error.availableCredits,
-        });
-      }
-
-      if (
-        error.code ===
-        "REPLICATE_PROVIDER_BLOCKED"
-      ) {
-        return res.status(402).json({
-          ok: false,
-          error:
-            error.message,
-        });
-      }
-
-      next(error);
-    }
-  }
-);
-
-/*
-|--------------------------------------------------------------------------
-| FREE STUDIO - NARRATION
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   FREE STUDIO
+========================================================= */
 
 app.post(
   "/api/studio/narration",
   requireUser,
-  async (req, res, next) => {
+  async (req, res) => {
     try {
       const text =
         String(
-          req.body?.text ||
-            ""
+          req.body?.text || ""
         ).trim();
 
       if (!text) {
         return res.status(400).json({
           ok: false,
           error:
-            "Narration text is required.",
+            "Narration text is required."
         });
       }
 
@@ -3303,29 +2266,32 @@ app.post(
         "en-US-AriaNeural",
         {
           outputFormat:
-            "audio-24khz-48kbitrate-mono-mp3",
+            "audio-24khz-96kbitrate-mono-mp3"
         }
       );
 
-      const audio =
-        await tts.toFile();
+      const data =
+        tts.toBuffer
+          ? await tts.toBuffer()
+          : null;
 
-      await fs.writeFile(
-        output,
-        audio
-      );
+      if (data) {
+        await fs.writeFile(
+          output,
+          data
+        );
+      }
 
-      await updateUsage(
+      await addUsage(
         req.user.id,
-        {
-          narrationJobs: 1,
-        }
+        "narrationJobs",
+        1
       );
 
       res.json({
         ok: true,
         audioUrl:
-          `${APP_URL}/outputs/${filename}`,
+          `/outputs/${filename}`
       });
     } catch (error) {
       await recordError(
@@ -3333,369 +2299,1105 @@ app.post(
         req
       );
 
-      next(error);
+      res.status(500).json({
+        ok: false,
+        error:
+          "Narration generation failed."
+      });
     }
   }
 );
 
-/*
-|--------------------------------------------------------------------------
-| ADMIN STATS
-|--------------------------------------------------------------------------
-*/
+app.post(
+  "/api/studio/upload",
+  requireUser,
+  upload.single("file"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "No file uploaded."
+        });
+      }
+
+      const ext =
+        path.extname(
+          req.file.originalname ||
+          ""
+        ) || ".bin";
+
+      const filename =
+        `${randomUUID()}${ext}`;
+
+      await fs.writeFile(
+        path.join(
+          OUTPUTS,
+          filename
+        ),
+        req.file.buffer
+      );
+
+      await addUsage(
+        req.user.id,
+        "studioJobs",
+        1
+      );
+
+      res.json({
+        ok: true,
+        url:
+          `/outputs/${filename}`
+      });
+    } catch (error) {
+      await recordError(
+        error,
+        req
+      );
+
+      res.status(500).json({
+        ok: false,
+        error:
+          "Studio upload failed."
+      });
+    }
+  }
+);
+
+/* =========================================================
+   FINANCE
+========================================================= */
+
+async function addFinanceTransaction(item) {
+  const rows =
+    await readJSON(
+      FINANCE_FILE,
+      []
+    );
+
+  rows.unshift({
+    id: randomUUID(),
+    date: now(),
+    ...item
+  });
+
+  await writeJSON(
+    FINANCE_FILE,
+    rows.slice(0, 5000)
+  );
+}
+
+async function calculateFinance() {
+  const finance =
+    await readJSON(
+      FINANCE_FILE,
+      []
+    );
+
+  let grossRevenue = 0;
+  let refunds = 0;
+  let totalCosts = 0;
+
+  for (const item of finance) {
+    const amount =
+      Number(item.amount || 0);
+
+    if (
+      item.type === "revenue"
+    ) {
+      grossRevenue += amount;
+    }
+
+    if (
+      item.type === "refund"
+    ) {
+      refunds += amount;
+    }
+
+    if (
+      item.type === "cost"
+    ) {
+      totalCosts += amount;
+    }
+  }
+
+  const netRevenue =
+    grossRevenue - refunds;
+
+  const profit =
+    netRevenue - totalCosts;
+
+  const margin =
+    netRevenue > 0
+      ? (profit / netRevenue) * 100
+      : 0;
+
+  return {
+    grossRevenue,
+    refunds,
+    netRevenue,
+    totalCosts,
+    profit,
+    profitMargin: margin
+  };
+}
+
+/* =========================================================
+   ADMIN PAGE
+========================================================= */
+
+function adminHTML() {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050509">
+<title>MAMAKI ADMIN</title>
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:#050509;
+  color:#f7f7fa;
+  font-family:Inter,Arial,sans-serif;
+}
+a{color:inherit}
+button{
+  border:0;
+  cursor:pointer;
+}
+.top{
+  position:sticky;
+  top:0;
+  z-index:10;
+  background:#09090d;
+  border-bottom:1px solid #24242d;
+  padding:16px 22px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:15px;
+}
+.brand{
+  font-size:21px;
+  font-weight:800;
+}
+.sub{
+  color:#92929d;
+  font-size:13px;
+  margin-top:3px;
+}
+.actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.btn{
+  padding:10px 14px;
+  border-radius:10px;
+  background:#1b1b23;
+  color:#fff;
+  border:1px solid #30303a;
+}
+.btn.primary{
+  background:#fff;
+  color:#050509;
+}
+.btn.danger{
+  background:#35161b;
+  color:#ffb8c0;
+}
+.wrap{
+  max-width:1500px;
+  margin:auto;
+  padding:25px;
+}
+.notice{
+  border:1px solid #2a2a34;
+  background:#101016;
+  border-radius:15px;
+  padding:14px 16px;
+  margin-bottom:20px;
+}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:12px;
+}
+.card{
+  background:#101016;
+  border:1px solid #24242d;
+  border-radius:16px;
+  padding:18px;
+}
+.label{
+  color:#92929d;
+  font-size:12px;
+}
+.value{
+  font-size:25px;
+  font-weight:800;
+  margin-top:8px;
+}
+.section{
+  margin-top:25px;
+}
+.section h2{
+  font-size:18px;
+}
+.status{
+  display:inline-flex;
+  padding:5px 9px;
+  border-radius:999px;
+  background:#17311f;
+  color:#8df0a6;
+  font-size:12px;
+}
+.warn{
+  background:#3b3014;
+  color:#ffd76b;
+}
+table{
+  width:100%;
+  border-collapse:collapse;
+  min-width:700px;
+}
+.tableWrap{
+  overflow:auto;
+}
+th,td{
+  text-align:left;
+  padding:12px;
+  border-bottom:1px solid #24242d;
+  font-size:13px;
+}
+th{
+  color:#92929d;
+}
+input,select{
+  width:100%;
+  background:#08080c;
+  color:#fff;
+  border:1px solid #30303a;
+  border-radius:9px;
+  padding:11px;
+}
+.form{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:10px;
+  align-items:end;
+}
+.muted{
+  color:#92929d;
+  font-size:12px;
+}
+.hidden{display:none}
+#error{
+  color:#ff9da7;
+  margin-top:10px;
+}
+@media(max-width:700px){
+  .wrap{padding:14px}
+  .top{padding:14px}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+<div>
+<div class="brand">✨ MAMAKI ADMIN</div>
+<div class="sub">Private administrator dashboard</div>
+</div>
+<div class="actions">
+<a class="btn" href="/">MAMAKI Interface</a>
+<button class="btn" onclick="refreshAll()">Refresh</button>
+<button class="btn danger" onclick="logout()">Logout</button>
+</div>
+</header>
+
+<main class="wrap">
+
+<div class="notice">
+<strong>Administrator dashboard connected.</strong>
+<div class="muted" id="adminInfo">Checking administrator authentication...</div>
+<div id="error"></div>
+</div>
+
+<section>
+<div class="grid" id="overview"></div>
+</section>
+
+<section class="section">
+<h2>Replicate & AI Provider</h2>
+<div class="card" id="provider"></div>
+</section>
+
+<section class="section">
+<h2>Business & Finance</h2>
+<div class="grid" id="finance"></div>
+</section>
+
+<section class="section">
+<h2>Smart Credit Pricing & FX</h2>
+<div class="card" id="pricing"></div>
+</section>
+
+<section class="section">
+<h2>MAMAKI Credit Management</h2>
+<div class="card">
+<div class="form">
+<div>
+<label>User ID</label>
+<input id="creditUser" placeholder="User ID">
+</div>
+<div>
+<label>Credit adjustment</label>
+<input id="creditAmount" type="number" placeholder="100 or -100">
+</div>
+<div>
+<button class="btn primary" onclick="adjustCredits()">Adjust Credits</button>
+</div>
+</div>
+</div>
+</section>
+
+<section class="section">
+<h2>Owner Profit Withdrawal</h2>
+<div class="card">
+<div class="form">
+<div>
+<label>Amount NGN</label>
+<input id="withdrawAmount" type="number" placeholder="Amount">
+</div>
+<div>
+<label>Bank / account description</label>
+<input id="withdrawAccount" placeholder="Owner withdrawal account">
+</div>
+<div>
+<button class="btn primary" onclick="withdrawProfit()">Withdraw Profit</button>
+</div>
+</div>
+<div class="muted" style="margin-top:10px">
+Withdrawals remain disabled until the relevant payment/transfer provider is configured.
+</div>
+</div>
+</section>
+
+<section class="section">
+<h2>Users</h2>
+<div class="card tableWrap">
+<table>
+<thead><tr>
+<th>Name</th><th>Email</th><th>Role</th><th>Credits</th>
+<th>Videos</th><th>AI Seconds</th><th>Created</th>
+</tr></thead>
+<tbody id="users"></tbody>
+</table>
+</div>
+</section>
+
+<section class="section">
+<h2>Payments</h2>
+<div class="card tableWrap">
+<table>
+<thead><tr>
+<th>Reference</th><th>Email</th><th>Credits</th>
+<th>Amount</th><th>Currency</th><th>Status</th><th>Date</th>
+</tr></thead>
+<tbody id="payments"></tbody>
+</table>
+</div>
+</section>
+
+<section class="section">
+<h2>Security Activity</h2>
+<div class="card tableWrap">
+<table>
+<thead><tr>
+<th>Action</th><th>Email/User</th><th>Reference</th><th>Date</th>
+</tr></thead>
+<tbody id="security"></tbody>
+</table>
+</div>
+</section>
+
+<section class="section">
+<h2>Errors</h2>
+<div class="card tableWrap">
+<table>
+<thead><tr>
+<th>Message</th><th>Path</th><th>Method</th><th>Date</th>
+</tr></thead>
+<tbody id="errors"></tbody>
+</table>
+</div>
+</section>
+
+<section class="section">
+<h2>Withdrawal History</h2>
+<div class="card tableWrap">
+<table>
+<thead><tr>
+<th>Reference</th><th>Amount</th><th>Status</th><th>Account</th><th>Date</th>
+</tr></thead>
+<tbody id="withdrawals"></tbody>
+</table>
+</div>
+</section>
+
+</main>
+
+<script>
+function token(){
+  const keys=[
+    "mamaki_token",
+    "mamakiToken",
+    "sessionToken",
+    "authToken",
+    "token",
+    "MAMAKI_TOKEN",
+    "mamaki_session"
+  ];
+
+  for(const k of keys){
+    const v=localStorage.getItem(k);
+    if(v && v.length>20) return v;
+  }
+
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    const v=localStorage.getItem(k);
+    if(v && typeof v==="string" && v.length>60){
+      if(v.split(".").length>=4) return v;
+    }
+  }
+
+  return "";
+}
+
+async function api(url,options={}){
+  const headers={
+    ...(options.headers||{}),
+    Authorization:"Bearer "+token()
+  };
+
+  if(options.body && !headers["Content-Type"]){
+    headers["Content-Type"]="application/json";
+  }
+
+  const r=await fetch(url,{
+    ...options,
+    headers
+  });
+
+  const text=await r.text();
+
+  let data;
+
+  try{
+    data=JSON.parse(text);
+  }catch{
+    throw new Error(
+      "Server returned an invalid response: "+
+      text.slice(0,120)
+    );
+  }
+
+  if(!r.ok || data.ok===false){
+    throw new Error(
+      data.error || "Request failed."
+    );
+  }
+
+  return data;
+}
+
+function money(n){
+  return "₦"+Number(n||0).toLocaleString(
+    undefined,
+    {minimumFractionDigits:2,maximumFractionDigits:2}
+  );
+}
+
+function esc(v){
+  return String(v??"")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;");
+}
+
+async function loadMe(){
+  const d=await api("/api/auth/me");
+
+  if(d.user.role!=="admin"){
+    throw new Error("Administrator access required.");
+  }
+
+  document.getElementById("adminInfo").textContent=
+    "Signed in as "+d.user.name+" ("+d.user.email+").";
+}
+
+async function loadStats(){
+  const d=await api("/api/admin/stats");
+  const s=d.stats||{};
+
+  const items=[
+    ["Total Users",s.totalUsers],
+    ["Live / Active",s.activeUsers],
+    ["New Today",s.newToday],
+    ["New This Week",s.newWeek],
+    ["New This Month",s.newMonth],
+    ["Total Admins",s.totalAdmins],
+    ["Videos Generated",s.videosGenerated],
+    ["AI Seconds",s.aiSeconds],
+    ["Narrations",s.narrations],
+    ["Projects",s.projects],
+    ["Completed Jobs",s.completedJobs],
+    ["Processing Jobs",s.processingJobs],
+    ["Failed Jobs",s.failedJobs],
+    ["MAMAKI Credits",s.mamakiCredits],
+    ["Profit",money(s.profit)]
+  ];
+
+  document.getElementById("overview").innerHTML=
+    items.map(x=>\`
+      <div class="card">
+        <div class="label">\${esc(x[0])}</div>
+        <div class="value">\${esc(x[1])}</div>
+      </div>
+    \`).join("");
+}
+
+async function loadProvider(){
+  const d=await api("/api/admin/credits");
+  const p=d.provider||d;
+
+  document.getElementById("provider").innerHTML=\`
+    <div class="grid">
+      <div>
+        <div class="label">Configured</div>
+        <div class="value">\${p.configured?"YES":"NO"}</div>
+      </div>
+      <div>
+        <div class="label">Provider Capacity</div>
+        <div class="value">\${p.usable===false?"BLOCKED":"AVAILABLE"}</div>
+      </div>
+      <div>
+        <div class="label">Provider Balance</div>
+        <div class="value">$\${Number(p.balance||0).toFixed(2)}</div>
+      </div>
+    </div>
+    <p class="muted">
+      Replicate does not expose an authoritative prepaid balance
+      through the public account API. MAMAKI will not fabricate a balance.
+    </p>
+  \`;
+}
+
+async function loadFinance(){
+  const d=await api("/api/admin/finance");
+  const f=d.finance||d;
+
+  document.getElementById("finance").innerHTML=
+    [
+      ["Gross Revenue",money(f.grossRevenue)],
+      ["Refunds",money(f.refunds)],
+      ["Net Revenue",money(f.netRevenue)],
+      ["Total Costs",money(f.totalCosts)],
+      ["Profit",money(f.profit)],
+      ["Profit Margin",Number(f.profitMargin||0).toFixed(2)+"%"]
+    ].map(x=>\`
+      <div class="card">
+        <div class="label">\${esc(x[0])}</div>
+        <div class="value">\${esc(x[1])}</div>
+      </div>
+    \`).join("");
+}
+
+async function loadPricing(){
+  const d=await api("/api/admin/billing");
+  const p=d.pricing||d;
+
+  document.getElementById("pricing").innerHTML=\`
+    <div class="grid">
+      <div>
+        <div class="label">Live USD → NGN</div>
+        <div class="value">₦\${Number(p.fxRate||0).toLocaleString()}</div>
+      </div>
+      <div>
+        <div class="label">MAMAKI Markup / USD</div>
+        <div class="value">₦\${Number(p.markup||0).toLocaleString()}</div>
+      </div>
+      <div>
+        <div class="label">MAMAKI Selling Rate</div>
+        <div class="value">₦\${Number(p.sellingRate||0).toLocaleString()}</div>
+      </div>
+      <div>
+        <div class="label">FX Status</div>
+        <div class="value">\${esc(p.fxSource||"UNKNOWN")}</div>
+      </div>
+      <div>
+        <div class="label">100 Credits</div>
+        <div class="value">₦\${Number(p.packages?.[0]?.amount||0).toLocaleString()}</div>
+      </div>
+      <div>
+        <div class="label">Paystack</div>
+        <div class="value">\${p.paystackConfigured?"CONFIGURED":"NOT CONFIGURED"}</div>
+      </div>
+    </div>
+    <p class="muted">
+      The FX rate and markup are internal business calculations.
+      Customers see only the final package price.
+    </p>
+  \`;
+}
+
+async function loadUsers(){
+  const d=await api("/api/admin/users");
+
+  document.getElementById("users").innerHTML=
+    (d.users||[]).map(u=>\`
+      <tr>
+        <td>\${esc(u.name)}</td>
+        <td>\${esc(u.email)}</td>
+        <td>\${esc(u.role)}</td>
+        <td>\${esc(u.credits)}</td>
+        <td>\${esc(u.videos)}</td>
+        <td>\${esc(u.aiSeconds)}</td>
+        <td>\${esc(u.createdAt)}</td>
+      </tr>
+    \`).join("");
+}
+
+async function loadPayments(){
+  const d=await api("/api/admin/billing");
+  const rows=d.payments||[];
+
+  document.getElementById("payments").innerHTML=
+    rows.map(p=>\`
+      <tr>
+        <td>\${esc(p.reference)}</td>
+        <td>\${esc(p.email)}</td>
+        <td>\${esc(p.credits)}</td>
+        <td>\${money(p.amount)}</td>
+        <td>\${esc(p.currency)}</td>
+        <td>\${esc(p.status)}</td>
+        <td>\${esc(p.createdAt)}</td>
+      </tr>
+    \`).join("");
+}
+
+async function loadSecurity(){
+  const d=await api("/api/admin/security");
+
+  document.getElementById("security").innerHTML=
+    (d.security||[]).map(x=>\`
+      <tr>
+        <td>\${esc(x.action)}</td>
+        <td>\${esc(x.email)}</td>
+        <td>\${esc(x.reference)}</td>
+        <td>\${esc(x.date)}</td>
+      </tr>
+    \`).join("");
+}
+
+async function loadErrors(){
+  const d=await api("/api/admin/errors");
+
+  document.getElementById("errors").innerHTML=
+    (d.errors||[]).map(x=>\`
+      <tr>
+        <td>\${esc(x.message)}</td>
+        <td>\${esc(x.path)}</td>
+        <td>\${esc(x.method)}</td>
+        <td>\${esc(x.date)}</td>
+      </tr>
+    \`).join("");
+}
+
+async function loadWithdrawals(){
+  const d=await api("/api/admin/withdrawals");
+
+  document.getElementById("withdrawals").innerHTML=
+    (d.withdrawals||[]).map(x=>\`
+      <tr>
+        <td>\${esc(x.reference)}</td>
+        <td>\${money(x.amount)}</td>
+        <td>\${esc(x.status)}</td>
+        <td>\${esc(x.account)}</td>
+        <td>\${esc(x.date)}</td>
+      </tr>
+    \`).join("");
+}
+
+async function adjustCredits(){
+  try{
+    const userId=
+      document.getElementById("creditUser").value.trim();
+
+    const amount=
+      Number(
+        document.getElementById("creditAmount").value
+      );
+
+    await api("/api/admin/credits/adjust",{
+      method:"POST",
+      body:JSON.stringify({
+        userId,
+        amount
+      })
+    });
+
+    alert("Credits updated.");
+    await refreshAll();
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+async function withdrawProfit(){
+  try{
+    const amount=
+      Number(
+        document.getElementById("withdrawAmount").value
+      );
+
+    const account=
+      document.getElementById("withdrawAccount").value.trim();
+
+    const d=
+      await api("/api/admin/withdrawals",{
+        method:"POST",
+        body:JSON.stringify({
+          amount,
+          account
+        })
+      });
+
+    alert(d.message||"Withdrawal request recorded.");
+    await refreshAll();
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+async function refreshAll(){
+  try{
+    document.getElementById("error").textContent="";
+    await loadMe();
+
+    await Promise.all([
+      loadStats(),
+      loadProvider(),
+      loadFinance(),
+      loadPricing(),
+      loadUsers(),
+      loadPayments(),
+      loadSecurity(),
+      loadErrors(),
+      loadWithdrawals()
+    ]);
+  }catch(e){
+    document.getElementById("error").textContent=e.message;
+
+    if(
+      /authentication|administrator/i.test(e.message)
+    ){
+      setTimeout(
+        ()=>location.href="/",
+        1200
+      );
+    }
+  }
+}
+
+async function logout(){
+  try{
+    await api("/api/auth/logout",{
+      method:"POST"
+    });
+  }catch{}
+
+  localStorage.removeItem("mamaki_token");
+  localStorage.removeItem("mamakiToken");
+  localStorage.removeItem("sessionToken");
+  localStorage.removeItem("authToken");
+  localStorage.removeItem("token");
+
+  location.href="/";
+}
+
+refreshAll();
+</script>
+</body>
+</html>`;
+}
+
+/* =========================================================
+   ADMIN API
+========================================================= */
 
 app.get(
   "/api/admin/stats",
   requireAdmin,
-  async (req, res, next) => {
-    try {
-      const users =
-        await getUsers();
-
-      const usage =
-        await getUsage();
-
-      const finance =
-        await getFinance();
-
-      const credits =
-        await readCredits();
-
-      let videos = 0;
-      let seconds = 0;
-      let narration = 0;
-      let projects = 0;
-
-      for (
-        const item of Object.values(
-          usage
-        )
-      ) {
-        videos +=
-          Number(
-            item.aiGenerations ||
-              0
-          );
-
-        seconds +=
-          Number(
-            item.aiSeconds ||
-              0
-          );
-
-        narration +=
-          Number(
-            item.narrationJobs ||
-              0
-          );
-
-        projects +=
-          Number(
-            item.studioJobs ||
-              0
-          );
-      }
-
-      const today =
-        new Date();
-
-      const startDay =
-        new Date(
-          today
-        );
-
-      startDay.setHours(
-        0,
-        0,
-        0,
-        0
+  async (req, res) => {
+    const users =
+      await readJSON(
+        USERS_FILE,
+        []
       );
 
-      const startWeek =
-        new Date(
-          today
-        );
-
-      startWeek.setDate(
-        startWeek.getDate() -
-          7
+    const usage =
+      await readJSON(
+        USAGE_FILE,
+        {}
       );
 
-      const startMonth =
-        new Date(
-          today
-        );
-
-      startMonth.setDate(
-        startMonth.getDate() -
-          30
+    const credits =
+      await readJSON(
+        CREDITS_FILE,
+        {}
       );
 
-      const newToday =
-        users.filter(
-          (user) =>
-            Date.parse(
-              user.createdAt
-            ) >=
-            startDay.getTime()
-        ).length;
+    const payments =
+      await readJSON(
+        PAYMENTS_FILE,
+        []
+      );
 
-      const newWeek =
-        users.filter(
-          (user) =>
-            Date.parse(
-              user.createdAt
-            ) >=
-            startWeek.getTime()
-        ).length;
+    const finance =
+      await calculateFinance();
 
-      const newMonth =
-        users.filter(
-          (user) =>
-            Date.parse(
-              user.createdAt
-            ) >=
-            startMonth.getTime()
-        ).length;
+    const today =
+      new Date();
 
-      const sessions =
-        await readJson(
-          SESSIONS_FILE,
-          {}
-        );
+    const dayStart =
+      new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate()
+      ).getTime();
 
-      const active =
-        Object.values(
-          sessions
-        ).filter(
-          (session) =>
-            Number(
-              session.expiresAt ||
-                0
-            ) >
-            Date.now()
-        ).length;
+    const weekStart =
+      dayStart -
+      6 * 24 * 60 * 60 * 1000;
 
-      const errors =
-        await readJson(
-          ERRORS_FILE,
-          []
-        );
+    const monthStart =
+      new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        1
+      ).getTime();
 
-      const issued =
-        credits.transactions
-          .filter(
-            (item) =>
-              item.type ===
-              "ISSUE"
-          )
-          .reduce(
-            (sum, item) =>
-              sum +
-              Number(
-                item.amount || 0
-              ),
-            0
-          );
+    let aiSeconds = 0;
+    let videosGenerated = 0;
+    let narrations = 0;
 
-      const consumed =
-        credits.transactions
-          .filter(
-            (item) =>
-              item.type ===
-              "CONSUME"
-          )
-          .reduce(
-            (sum, item) =>
-              sum +
-              Math.abs(
-                Number(
-                  item.amount || 0
-                )
-              ),
-            0
-          );
+    for (const item of Object.values(usage)) {
+      aiSeconds +=
+        Number(item.aiSeconds || 0);
 
-      const refunded =
-        credits.transactions
-          .filter(
-            (item) =>
-              item.type ===
-              "REFUND"
-          )
-          .reduce(
-            (sum, item) =>
-              sum +
-              Number(
-                item.amount || 0
-              ),
-            0
-          );
+      videosGenerated +=
+        Number(item.aiGenerations || 0);
 
-      const remaining =
-        Object.values(
-          credits.users
-        ).reduce(
-          (sum, value) =>
-            sum +
-            Number(
-              value || 0
-            ),
-          0
-        );
+      narrations +=
+        Number(item.narrationJobs || 0);
+    }
 
-      res.json({
-        ok: true,
-        version:
-          VERSION,
-        users:
+    let mamakiCredits = 0;
+
+    for (const item of Object.values(credits)) {
+      mamakiCredits +=
+        Number(item.balance || 0);
+    }
+
+    const newToday =
+      users.filter(
+        u =>
+          new Date(
+            u.createdAt
+          ).getTime() >= dayStart
+      ).length;
+
+    const newWeek =
+      users.filter(
+        u =>
+          new Date(
+            u.createdAt
+          ).getTime() >= weekStart
+      ).length;
+
+    const newMonth =
+      users.filter(
+        u =>
+          new Date(
+            u.createdAt
+          ).getTime() >= monthStart
+      ).length;
+
+    const projectCount =
+      await countAllProjects();
+
+    const successPayments =
+      payments.filter(
+        p => p.status === "success"
+      ).length;
+
+    res.json({
+      ok: true,
+      stats: {
+        totalUsers:
           users.length,
-        active,
+
+        activeUsers:
+          users.length,
+
         newToday,
         newWeek,
         newMonth,
-        admins:
+
+        totalAdmins:
           users.filter(
-            (user) =>
-              user.role ===
-              "admin"
+            u => u.role === "admin"
           ).length,
-        videosGenerated:
-          videos,
-        aiSeconds:
-          seconds,
-        narrations:
-          narration,
-        projects,
+
+        videosGenerated,
+        aiSeconds,
+        narrations,
+        projects:
+          projectCount,
+
         completedJobs:
-          videos,
+          videosGenerated,
+
         processingJobs: 0,
-        failedJobs:
-          errors.length,
-        mamakiCredits:
-          remaining,
-        creditsIssued:
-          issued,
-        creditsConsumed:
-          consumed,
-        creditsRefunded:
-          refunded,
-        profitNGN:
-          finance.wallet.profit,
-        revenue:
-          finance.wallet.revenue,
-        refunds:
-          finance.wallet.refunds,
-        costs:
-          finance.wallet.costs,
-        providerConfigured:
-          providerIsConfigured(),
-        providerBlocked,
-        paystackConfigured:
-          Boolean(
-            PAYSTACK_SECRET_KEY
-          ),
-        uptime:
-          process.uptime(),
-      });
-    } catch (error) {
-      next(error);
-    }
+        failedJobs: 0,
+
+        mamakiCredits,
+
+        successfulPayments:
+          successPayments,
+
+        profit:
+          finance.profit
+      }
+    });
   }
 );
 
-/*
-|--------------------------------------------------------------------------
-| ADMIN USERS
-|--------------------------------------------------------------------------
-*/
+async function countAllProjects() {
+  const users =
+    await readJSON(
+      USERS_FILE,
+      []
+    );
+
+  let count = 0;
+
+  for (const user of users) {
+    try {
+      const projects =
+        await readUserProjects(
+          user.id
+        );
+
+      count +=
+        projects.length;
+    } catch {}
+  }
+
+  return count;
+}
 
 app.get(
   "/api/admin/users",
   requireAdmin,
-  async (req, res, next) => {
-    try {
-      const users =
-        await getUsers();
+  async (req, res) => {
+    const users =
+      await readJSON(
+        USERS_FILE,
+        []
+      );
 
-      const usage =
-        await getUsage();
+    const usage =
+      await readJSON(
+        USAGE_FILE,
+        {}
+      );
 
-      const credits =
-        await readCredits();
+    const credits =
+      await readJSON(
+        CREDITS_FILE,
+        {}
+      );
 
-      res.json({
-        ok: true,
-        users:
-          users.map(
-            (user) => ({
-              ...safeUser(
-                user
-              ),
-              credits:
-                Number(
-                  credits.users[
-                    user.id
-                  ] || 0
-                ),
-              usage:
-                usage[
-                  user.id
-                ] || {
-                  aiGenerations: 0,
-                  aiSeconds: 0,
-                  narrationJobs: 0,
-                  studioJobs: 0,
-                },
-            })
-          ),
-      });
-    } catch (error) {
-      next(error);
-    }
+    res.json({
+      ok: true,
+      users:
+        users.map(u => ({
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          credits:
+            credits[u.id]?.balance ||
+            0,
+          videos:
+            usage[u.id]?.aiGenerations ||
+            0,
+          aiSeconds:
+            usage[u.id]?.aiSeconds ||
+            0,
+          createdAt:
+            u.createdAt
+        }))
+    });
   }
 );
-
-/*
-|--------------------------------------------------------------------------
-| ADMIN JOBS
-|--------------------------------------------------------------------------
-*/
 
 app.get(
   "/api/admin/jobs",
   requireAdmin,
   async (req, res) => {
-    const errors =
-      await readJson(
-        ERRORS_FILE,
+    const users =
+      await readJSON(
+        USERS_FILE,
         []
       );
 
+    const jobs = [];
+
+    for (const user of users) {
+      const projects =
+        await readUserProjects(
+          user.id
+        );
+
+      for (const project of projects) {
+        jobs.push({
+          ...project,
+          email: user.email
+        });
+      }
+    }
+
+    jobs.sort(
+      (a,b)=>
+        new Date(b.createdAt || 0) -
+        new Date(a.createdAt || 0)
+    );
+
     res.json({
       ok: true,
-      jobs:
-        errors.map(
-          (item) => ({
-            id:
-              item.id,
-            status:
-              "failed",
-            error:
-              item.message,
-            createdAt:
-              item.createdAt,
-          })
-        ),
+      jobs
     });
   }
 );
-
-/*
-|--------------------------------------------------------------------------
-| ADMIN ERRORS
-|--------------------------------------------------------------------------
-*/
 
 app.get(
   "/api/admin/errors",
@@ -3704,19 +3406,13 @@ app.get(
     res.json({
       ok: true,
       errors:
-        await readJson(
+        await readJSON(
           ERRORS_FILE,
           []
-        ),
+        )
     });
   }
 );
-
-/*
-|--------------------------------------------------------------------------
-| ADMIN SECURITY
-|--------------------------------------------------------------------------
-*/
 
 app.get(
   "/api/admin/security",
@@ -3724,137 +3420,75 @@ app.get(
   async (req, res) => {
     res.json({
       ok: true,
-      events:
-        await readJson(
+      security:
+        await readJSON(
           SECURITY_FILE,
           []
-        ),
+        )
     });
   }
 );
 
-/*
-|--------------------------------------------------------------------------
-| ADMIN CREDITS
-|--------------------------------------------------------------------------
-*/
-
 app.get(
   "/api/admin/credits",
   requireAdmin,
-  async (req, res, next) => {
-    try {
-      const data =
-        await readCredits();
+  async (req, res) => {
+    const records =
+      await readJSON(
+        CREDITS_FILE,
+        {}
+      );
 
-      const transactions =
-        data.transactions;
+    let balance = 0;
+    let consumed = 0;
+    let issued = 0;
+    let refunded = 0;
 
-      const issued =
-        transactions
-          .filter(
-            (item) =>
-              item.type ===
-              "ISSUE"
-          )
-          .reduce(
-            (sum, item) =>
-              sum +
-              Number(
-                item.amount || 0
-              ),
-            0
-          );
+    for (const item of Object.values(records)) {
+      balance +=
+        Number(item.balance || 0);
 
-      const consumed =
-        transactions
-          .filter(
-            (item) =>
-              item.type ===
-              "CONSUME"
-          )
-          .reduce(
-            (sum, item) =>
-              sum +
-              Math.abs(
-                Number(
-                  item.amount || 0
-                )
-              ),
-            0
-          );
+      consumed +=
+        Number(item.consumed || 0);
 
-      const refunded =
-        transactions
-          .filter(
-            (item) =>
-              item.type ===
-              "REFUND"
-          )
-          .reduce(
-            (sum, item) =>
-              sum +
-              Number(
-                item.amount || 0
-              ),
-            0
-          );
+      issued +=
+        Number(item.issued || 0);
 
-      const assigned =
-        Object.values(
-          data.users
-        ).reduce(
-          (sum, value) =>
-            sum +
-            Number(
-              value || 0
-            ),
-          0
-        );
-
-      res.json({
-        ok: true,
-        issued,
-        consumed,
-        refunded,
-        remaining:
-          assigned,
-        users:
-          data.users,
-        transactions:
-          transactions.slice(
-            0,
-            500
-          ),
-        replicate: {
-          configured:
-            providerIsConfigured(),
-          balance: 0,
-          balanceKnown: false,
-          usable:
-            providerIsConfigured() &&
-            !providerBlocked,
-          note:
-            providerBlocked
-              ? "Replicate recently reported insufficient credit. AI generation is blocked until provider credit is restored."
-              : "Replicate's public account API does not expose prepaid balance, so no provider balance is fabricated.",
-        },
-      });
-    } catch (error) {
-      next(error);
+      refunded +=
+        Number(item.refunded || 0);
     }
+
+    res.json({
+      ok: true,
+      credits: {
+        balance,
+        consumed,
+        issued,
+        refunded
+      },
+      provider: {
+        configured:
+          Boolean(REPLICATE_TOKEN),
+        usable:
+          Boolean(REPLICATE_TOKEN) &&
+          !providerBlocked,
+        balance: 0,
+        balanceKnown: false,
+        note:
+          "Replicate does not expose an authoritative prepaid balance through the public account API."
+      }
+    });
   }
 );
 
 app.post(
   "/api/admin/credits/adjust",
   requireAdmin,
-  async (req, res, next) => {
+  async (req, res) => {
     try {
       const userId =
         String(
-          req.body?.userId ||
-            ""
+          req.body?.userId || ""
         ).trim();
 
       const amount =
@@ -3864,504 +3498,56 @@ app.post(
 
       if (
         !userId ||
-        !Number.isFinite(
-          amount
-        ) ||
+        !Number.isFinite(amount) ||
         amount === 0
       ) {
         return res.status(400).json({
           ok: false,
           error:
-            "Valid userId and non-zero amount are required.",
+            "Valid user ID and non-zero credit adjustment are required."
         });
       }
 
+      const users =
+        await readJSON(
+          USERS_FILE,
+          []
+        );
+
       const user =
-        await findUserById(
-          userId
+        users.find(
+          u => u.id === userId
         );
 
       if (!user) {
         return res.status(404).json({
           ok: false,
-          error:
-            "User not found.",
+          error: "User not found."
         });
       }
 
-      if (
-        amount > 0
-      ) {
-        const balance =
-          await addUserCredits(
-            userId,
-            amount,
-            "ADMIN_ADJUSTMENT"
-          );
-
-        await addSecurityEvent({
-          action:
-            "ADMIN_CREDIT_ADJUSTMENT",
-          adminId:
-            req.user.id,
+      const record =
+        await changeCredits(
           userId,
           amount,
-        });
-
-        return res.json({
-          ok: true,
-          balance,
-        });
-      }
-
-      const data =
-        await readCredits();
-
-      const balance =
-        Number(
-          data.users[userId] ||
-            0
+          "admin_adjustment",
+          req.user.email
         );
 
-      const deduction =
-        Math.abs(
-          Math.floor(
-            amount
-          )
-        );
-
-      if (
-        balance <
-        deduction
-      ) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "User does not have enough credits for this adjustment.",
-        });
-      }
-
-      data.users[userId] =
-        balance -
-        deduction;
-
-      data.transactions.push({
-        id: randomUUID(),
-        type: "CONSUME",
-        source:
-          "ADMIN_ADJUSTMENT",
+      await recordSecurity(
+        "ADMIN_CREDIT_ADJUSTMENT",
+        req.user,
         userId,
-        amount:
-          -deduction,
-        createdAt:
-          now(),
-      });
-
-      await writeCredits(
-        data
-      );
-
-      await addSecurityEvent({
-        action:
-          "ADMIN_CREDIT_ADJUSTMENT",
-        adminId:
-          req.user.id,
-        userId,
-        amount:
-          -deduction,
-      });
-
-      res.json({
-        ok: true,
-        balance:
-          data.users[userId],
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-/*
-|--------------------------------------------------------------------------
-| ADMIN FINANCE
-|--------------------------------------------------------------------------
-*/
-
-app.get(
-  "/api/admin/finance",
-  requireAdmin,
-  async (req, res, next) => {
-    try {
-      const finance =
-        await getFinance();
-
-      res.json({
-        ok: true,
-        ...finance,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-/*
-|--------------------------------------------------------------------------
-| ADMIN BILLING
-|--------------------------------------------------------------------------
-*/
-
-app.get(
-  "/api/admin/billing",
-  requireAdmin,
-  async (req, res, next) => {
-    try {
-      const finance =
-        await getFinance();
-
-      const payments =
-        await getPayments();
-
-      const fx =
-        await getFxRates();
-
-      const pricing =
-        await calculateCreditPrice(
-          100,
-          "NGN"
-        );
-
-      res.json({
-        ok: true,
-        provider:
-          PAYSTACK_SECRET_KEY
-            ? "Paystack"
-            : null,
-        configured:
-          Boolean(
-            PAYSTACK_SECRET_KEY
-          ),
-        publicKey:
-          PAYSTACK_PUBLIC_KEY ||
-          null,
-        fx,
-        pricing,
-        finance,
-        payments:
-          payments.slice(
-            0,
-            500
-          ),
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-app.post(
-  "/api/admin/finance/transaction",
-  requireAdmin,
-  async (req, res, next) => {
-    try {
-      const type =
-        String(
-          req.body?.type ||
-            "COST"
-        ).toUpperCase();
-
-      const amount =
-        Number(
-          req.body?.amount
-        );
-
-      const currency =
-        normalizeCurrency(
-          req.body?.currency
-        );
-
-      if (
-        ![
-          "REVENUE",
-          "REFUND",
-          "COST",
-        ].includes(type)
-      ) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "Invalid transaction type.",
-        });
-      }
-
-      if (
-        !Number.isFinite(
-          amount
-        ) ||
-        amount <= 0
-      ) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "Amount must be greater than zero.",
-        });
-      }
-
-      const item =
-        await addFinanceTransaction({
-          type,
-          category:
-            String(
-              req.body?.category ||
-                "ADMIN"
-            ),
+        {
           amount,
-          currency,
-          description:
-            String(
-              req.body?.description ||
-                ""
-            ),
-        });
+          targetEmail:
+            user.email
+        }
+      );
 
       res.json({
         ok: true,
-        transaction:
-          item,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-/*
-|--------------------------------------------------------------------------
-| OWNER PROFIT WITHDRAWAL
-|--------------------------------------------------------------------------
-*/
-
-app.post(
-  "/api/admin/withdraw",
-  requireAdmin,
-  async (req, res, next) => {
-    try {
-      if (
-        !PAYSTACK_SECRET_KEY
-      ) {
-        return res.status(503).json({
-          ok: false,
-          error:
-            "Paystack is not configured for withdrawals.",
-        });
-      }
-
-      const amount =
-        Number(
-          req.body?.amount
-        );
-
-      const accountNumber =
-        String(
-          req.body?.accountNumber ||
-            ""
-        ).trim();
-
-      const bankCode =
-        String(
-          req.body?.bankCode ||
-            ""
-        ).trim();
-
-      const accountName =
-        String(
-          req.body?.accountName ||
-            ""
-        ).trim();
-
-      if (
-        !Number.isFinite(
-          amount
-        ) ||
-        amount <= 0
-      ) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "Withdrawal amount must be greater than zero.",
-        });
-      }
-
-      if (
-        !accountNumber ||
-        !bankCode
-      ) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "Bank account number and bank code are required.",
-        });
-      }
-
-      const finance =
-        await getFinance();
-
-      if (
-        finance.wallet.profit <
-        amount
-      ) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "Withdrawal exceeds available profit.",
-        });
-      }
-
-      const recipientResponse =
-        await fetch(
-          "https://api.paystack.co/transferrecipient",
-          {
-            method: "POST",
-            headers: {
-              Authorization:
-                `Bearer ${PAYSTACK_SECRET_KEY}`,
-              "Content-Type":
-                "application/json",
-            },
-            body:
-              JSON.stringify({
-                type: "nuban",
-                name:
-                  accountName ||
-                  "MAMAKI Owner",
-                account_number:
-                  accountNumber,
-                bank_code:
-                  bankCode,
-                currency:
-                  "NGN",
-              }),
-          }
-        );
-
-      const recipientData =
-        await recipientResponse.json();
-
-      if (
-        !recipientResponse.ok ||
-        !recipientData.status
-      ) {
-        throw new Error(
-          recipientData?.message ||
-            "Unable to create Paystack transfer recipient."
-        );
-      }
-
-      const transferResponse =
-        await fetch(
-          "https://api.paystack.co/transfer",
-          {
-            method: "POST",
-            headers: {
-              Authorization:
-                `Bearer ${PAYSTACK_SECRET_KEY}`,
-              "Content-Type":
-                "application/json",
-            },
-            body:
-              JSON.stringify({
-                source:
-                  "balance",
-                amount:
-                  Math.round(
-                    amount * 100
-                  ),
-                recipient:
-                  recipientData
-                    .data
-                    .recipient_code,
-                reason:
-                  "MAMAKI AI profit withdrawal",
-              }),
-          }
-        );
-
-      const transferData =
-        await transferResponse.json();
-
-      if (
-        !transferResponse.ok ||
-        !transferData.status
-      ) {
-        throw new Error(
-          transferData?.message ||
-            "Paystack withdrawal failed."
-        );
-      }
-
-      const withdrawal = {
-        id: randomUUID(),
-        reference:
-          transferData.data.reference,
-        amount,
-        currency:
-          "NGN",
-        status:
-          transferData.data.status ||
-          "pending",
-        accountNumber:
-          accountNumber.slice(
-            -4
-          ),
-        bankCode,
-        createdAt:
-          now(),
-      };
-
-      const withdrawals =
-        await readJson(
-          WITHDRAWALS_FILE,
-          []
-        );
-
-      withdrawals.unshift(
-        withdrawal
-      );
-
-      await writeJson(
-        WITHDRAWALS_FILE,
-        withdrawals
-      );
-
-      await addFinanceTransaction({
-        type: "COST",
-        category:
-          "PROFIT_WITHDRAWAL",
-        provider:
-          "Paystack",
-        amount,
-        currency:
-          "NGN",
-        description:
-          "Owner profit withdrawal",
-        reference:
-          withdrawal.reference,
-      });
-
-      await addSecurityEvent({
-        action:
-          "OWNER_PROFIT_WITHDRAWAL",
-        adminId:
-          req.user.id,
-        amount,
-        reference:
-          withdrawal.reference,
-      });
-
-      res.json({
-        ok: true,
-        withdrawal,
+        credits: record
       });
     } catch (error) {
       await recordError(
@@ -4369,8 +3555,82 @@ app.post(
         req
       );
 
-      next(error);
+      res.status(500).json({
+        ok: false,
+        error:
+          "Credit adjustment failed."
+      });
     }
+  }
+);
+
+app.get(
+  "/api/admin/finance",
+  requireAdmin,
+  async (req, res) => {
+    res.json({
+      ok: true,
+      finance:
+        await calculateFinance()
+    });
+  }
+);
+
+app.get(
+  "/api/admin/billing",
+  requireAdmin,
+  async (req, res) => {
+    const fx =
+      await getLiveFX();
+
+    const sellingRate =
+      mamakiSellingRate(
+        fx.rate
+      );
+
+    const payments =
+      await readJSON(
+        PAYMENTS_FILE,
+        []
+      );
+
+    res.json({
+      ok: true,
+
+      pricing: {
+        fxRate:
+          fx.rate,
+
+        markup:
+          MAMAKI_MARKUP_NGN,
+
+        sellingRate,
+
+        fxSource:
+          fx.source,
+
+        paystackConfigured:
+          Boolean(
+            PAYSTACK_SECRET_KEY
+          ),
+
+        packages:
+          CREDIT_PACKAGES.map(
+            pkg => ({
+              credits:
+                pkg.credits,
+              amount:
+                packagePriceNGN(
+                  pkg.credits,
+                  sellingRate
+                )
+            })
+          )
+      },
+
+      payments:
+        payments.slice(0, 500)
+    });
   }
 );
 
@@ -4381,985 +3641,541 @@ app.get(
     res.json({
       ok: true,
       withdrawals:
-        await readJson(
+        await readJSON(
           WITHDRAWALS_FILE,
           []
-        ),
+        )
     });
   }
 );
 
-/*
-|--------------------------------------------------------------------------
-| ADMIN CONFIG
-|--------------------------------------------------------------------------
-*/
-
-app.get(
-  "/api/admin/config",
+app.post(
+  "/api/admin/withdrawals",
   requireAdmin,
   async (req, res) => {
-    res.json({
-      ok: true,
-      version:
-        VERSION,
-      appUrl:
-        APP_URL,
-      models: {
-        textToVideo:
-          T2V_MODEL,
-        imageToVideo:
-          I2V_MODEL,
-      },
-      limits: {
-        minimumDuration:
-          MIN_DURATION,
-        maximumDuration:
-          MAX_DURATION,
-        uploadMB: 100,
-      },
-      credits: {
-        starter:
-          STARTER_CREDITS,
-        creditsPer5Seconds:
-          CREDITS_PER_5_SECONDS,
-      },
-      payments: {
-        provider:
-          PAYSTACK_SECRET_KEY
-            ? "Paystack"
-            : null,
-        configured:
-          Boolean(
-            PAYSTACK_SECRET_KEY
-          ),
-      },
-      replicate: {
-        configured:
-          providerIsConfigured(),
-        providerBlocked,
-      },
-    });
+    try {
+      const amount =
+        Number(
+          req.body?.amount
+        );
+
+      const account =
+        String(
+          req.body?.account || ""
+        ).trim();
+
+      if (
+        !Number.isFinite(amount) ||
+        amount <= 0
+      ) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "Enter a valid withdrawal amount."
+        });
+      }
+
+      const reference =
+        `MAMAKI-WD-${Date.now()}-${randomBytes(4).toString("hex")}`;
+
+      const withdrawals =
+        await readJSON(
+          WITHDRAWALS_FILE,
+          []
+        );
+
+      const item = {
+        id: randomUUID(),
+        reference,
+        amount,
+        status:
+          "pending_provider_configuration",
+        account,
+        date: now()
+      };
+
+      withdrawals.unshift(item);
+
+      await writeJSON(
+        WITHDRAWALS_FILE,
+        withdrawals.slice(0, 1000)
+      );
+
+      await recordSecurity(
+        "WITHDRAWAL_REQUEST",
+        req.user,
+        reference,
+        { amount, account }
+      );
+
+      res.json({
+        ok: true,
+        withdrawal: item,
+        message:
+          "Withdrawal request recorded. Automatic bank transfer requires a configured transfer provider."
+      });
+    } catch (error) {
+      await recordError(
+        error,
+        req
+      );
+
+      res.status(500).json({
+        ok: false,
+        error:
+          "Withdrawal request failed."
+      });
+    }
   }
 );
 
-/*
-|--------------------------------------------------------------------------
-| API INFORMATION
-|--------------------------------------------------------------------------
-*/
-
-app.get(
-  "/api",
-  async (req, res) => {
-    res.json({
-      ok: true,
-      service:
-        "MAMAKI AI Video Creative Studio",
-      version:
-        VERSION,
-      endpoints: {
-        health:
-          "/health",
-        login:
-          "/api/auth/login",
-        register:
-          "/api/auth/register",
-        me:
-          "/api/auth/me",
-        credits:
-          "/api/credits",
-        pricing:
-          "/api/billing/pricing",
-        paystack:
-          "/api/billing/paystack/initialize",
-        paymentStatus:
-          "/api/billing/payment/:reference",
-        textToVideo:
-          "/api/generate/text",
-        imageToVideo:
-          "/api/generate/image",
-        admin:
-          "/admin",
-      },
-    });
-  }
-);
-
-/*
-|--------------------------------------------------------------------------
-| PRIVATE ADMIN DASHBOARD
-|
-| THIS IS THE IMPORTANT FIX:
-| /admin NO LONGER SERVES THE NORMAL MAMAKI INTERFACE.
-|--------------------------------------------------------------------------
-*/
-
-const ADMIN_HTML = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<meta name="robots" content="noindex,nofollow">
-<title>MAMAKI AI — Administrator Dashboard</title>
-<style>
-*{box-sizing:border-box}
-body{
- margin:0;
- background:#050509;
- color:#f5f5f7;
- font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-}
-button,input,select{font:inherit}
-.top{
- position:sticky;
- top:0;
- z-index:20;
- background:rgba(5,5,9,.96);
- border-bottom:1px solid #222;
- padding:18px 22px;
- display:flex;
- justify-content:space-between;
- align-items:center;
- gap:12px;
-}
-.brand{font-size:20px;font-weight:800}
-.brand span{opacity:.65}
-.back{
- color:#fff;
- text-decoration:none;
- border:1px solid #333;
- border-radius:10px;
- padding:9px 13px;
-}
-.wrap{max-width:1450px;margin:auto;padding:24px}
-.hidden{display:none!important}
-.notice{
- padding:14px;
- border:1px solid #30303a;
- border-radius:12px;
- background:#0c0c12;
- margin-bottom:18px;
-}
-.grid{
- display:grid;
- grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
- gap:14px;
- margin-bottom:18px;
-}
-.card{
- background:#0d0d13;
- border:1px solid #22232b;
- border-radius:16px;
- padding:18px;
-}
-.card small{color:#9d9da8}
-.value{font-size:27px;font-weight:800;margin-top:8px}
-.section{
- background:#0b0b10;
- border:1px solid #22232b;
- border-radius:16px;
- padding:18px;
- margin-bottom:18px;
- overflow:auto;
-}
-.section h2{margin-top:0}
-table{
- width:100%;
- border-collapse:collapse;
- min-width:650px;
-}
-th,td{
- text-align:left;
- padding:11px;
- border-bottom:1px solid #222;
- font-size:13px;
-}
-th{color:#a9a9b3}
-.badge{
- display:inline-block;
- padding:5px 8px;
- border-radius:999px;
- background:#191923;
- border:1px solid #30303b;
-}
-.controls{
- display:flex;
- flex-wrap:wrap;
- gap:10px;
- margin-bottom:15px;
-}
-.controls input,.controls select{
- background:#09090d;
- color:#fff;
- border:1px solid #333;
- padding:10px;
- border-radius:10px;
-}
-.btn{
- background:#fff;
- color:#000;
- border:0;
- padding:10px 14px;
- border-radius:10px;
- cursor:pointer;
- font-weight:700;
-}
-.btn.dark{
- background:#17171f;
- color:#fff;
- border:1px solid #333;
-}
-.login{
- max-width:430px;
- margin:12vh auto;
- background:#0d0d13;
- border:1px solid #272731;
- border-radius:18px;
- padding:24px;
-}
-.login input{
- width:100%;
- padding:13px;
- margin:7px 0;
- background:#08080c;
- color:#fff;
- border:1px solid #333;
- border-radius:10px;
-}
-.error{color:#ff7b7b;margin-top:10px}
-.success{color:#79e2a0;margin-top:10px}
-</style>
-</head>
-<body>
-
-<div id="loginBox" class="login">
-<h1>MAMAKI AI</h1>
-<p>Private Administrator Dashboard</p>
-<input id="adminEmail" type="email" placeholder="Administrator email">
-<input id="adminPassword" type="password" placeholder="Password">
-<button class="btn" style="width:100%;margin-top:8px" onclick="adminLogin()">Access Admin Dashboard</button>
-<div id="loginMessage"></div>
-</div>
-
-<div id="dashboard" class="hidden">
-<div class="top">
- <div class="brand">✨ MAMAKI <span>ADMIN</span></div>
- <div>
-  <a class="back" href="/">MAMAKI Interface</a>
-  <button class="back" onclick="adminLogout()" style="background:#0d0d13;color:#fff;cursor:pointer">Logout</button>
- </div>
-</div>
-
-<div class="wrap">
-
-<div id="dashMessage" class="notice">Loading administrator data...</div>
-
-<div class="grid">
- <div class="card"><small>Total Users</small><div id="users" class="value">0</div></div>
- <div class="card"><small>Live / Active</small><div id="active" class="value">0</div></div>
- <div class="card"><small>New Today</small><div id="newToday" class="value">0</div></div>
- <div class="card"><small>New This Week</small><div id="newWeek" class="value">0</div></div>
- <div class="card"><small>New This Month</small><div id="newMonth" class="value">0</div></div>
- <div class="card"><small>Total Admins</small><div id="admins" class="value">0</div></div>
- <div class="card"><small>Videos Generated</small><div id="videos" class="value">0</div></div>
- <div class="card"><small>AI Seconds</small><div id="seconds" class="value">0</div></div>
- <div class="card"><small>MAMAKI Credits</small><div id="credits" class="value">0</div></div>
- <div class="card"><small>Profit</small><div id="profit" class="value">₦0</div></div>
-</div>
-
-<div class="section">
-<h2>Replicate & AI Provider</h2>
-<div class="grid">
- <div class="card"><small>Configured</small><div id="replicateConfigured" class="value">—</div></div>
- <div class="card"><small>Provider Capacity</small><div id="replicateUsable" class="value">—</div></div>
- <div class="card"><small>Provider Balance</small><div class="value">$0.00</div></div>
-</div>
-<p style="color:#999">Replicate does not expose an authoritative prepaid balance through the public account API. MAMAKI will not fabricate a balance.</p>
-</div>
-
-<div class="section">
-<h2>Business & Finance</h2>
-<div class="grid">
- <div class="card"><small>Gross Revenue</small><div id="revenue" class="value">₦0</div></div>
- <div class="card"><small>Refunds</small><div id="refunds" class="value">₦0</div></div>
- <div class="card"><small>Total Costs</small><div id="costs" class="value">₦0</div></div>
- <div class="card"><small>Profit</small><div id="financeProfit" class="value">₦0</div></div>
-</div>
-</div>
-
-<div class="section">
-<h2>Smart Credit Pricing & FX</h2>
-<div id="pricingBox">Loading...</div>
-</div>
-
-<div class="section">
-<h2>Owner Profit Withdrawal</h2>
-<div class="controls">
-<input id="withdrawAmount" type="number" min="1" placeholder="Amount in NGN">
-<input id="withdrawAccount" placeholder="Bank account number">
-<input id="withdrawBankCode" placeholder="Bank code">
-<input id="withdrawName" placeholder="Account name">
-<button class="btn" onclick="withdrawProfit()">Withdraw Profit</button>
-</div>
-<div id="withdrawMessage"></div>
-</div>
-
-<div class="section">
-<h2>Users</h2>
-<table>
-<thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Credits</th><th>Videos</th><th>AI Seconds</th><th>Created</th></tr></thead>
-<tbody id="usersTable"></tbody>
-</table>
-</div>
-
-<div class="section">
-<h2>Payments</h2>
-<table>
-<thead><tr><th>Reference</th><th>Email</th><th>Credits</th><th>Amount</th><th>Currency</th><th>Status</th><th>Date</th></tr></thead>
-<tbody id="paymentsTable"></tbody>
-</table>
-</div>
-
-<div class="section">
-<h2>Security Activity</h2>
-<table>
-<thead><tr><th>Action</th><th>Email/User</th><th>Reference</th><th>Date</th></tr></thead>
-<tbody id="securityTable"></tbody>
-</table>
-</div>
-
-<div class="section">
-<h2>Errors</h2>
-<table>
-<thead><tr><th>Message</th><th>Path</th><th>Method</th><th>Date</th></tr></thead>
-<tbody id="errorsTable"></tbody>
-</table>
-</div>
-
-<div class="section">
-<h2>Withdrawal History</h2>
-<table>
-<thead><tr><th>Reference</th><th>Amount</th><th>Status</th><th>Account</th><th>Date</th></tr></thead>
-<tbody id="withdrawalsTable"></tbody>
-</table>
-</div>
-
-</div>
-</div>
-
-<script>
-let adminToken=localStorage.getItem("mamaki_token")||localStorage.getItem("mamakiToken")||localStorage.getItem("sessionToken")||localStorage.getItem("token")||"";
-
-function saveToken(token){
- adminToken=token||"";
- if(adminToken){
-  localStorage.setItem("mamaki_token",adminToken);
- }
-}
-
-function headers(){
- return {
-  "Content-Type":"application/json",
-  "Authorization":"Bearer "+adminToken
- };
-}
-
-async function api(url,options={}){
- options.headers={
-  ...(options.headers||{}),
-  ...headers()
- };
- const r=await fetch(url,options);
- let d={};
- try{d=await r.json()}catch{}
- if(!r.ok)throw new Error(d.error||"Request failed");
- return d;
-}
-
-async function adminLogin(){
- const email=document.getElementById("adminEmail").value.trim();
- const password=document.getElementById("adminPassword").value;
- const msg=document.getElementById("loginMessage");
- msg.className="";
- msg.textContent="Signing in...";
- try{
-  const r=await fetch("/api/auth/login",{
-   method:"POST",
-   headers:{"Content-Type":"application/json"},
-   body:JSON.stringify({email,password})
-  });
-  const d=await r.json();
-  if(!r.ok)throw new Error(d.error||"Invalid credentials");
-  if(d.user.role!=="admin")throw new Error("This account is not an administrator.");
-  saveToken(d.token);
-  showDashboard();
- }catch(e){
-  msg.className="error";
-  msg.textContent=e.message;
- }
-}
-
-function showDashboard(){
- document.getElementById("loginBox").classList.add("hidden");
- document.getElementById("dashboard").classList.remove("hidden");
- loadDashboard();
-}
-
-async function loadDashboard(){
- try{
-  const me=await api("/api/auth/me");
-  if(me.user.role!=="admin")throw new Error("Administrator access required.");
-
-  const [stats,users,credits,billing,security,errors,withdrawals]=await Promise.all([
-   api("/api/admin/stats"),
-   api("/api/admin/users"),
-   api("/api/admin/credits"),
-   api("/api/admin/billing"),
-   api("/api/admin/security"),
-   api("/api/admin/errors"),
-   api("/api/admin/withdrawals")
-  ]);
-
-  document.getElementById("dashMessage").textContent="Administrator dashboard connected.";
-
-  document.getElementById("users").textContent=stats.users;
-  document.getElementById("active").textContent=stats.active;
-  document.getElementById("newToday").textContent=stats.newToday;
-  document.getElementById("newWeek").textContent=stats.newWeek;
-  document.getElementById("newMonth").textContent=stats.newMonth;
-  document.getElementById("admins").textContent=stats.admins;
-  document.getElementById("videos").textContent=stats.videosGenerated;
-  document.getElementById("seconds").textContent=stats.aiSeconds;
-  document.getElementById("credits").textContent=stats.mamakiCredits;
-  document.getElementById("profit").textContent=money(stats.profitNGN);
-
-  document.getElementById("replicateConfigured").textContent=stats.providerConfigured?"YES":"NO";
-  document.getElementById("replicateUsable").textContent=credits.replicate.usable?"AVAILABLE":"BLOCKED";
-
-  document.getElementById("revenue").textContent=money(billing.finance.wallet.revenue);
-  document.getElementById("refunds").textContent=money(billing.finance.wallet.refunds);
-  document.getElementById("costs").textContent=money(billing.finance.wallet.costs);
-  document.getElementById("financeProfit").textContent=money(billing.finance.wallet.profit);
-
-  document.getElementById("pricingBox").innerHTML=
-   "<p><b>USD → NGN:</b> "+Number(billing.fx.rates.NGN||0).toFixed(2)+"</p>"+
-   "<p><b>FX status:</b> "+(billing.fx.live?"LIVE":"FALLBACK")+"</p>"+
-   "<p><b>Last update:</b> "+new Date(billing.fx.updatedAt).toLocaleString()+"</p>"+
-   "<p><b>100 credits:</b> "+formatPrice(billing.pricing)+"</p>"+
-   "<p><b>Target margin:</b> "+(billing.pricing.marginTarget*100).toFixed(0)+"%</p>"+
-   "<p><b>Paystack:</b> "+(billing.configured?"CONFIGURED":"NOT CONFIGURED")+"</p>";
-
-  document.getElementById("usersTable").innerHTML=users.users.map(u=>
-   "<tr><td>"+esc(u.name)+"</td><td>"+esc(u.email)+"</td><td><span class='badge'>"+esc(u.role)+"</span></td><td>"+Number(u.credits||0)+"</td><td>"+Number(u.usage?.aiGenerations||0)+"</td><td>"+Number(u.usage?.aiSeconds||0)+"</td><td>"+date(u.createdAt)+"</td></tr>"
-  ).join("");
-
-  document.getElementById("paymentsTable").innerHTML=(billing.payments||[]).map(p=>
-   "<tr><td>"+esc(p.reference)+"</td><td>"+esc(p.email)+"</td><td>"+Number(p.credits||0)+"</td><td>"+Number(p.amount||0).toLocaleString()+"</td><td>"+esc(p.currency||"")+"</td><td><span class='badge'>"+esc(p.status||"")+"</span></td><td>"+date(p.createdAt||p.updatedAt)+"</td></tr>"
-  ).join("");
-
-  document.getElementById("securityTable").innerHTML=(security.events||[]).slice(0,100).map(e=>
-   "<tr><td>"+esc(e.action||"")+"</td><td>"+esc(e.email||e.userId||"")+"</td><td>"+esc(e.reference||"")+"</td><td>"+date(e.createdAt)+"</td></tr>"
-  ).join("");
-
-  document.getElementById("errorsTable").innerHTML=(errors.errors||[]).slice(0,100).map(e=>
-   "<tr><td>"+esc(e.message||"")+"</td><td>"+esc(e.path||"")+"</td><td>"+esc(e.method||"")+"</td><td>"+date(e.createdAt)+"</td></tr>"
-  ).join("");
-
-  document.getElementById("withdrawalsTable").innerHTML=(withdrawals.withdrawals||[]).map(w=>
-   "<tr><td>"+esc(w.reference||"")+"</td><td>"+money(w.amount||0)+"</td><td>"+esc(w.status||"")+"</td><td>****"+esc(w.accountNumber||"")+"</td><td>"+date(w.createdAt)+"</td></tr>"
-  ).join("");
-
- }catch(e){
-  document.getElementById("dashMessage").className="notice error";
-  document.getElementById("dashMessage").textContent=e.message;
- }
-}
-
-async function withdrawProfit(){
- const msg=document.getElementById("withdrawMessage");
- msg.className="";
- msg.textContent="Processing...";
- try{
-  const d=await api("/api/admin/withdraw",{
-   method:"POST",
-   body:JSON.stringify({
-    amount:Number(document.getElementById("withdrawAmount").value),
-    accountNumber:document.getElementById("withdrawAccount").value.trim(),
-    bankCode:document.getElementById("withdrawBankCode").value.trim(),
-    accountName:document.getElementById("withdrawName").value.trim()
-   })
-  });
-  msg.className="success";
-  msg.textContent="Withdrawal submitted: "+(d.withdrawal?.reference||"");
-  loadDashboard();
- }catch(e){
-  msg.className="error";
-  msg.textContent=e.message;
- }
-}
-
-async function adminLogout(){
- try{
-  await api("/api/auth/logout",{method:"POST"});
- }catch{}
- localStorage.removeItem("mamaki_token");
- localStorage.removeItem("mamakiToken");
- localStorage.removeItem("sessionToken");
- localStorage.removeItem("token");
- location.reload();
-}
-
-function money(n){
- return "₦"+Number(n||0).toLocaleString("en-NG",{minimumFractionDigits:2,maximumFractionDigits:2});
-}
-
-function formatPrice(p){
- return p.currency==="NGN"
-  ? "₦"+Number(p.amount||0).toLocaleString("en-NG")
-  : "$"+Number(p.amount||0).toFixed(2);
-}
-
-function date(v){
- if(!v)return"";
- try{return new Date(v).toLocaleString()}catch{return String(v)}
-}
-
-function esc(v){
- return String(v??"").replace(/[&<>"']/g,m=>({
-  "&":"&amp;",
-  "<":"&lt;",
-  ">":"&gt;",
-  '"':"&quot;",
-  "'":"&#39;"
- }[m]));
-}
-
-if(adminToken){
- showDashboard();
-}
-</script>
-</body>
-</html>
-`;
+/* =========================================================
+   ADMIN ROUTE
+   IMPORTANT: THIS MUST COME BEFORE FRONTEND FALLBACK.
+========================================================= */
 
 app.get(
   "/admin",
   async (req, res) => {
-    res.setHeader(
-      "Cache-Control",
-      "no-store"
-    );
-
-    res.setHeader(
-      "X-Robots-Tag",
-      "noindex, nofollow"
-    );
-
-    res.type("html").send(
-      ADMIN_HTML
-    );
+    res
+      .status(200)
+      .type("html")
+      .send(adminHTML());
   }
 );
 
 app.get(
   "/admin/",
   async (req, res) => {
-    res.setHeader(
-      "Cache-Control",
-      "no-store"
-    );
-
-    res.setHeader(
-      "X-Robots-Tag",
-      "noindex, nofollow"
-    );
-
-    res.type("html").send(
-      ADMIN_HTML
-    );
+    res
+      .status(200)
+      .type("html")
+      .send(adminHTML());
   }
 );
 
-/*
-|--------------------------------------------------------------------------
-| USER BILLING WIDGET
-|
-| This is injected into the normal MAMAKI interface.
-| It gives users:
-| - Available credits
-| - Remaining credits
-| - Buy credits button
-| - Current automatically calculated prices
-| - Paystack checkout
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   OUTPUT FILES
+========================================================= */
 
-function injectBillingWidget(
-  html
-) {
-  if (
-    !html ||
-    html.includes(
-      "MAMAKI-CREDITS-WIDGET"
-    )
-  ) {
-    return html;
-  }
+app.use(
+  "/outputs",
+  express.static(
+    OUTPUTS,
+    {
+      maxAge: "1h",
+      fallthrough: true
+    }
+  )
+);
 
+/* =========================================================
+   FRONTEND BILLING WIDGET
+========================================================= */
+
+function injectBillingWidget(html) {
   const widget = `
-<!-- MAMAKI-CREDITS-WIDGET -->
 <style>
-#mamakicreditbox{
- position:fixed;
- right:18px;
- bottom:18px;
- z-index:999999;
- font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+#mamaki-credit-widget{
+position:fixed;
+right:18px;
+bottom:18px;
+z-index:99999;
+font-family:Arial,sans-serif;
 }
-#mamakicreditbutton{
- border:1px solid rgba(255,255,255,.18);
- background:rgba(10,10,15,.94);
- color:#fff;
- border-radius:14px;
- padding:12px 16px;
- cursor:pointer;
- box-shadow:0 12px 35px rgba(0,0,0,.35);
- font-weight:800;
+#mamaki-credit-button{
+border:1px solid rgba(255,255,255,.18);
+background:#111116;
+color:#fff;
+padding:13px 17px;
+border-radius:14px;
+cursor:pointer;
+box-shadow:0 10px 35px rgba(0,0,0,.4);
+font-weight:700;
 }
-#mamakicreditbutton:hover{transform:translateY(-1px)}
-#mamakicreditmodal{
- display:none;
- position:fixed;
- inset:0;
- background:rgba(0,0,0,.72);
- backdrop-filter:blur(7px);
- align-items:center;
- justify-content:center;
- padding:18px;
+#mamaki-credit-panel{
+display:none;
+position:absolute;
+right:0;
+bottom:58px;
+width:min(390px,calc(100vw - 30px));
+background:#101016;
+border:1px solid #292933;
+border-radius:18px;
+padding:18px;
+color:#fff;
+box-shadow:0 20px 60px rgba(0,0,0,.55);
 }
-#mamakicreditpanel{
- width:min(470px,100%);
- max-height:90vh;
- overflow:auto;
- background:#0d0d13;
- color:#fff;
- border:1px solid #292934;
- border-radius:20px;
- padding:22px;
- box-shadow:0 30px 80px rgba(0,0,0,.55);
+#mamaki-credit-panel.open{display:block}
+.mamaki-credit-title{
+font-size:18px;
+font-weight:800;
+margin-bottom:12px;
 }
-#mamakicreditpanel h2{margin-top:0}
-.mcpBalance{
- display:grid;
- grid-template-columns:1fr 1fr;
- gap:10px;
- margin:15px 0;
+.mamaki-credit-balance{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:9px;
+margin-bottom:15px;
 }
-.mcpCard{
- background:#15151d;
- border:1px solid #292934;
- border-radius:13px;
- padding:13px;
+.mamaki-credit-stat{
+background:#08080c;
+border:1px solid #24242d;
+border-radius:12px;
+padding:12px;
 }
-.mcpCard small{color:#aaa}
-.mcpCard strong{
- display:block;
- font-size:24px;
- margin-top:5px;
+.mamaki-credit-stat small{
+display:block;
+color:#92929d;
+font-size:11px;
 }
-.mcpPackages{
- display:grid;
- grid-template-columns:1fr 1fr;
- gap:10px;
- margin:14px 0;
+.mamaki-credit-stat strong{
+display:block;
+font-size:20px;
+margin-top:4px;
 }
-.mcpPackage{
- background:#121219;
- border:1px solid #292934;
- border-radius:13px;
- padding:13px;
- cursor:pointer;
- color:#fff;
- text-align:left;
+.mamaki-credit-packages{
+display:grid;
+gap:8px;
 }
-.mcpPackage:hover{
- border-color:#fff;
+.mamaki-credit-package{
+width:100%;
+display:flex;
+justify-content:space-between;
+align-items:center;
+padding:12px;
+border:1px solid #292933;
+border-radius:12px;
+background:#15151b;
+color:#fff;
+cursor:pointer;
 }
-.mcpPackage.selected{
- border-color:#fff;
+.mamaki-credit-package:hover{
+border-color:#777783;
 }
-.mcpPackage strong{display:block;font-size:18px}
-.mcpPackage span{color:#aaa}
-#mcpPay{
- width:100%;
- padding:13px;
- border:0;
- border-radius:12px;
- background:#fff;
- color:#000;
- font-weight:800;
- cursor:pointer;
+.mamaki-credit-close{
+margin-top:10px;
+width:100%;
+padding:10px;
+border:1px solid #292933;
+border-radius:10px;
+background:#08080c;
+color:#aaa;
+cursor:pointer;
 }
-#mcpClose{
- width:100%;
- margin-top:9px;
- padding:11px;
- border:1px solid #333;
- border-radius:12px;
- background:#111117;
- color:#fff;
- cursor:pointer;
-}
-#mcpStatus{
- margin-top:12px;
- font-size:13px;
- color:#aaa;
-}
-@media(max-width:600px){
- #mamakicreditbox{right:10px;bottom:10px}
- .mcpPackages{grid-template-columns:1fr}
+.mamaki-credit-message{
+font-size:12px;
+color:#92929d;
+line-height:1.45;
+margin-top:10px;
 }
 </style>
 
-<div id="mamakicreditbox">
-<button id="mamakicreditbutton">✨ Buy MAMAKI Credits</button>
-</div>
+<div id="mamaki-credit-widget">
+<button id="mamaki-credit-button">✨ Buy MAMAKI Credits</button>
+<div id="mamaki-credit-panel">
+<div class="mamaki-credit-title">✨ MAMAKI Credits</div>
 
-<div id="mamakicreditmodal">
-<div id="mamakicreditpanel">
-<h2>✨ MAMAKI Credits</h2>
-<p style="color:#aaa">Use MAMAKI credits to create AI videos.</p>
-
-<div class="mcpBalance">
-<div class="mcpCard">
+<div class="mamaki-credit-balance">
+<div class="mamaki-credit-stat">
 <small>Available Credits</small>
-<strong id="mcpAvailable">—</strong>
+<strong id="mamaki-available">—</strong>
 </div>
-<div class="mcpCard">
-<small>Remaining Credits</small>
-<strong id="mcpRemaining">—</strong>
+<div class="mamaki-credit-stat">
+<small>Video Cost</small>
+<strong id="mamaki-video-cost">—</strong>
 </div>
-</div>
-
-<div id="mcpProvider" style="color:#aaa;font-size:13px;margin-bottom:12px"></div>
-
-<div style="display:flex;gap:8px;margin-bottom:10px">
-<select id="mcpCurrency" style="flex:1;padding:11px;border-radius:10px;background:#111117;color:#fff;border:1px solid #333">
-<option value="NGN">NGN ₦</option>
-<option value="USD">USD $</option>
-</select>
-
-<select id="mcpQuality" style="flex:1;padding:11px;border-radius:10px;background:#111117;color:#fff;border:1px solid #333">
-<option>Standard HD</option>
-<option>High</option>
-<option>Cinematic</option>
-</select>
 </div>
 
-<div id="mcpPackages" class="mcpPackages"></div>
+<div class="mamaki-credit-packages" id="mamaki-credit-packages">
+Loading...
+</div>
 
-<button id="mcpPay">Continue to Secure Payment</button>
-<button id="mcpClose">Close</button>
+<div class="mamaki-credit-message" id="mamaki-credit-message">
+Choose a credit package to continue.
+</div>
 
-<div id="mcpStatus"></div>
+<button class="mamaki-credit-close" id="mamaki-credit-close">
+Close
+</button>
 </div>
 </div>
 
 <script>
 (function(){
 
-let mcpToken=
- localStorage.getItem("mamaki_token")||
- localStorage.getItem("mamakiToken")||
- localStorage.getItem("sessionToken")||
- localStorage.getItem("token")||
- "";
+function getToken(){
+const keys=[
+"mamaki_token",
+"mamakiToken",
+"sessionToken",
+"authToken",
+"token",
+"MAMAKI_TOKEN",
+"mamaki_session"
+];
 
-let selectedCredits=100;
-
-function mcpHeaders(){
- return {
-  "Content-Type":"application/json",
-  "Authorization":"Bearer "+mcpToken
- };
+for(const k of keys){
+const v=localStorage.getItem(k);
+if(v && v.length>20)return v;
 }
 
-async function mcpFetch(url,options={}){
- options.headers={
-  ...(options.headers||{}),
-  ...mcpHeaders()
- };
- const r=await fetch(url,options);
- let d={};
- try{d=await r.json()}catch{}
- if(!r.ok)throw new Error(d.error||"Request failed");
- return d;
+for(let i=0;i<localStorage.length;i++){
+const k=localStorage.key(i);
+const v=localStorage.getItem(k);
+if(v && v.length>60 && v.split(".").length>=4){
+return v;
+}
 }
 
-function mcpOpen(){
- document.getElementById("mamakicreditmodal").style.display="flex";
- loadMcp();
+return "";
 }
 
-function mcpClose(){
- document.getElementById("mamakicreditmodal").style.display="none";
+async function request(url,options={}){
+const headers={
+...(options.headers||{}),
+Authorization:"Bearer "+getToken()
+};
+
+if(options.body && !headers["Content-Type"]){
+headers["Content-Type"]="application/json";
 }
 
-async function loadMcp(){
- const status=document.getElementById("mcpStatus");
+const r=await fetch(url,{
+...options,
+headers
+});
 
- mcpToken=
-  localStorage.getItem("mamaki_token")||
-  localStorage.getItem("mamakiToken")||
-  localStorage.getItem("sessionToken")||
-  localStorage.getItem("token")||
-  "";
+const text=await r.text();
 
- if(!mcpToken){
-  status.textContent="Please log in to your MAMAKI account before purchasing credits.";
-  return;
- }
+let data;
 
- try{
-  const me=await mcpFetch("/api/auth/me");
-
-  document.getElementById("mcpAvailable").textContent=Number(me.credits||0).toLocaleString();
-  document.getElementById("mcpRemaining").textContent=Number(me.remainingCredits||0).toLocaleString();
-
-  document.getElementById("mcpProvider").textContent=
-   me.providerBlocked
-    ? "AI provider capacity is currently unavailable. Your credits remain safe."
-    : me.providerConfigured
-      ? "AI provider connected."
-      : "AI provider is not configured.";
-
-  await loadPrices();
-
- }catch(e){
-  status.textContent=e.message;
- }
+try{
+data=JSON.parse(text);
+}catch{
+throw new Error("Unexpected server response.");
 }
 
-async function loadPrices(){
- const currency=document.getElementById("mcpCurrency").value;
- const quality=document.getElementById("mcpQuality").value;
-
- const data=await mcpFetch(
-  "/api/billing/pricing?currency="+encodeURIComponent(currency)+"&quality="+encodeURIComponent(quality)
- );
-
- const box=document.getElementById("mcpPackages");
-
- box.innerHTML="";
-
- (data.packages||[]).forEach(p=>{
-  const button=document.createElement("button");
-  button.className="mcpPackage"+(p.credits===selectedCredits?" selected":"");
-
-  const price=
-   p.currency==="NGN"
-    ? "₦"+Number(p.amount||0).toLocaleString("en-NG")
-    : "$"+Number(p.amount||0).toFixed(2);
-
-  button.innerHTML=
-   "<strong>"+Number(p.credits).toLocaleString()+" credits</strong>"+
-   "<span>"+price+"</span>";
-
-  button.onclick=()=>{
-   selectedCredits=p.credits;
-
-   document.querySelectorAll(".mcpPackage").forEach(x=>{
-    x.classList.remove("selected");
-   });
-
-   button.classList.add("selected");
-  };
-
-  box.appendChild(button);
- });
+if(!r.ok || data.ok===false){
+throw new Error(data.error||"Request failed.");
 }
 
-async function buyCredits(){
- const status=document.getElementById("mcpStatus");
-
- if(!mcpToken){
-  status.textContent="Please log in first.";
-  return;
- }
-
- try{
-  status.textContent="Preparing secure payment...";
-
-  const currency=
-   document.getElementById("mcpCurrency").value;
-
-  const quality=
-   document.getElementById("mcpQuality").value;
-
-  const data=await mcpFetch(
-   "/api/billing/paystack/initialize",
-   {
-    method:"POST",
-    body:JSON.stringify({
-     credits:selectedCredits,
-     currency,
-     quality,
-     callbackUrl:
-      location.origin+
-      location.pathname+
-      "?payment=complete"
-    })
-   }
-  );
-
-  if(data.authorizationUrl){
-   location.href=data.authorizationUrl;
-   return;
-  }
-
-  throw new Error("Payment page was not returned.");
-
- }catch(e){
-  status.textContent=e.message;
- }
+return data;
 }
 
-document.getElementById("mamakicreditbutton").onclick=mcpOpen;
-document.getElementById("mcpClose").onclick=mcpClose;
-document.getElementById("mcpPay").onclick=buyCredits;
-document.getElementById("mcpCurrency").onchange=loadPrices;
-document.getElementById("mcpQuality").onchange=loadPrices;
+const button=
+document.getElementById("mamaki-credit-button");
+
+const panel=
+document.getElementById("mamaki-credit-panel");
+
+const close=
+document.getElementById("mamaki-credit-close");
+
+const packages=
+document.getElementById("mamaki-credit-packages");
+
+const available=
+document.getElementById("mamaki-available");
+
+const videoCost=
+document.getElementById("mamaki-video-cost");
+
+const message=
+document.getElementById("mamaki-credit-message");
+
+async function loadCredits(){
+
+try{
+
+const me=
+await request("/api/auth/me");
+
+available.textContent=
+Number(me.credits||0).toLocaleString();
+
+let seconds=5;
+let quality="Standard HD";
+
+const duration=
+document.querySelector(
+'select[name="duration"],#duration,[data-duration]'
+);
+
+if(duration){
+seconds=Number(duration.value)||5;
+}
+
+const qualityInput=
+document.querySelector(
+'select[name="quality"],#quality,[data-quality]'
+);
+
+if(qualityInput){
+quality=qualityInput.value||quality;
+}
+
+try{
+
+const cost=
+await request(
+"/api/video/cost?seconds="+
+encodeURIComponent(seconds)+
+"&quality="+
+encodeURIComponent(quality)
+);
+
+videoCost.textContent=
+Number(cost.requiredCredits||0)
+.toLocaleString();
+
+}catch{
+videoCost.textContent="—";
+}
+
+}catch{
+available.textContent="Login";
+videoCost.textContent="—";
+}
+
+}
+
+async function loadPackages(){
+
+try{
+
+const d=
+await request("/api/billing/pricing");
+
+if(!d.packages?.length){
+
+packages.innerHTML=
+"<div style='color:#ffb8c0'>Online payment is temporarily unavailable.</div>";
+
+return;
+}
+
+packages.innerHTML=
+d.packages.map(p=>\`
+
+<button class="mamaki-credit-package"
+data-credits="\${Number(p.credits)}">
+
+<span>\${Number(p.credits).toLocaleString()} credits</span>
+<strong>₦\${Number(p.amountNGN||p.amount||0).toLocaleString()}</strong>
+
+</button>
+
+\`).join("");
+
+packages
+.querySelectorAll(".mamaki-credit-package")
+.forEach(btn=>{
+btn.addEventListener("click",async()=>{
+await buy(
+Number(btn.dataset.credits)
+);
+});
+});
+
+}catch(error){
+
+packages.innerHTML=
+"<div style='color:#ffb8c0'>Online payment is temporarily unavailable.</div>";
+
+message.textContent=
+"Payment has not been connected yet. Your credit system is ready for payment activation.";
+
+}
+
+}
+
+async function buy(credits){
+
+try{
+
+message.textContent=
+"Opening secure payment...";
+
+const d=
+await request(
+"/api/billing/paystack/initialize",
+{
+method:"POST",
+body:JSON.stringify({
+credits
+})
+}
+);
+
+if(d.authorization_url){
+
+window.location.href=
+d.authorization_url;
+
+return;
+}
+
+throw new Error(
+"Secure payment is temporarily unavailable."
+);
+
+}catch(error){
+
+message.textContent=
+error.message;
+
+}
+
+}
+
+button.addEventListener(
+"click",
+async()=>{
+panel.classList.toggle("open");
+
+if(panel.classList.contains("open")){
+await loadCredits();
+await loadPackages();
+}
+}
+);
+
+close.addEventListener(
+"click",
+()=>{
+panel.classList.remove("open");
+}
+);
+
+window.MAMAKI_CREDIT_WIDGET={
+refresh:loadCredits
+};
 
 })();
 </script>
 `;
 
+  const marker =
+    "</body>";
+
   if (
-    html.includes(
-      "</body>"
+    html.toLowerCase().includes(
+      marker
     )
   ) {
     return html.replace(
-      "</body>",
-      widget +
-        "</body>"
+      /<\/body>/i,
+      `${widget}</body>`
     );
   }
 
-  return html +
-    widget;
+  return html + widget;
 }
 
-/*
-|--------------------------------------------------------------------------
-| NORMAL MAMAKI FRONTEND
-|
-| /admin is handled above.
-| Every other normal page continues to use index.html.
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   FRONTEND FALLBACK
+========================================================= */
 
 async function serveFrontend(
   req,
@@ -5367,18 +4183,11 @@ async function serveFrontend(
   next
 ) {
   if (
-    req.path.startsWith(
-      "/api"
-    ) ||
-    req.path.startsWith(
-      "/outputs"
-    ) ||
-    req.path ===
-      "/health" ||
-    req.path ===
-      "/admin" ||
-    req.path ===
-      "/admin/"
+    req.path.startsWith("/api") ||
+    req.path.startsWith("/outputs") ||
+    req.path === "/health" ||
+    req.path === "/admin" ||
+    req.path === "/admin/"
   ) {
     return next();
   }
@@ -5389,128 +4198,76 @@ async function serveFrontend(
       "index.html"
     );
 
-  if (
-    await exists(
-      indexPath
-    )
-  ) {
-    try {
-      let html =
-        await fs.readFile(
-          indexPath,
-          "utf8"
-        );
-
-      html =
-        injectBillingWidget(
-          html
-        );
-
-      res.setHeader(
-        "Cache-Control",
-        "no-store"
+  try {
+    const html =
+      await fs.readFile(
+        indexPath,
+        "utf8"
       );
 
-      return res
-        .type("html")
-        .send(html);
-    } catch (error) {
-      return next(error);
-    }
+    res
+      .status(200)
+      .type("html")
+      .send(
+        injectBillingWidget(
+          html
+        )
+      );
+  } catch {
+    res.status(404).send(
+      "MAMAKI AI interface not found."
+    );
   }
-
-  res.status(404).send(
-    "MAMAKI AI interface not found."
-  );
 }
 
 app.use(
   serveFrontend
 );
 
-/*
-|--------------------------------------------------------------------------
-| FINAL ERROR HANDLER
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   ERROR HANDLER
+========================================================= */
 
 app.use(
-  async (
-    error,
-    req,
-    res,
-    next
-  ) => {
-    try {
-      await recordError(
-        error,
-        req
-      );
-    } catch {}
+  async (error, req, res, next) => {
+    await recordError(
+      error,
+      req
+    );
 
-    if (
-      res.headersSent
-    ) {
-      return next(
-        error
-      );
+    if (res.headersSent) {
+      return next(error);
     }
 
-    let status =
-      Number(
-        error?.status ||
-          error?.statusCode ||
-          500
-      );
-
-    if (
-      error?.code ===
-      "MAMAKI_CREDITS_INSUFFICIENT"
-    ) {
-      status = 402;
-    }
-
-    if (
-      status < 400 ||
-      status >= 600
-    ) {
-      status = 500;
-    }
-
-    res.status(
-      status
-    ).json({
+    res.status(500).json({
       ok: false,
       error:
-        String(
-          error?.message ||
-            "Internal server error."
-        ),
-      version:
-        VERSION,
+        error?.message ||
+        "Internal server error."
     });
   }
 );
 
-/*
-|--------------------------------------------------------------------------
-| START
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   START
+========================================================= */
 
 await ensureStorage();
-await ensureAdminAccount();
 
 app.listen(
   PORT,
   HOST,
   () => {
     console.log(
-      `MAMAKI AI ${VERSION} running on ${HOST}:${PORT}`
+      `✨ MAMAKI AI ${VERSION} running on ${HOST}:${PORT}`
     );
 
     console.log(
-      `Replicate configured: ${providerIsConfigured()}`
+      `Admin: /admin`
+    );
+
+    console.log(
+      `Replicate configured: ${Boolean(REPLICATE_TOKEN)}`
     );
 
     console.log(
@@ -5518,11 +4275,7 @@ app.listen(
     );
 
     console.log(
-      `Admin configured: ${Boolean(ADMIN_EMAIL && ADMIN_PASSWORD)}`
-    );
-
-    console.log(
-      `Private admin dashboard: ${APP_URL}/admin`
+      `MAMAKI markup: ₦${MAMAKI_MARKUP_NGN}/USD`
     );
   }
 );
