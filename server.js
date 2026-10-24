@@ -3477,13 +3477,11 @@ async function getReplicateStatus() {
 
 
     return {
-        configured: true,
+    configured: true,
         usable: true,
         balanceKnown: false,
         balance: null,
-        note:
-   "Replicate token is configured. Replicate does not provide a universal account balance through this server
-endpoint.",
+        note: "Replicate token is configured. Replicate does not provide a universal account balance through this server endpoint.",
     };
 }
 
@@ -3495,13 +3493,13 @@ async function getWallet() {
 
     const grossRevenue =
         Number(
-         finance.revenue || 0
+            finance.revenue || 0
         );
 
 
     const refunds =
         Number(
-         finance.refunds || 0
+            finance.refunds || 0
         );
 
 
