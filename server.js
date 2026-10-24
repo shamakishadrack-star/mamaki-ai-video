@@ -1089,36 +1089,28 @@ async function runFFmpeg(args) {
     );
 }
 
+async function addWatermark(input, output) {
+const filter =
+"drawtext=text='MAMAKI ✨':fontcolor=white@0.78:fontsize=28:borderw=2:bordercolor=black@0.45:x=w-tw-28:y=h-th-24";
 
-async function addWatermark(
+await runFFmpeg([
+    "-y",
+    "-i",
     input,
+    "-vf",
+    filter,
+    "-c:v",
+    "libx264",
+    "-preset",
+    "veryfast",
+    "-crf",
+    "23",
+    "-c:a",
+    "copy",
     output
-){
-    const filter =
-  "drawtext=text='MAMAKI
-tw-28:y=h-th-24";
-                                       ✨':fontcolor=white@0.78:fontsize=28:borderw=2:bordercolor=black@0.45:x=w-
+]);
 
-    await runFFmpeg([
-     "-y",
-     "-i",
-     input,
-     "-vf",
-     filter,
-     "-c:v",
-     "libx264",
-     "-preset",
-     "veryfast",
-     "-crf",
-     "20",
-     "-c:a",
-     "aac",
-     "-b:a",
-     "160k",
-     "-movflags",
-     "+faststart",
-     output,
-    ]);
+}
 
 
     return output;
