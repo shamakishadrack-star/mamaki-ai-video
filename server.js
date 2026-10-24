@@ -1107,20 +1107,14 @@ await runFFmpeg([
     "23",
     "-c:a",
     "copy",
-    output
+output
 ]);
-
 }
-
-
-    return output;
-}
-
 
 async function forceDuration(
-    input,
-    output,
-    seconds
+input,
+output,
+seconds
 ){
     await runFFmpeg([
      "-y",
