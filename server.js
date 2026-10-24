@@ -1398,16 +1398,18 @@ function enhancePrompt(
     }
 
 
-    return [
-        clean,
-        `Visual style: ${style}.`,
-        "Create a coherent professional video sequence.",
-  "Use strong composition, natural motion, consistent subjects, realistic lighting, cinematic depth and detailed
-environments.",
-        "Maintain continuity between shots.",
-        "Avoid text overlays, logos and unwanted distortions.",
-        "Use smooth camera movement appropriate to the scene.",
-    ].join(" ");
+    return "";
+}
+
+return [
+    clean,
+    `Visual style: ${style}.`,
+    "Create a coherent professional video sequence.",
+    "Use strong composition, natural motion, consistent subjects, realistic lighting, cinematic depth and detailed environments.",
+    "Maintain continuity between shots.",
+    "Avoid text overlays, logos and unwanted distortions.",
+    "Use smooth camera movement appropriate to the scene.",
+].join(" ");
 }
 
 
